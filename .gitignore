@@ -1,3 +1,5 @@
+.env
+
 # Composer Related
 composer.lock
 /vendor
@@ -30,3 +32,9 @@ phpstan.neon
 testbench.yaml
 /docs
 /coverage
+!/.env
+!/.env
+
+test-app/public/vendor/vox/
+
+tests/.tmp/

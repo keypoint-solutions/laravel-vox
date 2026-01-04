@@ -1,0 +1,23 @@
+{
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "/Users/costin/Library/Application Support/Herd/bin/php84",
+            "args": [
+                "/Users/costin/sites/laravel-vox/vendor/orchestra/testbench-core/laravel/artisan",
+                "boost:mcp"
+            ],
+            "env": {
+                "SITE_PATH": "/Users/costin/sites/laravel-vox"
+            }
+        },
+        "herd": {
+            "command": "/Users/costin/Library/Application Support/Herd/bin/php84",
+            "args": [
+                "/Applications/Herd.app/Contents/Resources/herd-mcp.phar"
+            ],
+            "env": {
+                "SITE_PATH": "/Users/costin/sites/laravel-vox"
+            }
+        }
+    }
+}

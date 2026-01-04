@@ -1,0 +1,97 @@
+{
+  "_Layout.vue_vue_type_script_setup_true_lang-BHfugt-1.js": {
+    "file": "assets/Layout.vue_vue_type_script_setup_true_lang-BHfugt-1.js",
+    "name": "Layout.vue_vue_type_script_setup_true_lang",
+    "imports": [
+      "resources/js/vox.ts"
+    ]
+  },
+  "resources/js/pages/Audit.vue": {
+    "file": "assets/Audit-lnb8z1hb.js",
+    "name": "Audit",
+    "src": "resources/js/pages/Audit.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_Layout.vue_vue_type_script_setup_true_lang-BHfugt-1.js",
+      "resources/js/vox.ts"
+    ]
+  },
+  "resources/js/pages/Dashboard.vue": {
+    "file": "assets/Dashboard-C5sp2brB.js",
+    "name": "Dashboard",
+    "src": "resources/js/pages/Dashboard.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_Layout.vue_vue_type_script_setup_true_lang-BHfugt-1.js",
+      "resources/js/vox.ts"
+    ]
+  },
+  "resources/js/pages/Manage.vue": {
+    "file": "assets/Manage-C9_cPxsi.js",
+    "name": "Manage",
+    "src": "resources/js/pages/Manage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_Layout.vue_vue_type_script_setup_true_lang-BHfugt-1.js",
+      "resources/js/vox.ts"
+    ]
+  },
+  "resources/js/pages/Publish.vue": {
+    "file": "assets/Publish-zqB2vtOK.js",
+    "name": "Publish",
+    "src": "resources/js/pages/Publish.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_Layout.vue_vue_type_script_setup_true_lang-BHfugt-1.js",
+      "resources/js/vox.ts"
+    ]
+  },
+  "resources/js/pages/Settings.vue": {
+    "file": "assets/Settings-wF3Sa7VD.js",
+    "name": "Settings",
+    "src": "resources/js/pages/Settings.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_Layout.vue_vue_type_script_setup_true_lang-BHfugt-1.js",
+      "resources/js/vox.ts"
+    ]
+  },
+  "resources/js/pages/Sync.vue": {
+    "file": "assets/Sync-BrfYKbHp.js",
+    "name": "Sync",
+    "src": "resources/js/pages/Sync.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_Layout.vue_vue_type_script_setup_true_lang-BHfugt-1.js",
+      "resources/js/vox.ts"
+    ]
+  },
+  "resources/js/pages/Test.vue": {
+    "file": "assets/Test-DLvbrhuH.js",
+    "name": "Test",
+    "src": "resources/js/pages/Test.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_Layout.vue_vue_type_script_setup_true_lang-BHfugt-1.js",
+      "resources/js/vox.ts"
+    ]
+  },
+  "resources/js/vox.ts": {
+    "file": "assets/vox-Cv7nAqvu.js",
+    "name": "vox",
+    "src": "resources/js/vox.ts",
+    "isEntry": true,
+    "dynamicImports": [
+      "resources/js/pages/Audit.vue",
+      "resources/js/pages/Dashboard.vue",
+      "resources/js/pages/Manage.vue",
+      "resources/js/pages/Publish.vue",
+      "resources/js/pages/Settings.vue",
+      "resources/js/pages/Sync.vue",
+      "resources/js/pages/Test.vue"
+    ],
+    "css": [
+      "assets/vox-Dtb7bEr-.css"
+    ]
+  }
+}
