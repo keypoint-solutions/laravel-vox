@@ -1,0 +1,20 @@
+{
+    "All rights reserved.": "Tous droits réservés.",
+    "Forbidden": "Interdit",
+    "Go to page :page": "Aller à la page :page",
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n                                Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n                                Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.": "Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n                                Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n                                Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
+    "Not Found": "Non trouvé",
+    "Page Expired": "Page expirée",
+    "Pagination Navigation": "Navigation de pagination",
+    "Payment Required": "Paiement requis",
+    "Server Error": "Erreur du serveur",
+    "Service Unavailable": "Service indisponible",
+    "Showing": "Affichage",
+    "This ends up in JSON": "Cela se termine par du JSON",
+    "This ends up in JSON too.": "Cela se termine également en JSON.",
+    "Too Many Requests": "Trop de demandes",
+    "Unauthorized": "Non autorisé",
+    "of": "de",
+    "results": "résultats",
+    "to": "à"
+}
