@@ -23,6 +23,7 @@ class HandleInertiaRequests extends Middleware
     public function handle(Request $request, Closure $next): Response
     {
         Vite::useBuildDirectory('vendor/vox');
+        Vite::useHotFile(public_path('vendor/vox/hot'));
 
         return parent::handle($request, $next);
     }
@@ -50,6 +51,7 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'vox' => [
                 'features' => config('vox.features', []),
+                'sync_enabled' => config('vox.sync.enabled', true),
             ],
         ];
     }

@@ -9,6 +9,7 @@ use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
 use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
 use KeypointSolutions\LaravelVox\Translation\TranslationSyncer;
+
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\table;
@@ -31,7 +32,7 @@ class SyncTranslationsCommand extends Command
 
         $scanResults = spin(fn () => $scanner->scan(), 'Scanning translation keys');
 
-        $localeResolver = new VoxLocaleResolver();
+        $localeResolver = new VoxLocaleResolver;
         $locales = $localeResolver->resolveLocales();
         $baseLocale = $localeResolver->resolveBaseLocale($locales);
 
@@ -39,7 +40,7 @@ class SyncTranslationsCommand extends Command
             $locales[] = $baseLocale;
         }
 
-        $fileRepository = new TranslationFileRepository(new TranslationFileWriter());
+        $fileRepository = new TranslationFileRepository(new TranslationFileWriter);
         $syncer = new TranslationSyncer($fileRepository);
 
         $result = $syncer->sync($locales, $scanResults);

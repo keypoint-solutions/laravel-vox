@@ -8,14 +8,8 @@ export default defineConfig({
         laravel({
             input: ['resources/js/vox.ts'],
             buildDirectory: 'vendor/vox',
-            refresh: [
-                'resources/css/**',
-                'resources/js/**',
-                'resources/views/**',
-                'routes/**',
-                'src/**',
-                'config/**',
-            ],
+            hotFile: 'public/vendor/vox/hot',
+            refresh: ['resources/css/**', 'resources/js/**', 'resources/views/**', 'routes/**', 'src/**', 'config/**'],
         }),
         tailwindcss(),
         vue({
@@ -29,12 +23,7 @@ export default defineConfig({
     ],
     server: {
         watch: {
-            ignored: [
-                '**/test-app/**',
-                '**/node_modules/**',
-                '**/vendor/**',
-                '**/.git/**',
-            ],
+            ignored: ['**/test-app/**', '**/node_modules/**', '**/vendor/**', '**/.git/**'],
         },
     },
 });

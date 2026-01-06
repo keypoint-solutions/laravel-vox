@@ -1,0 +1,10 @@
+/bootstrap/cache
+/build
+/dist
+/node_modules
+/public
+/storage
+/test-app
+/tests
+/vendor
+*.min.*

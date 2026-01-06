@@ -7,8 +7,8 @@
 // psalm-disable-file
 
 return [
-    'reset' => 'Parola ta a fost resetată.',
-    'sent' => 'V-am trimis un email cu linkul pentru resetarea parolei.',
+    'reset' => 'Parola dvs. a fost resetată.',
+    'sent' => 'Am trimis pe email linkul pentru resetarea parolei.',
     'throttled' => 'Vă rugăm să așteptați înainte de a încerca din nou.',
     'token' => 'Acest token de resetare a parolei este invalid.',
     'user' => 'Nu putem găsi un utilizator cu acea adresă de email.',

@@ -11,16 +11,18 @@ class TranslationScanner
      * @var array<string, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>
      */
     private array $dynamicKeys = [];
+
     /**
      * @var array<int, string>
      */
     private array $lastFiles = [];
+
     private bool $filesLoaded = false;
 
     /**
-     * @param array<int, string> $paths
-     * @param array<int, string> $exclude
-     * @param array<int, string> $extensions
+     * @param  array<int, string>  $paths
+     * @param  array<int, string>  $exclude
+     * @param  array<int, string>  $extensions
      */
     public function __construct(
         private string $basePath,
@@ -28,8 +30,7 @@ class TranslationScanner
         private array $exclude,
         private array $extensions,
         private int $contextLines
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, array<string, mixed>>
@@ -100,27 +101,6 @@ class TranslationScanner
     /**
      * @return array<int, string>
      */
-    public function files(): array
-    {
-        if (! $this->filesLoaded) {
-            $this->lastFiles = $this->gatherFiles();
-            $this->filesLoaded = true;
-        }
-
-        return $this->lastFiles;
-    }
-
-    /**
-     * @return array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>
-     */
-    public function dynamicKeys(): array
-    {
-        return array_values($this->dynamicKeys);
-    }
-
-    /**
-     * @return array<int, string>
-     */
     private function gatherFiles(): array
     {
         $paths = [];
@@ -138,6 +118,7 @@ class TranslationScanner
 
             if (File::isFile($path)) {
                 $files[] = $path;
+
                 continue;
             }
 
@@ -183,15 +164,6 @@ class TranslationScanner
         return false;
     }
 
-    private function resolveExtension(string $filePath): string
-    {
-        if (Str::endsWith($filePath, '.blade.php')) {
-            return 'blade.php';
-        }
-
-        return pathinfo($filePath, PATHINFO_EXTENSION) ?: '';
-    }
-
     private function isExcluded(string $filePath): bool
     {
         $relativePath = $this->relativePath($filePath);
@@ -215,14 +187,23 @@ class TranslationScanner
         return false;
     }
 
+    private function relativePath(string $filePath): string
+    {
+        return ltrim(Str::replaceFirst($this->basePath, '', $filePath), DIRECTORY_SEPARATOR);
+    }
+
     private function isRegex(string $pattern): bool
     {
         return Str::startsWith($pattern, '/') && Str::endsWith($pattern, '/') && strlen($pattern) > 2;
     }
 
-    private function relativePath(string $filePath): string
+    private function resolveExtension(string $filePath): string
     {
-        return ltrim(Str::replaceFirst($this->basePath, '', $filePath), DIRECTORY_SEPARATOR);
+        if (Str::endsWith($filePath, '.blade.php')) {
+            return 'blade.php';
+        }
+
+        return pathinfo($filePath, PATHINFO_EXTENSION) ?: '';
     }
 
     /**
@@ -329,7 +310,8 @@ class TranslationScanner
         $matches = [];
 
         foreach ($patterns as $pattern) {
-            if (preg_match_all($pattern['pattern'], $content, $results, PREG_SET_ORDER | PREG_OFFSET_CAPTURE) === false) {
+            if (preg_match_all($pattern['pattern'], $content, $results,
+                PREG_SET_ORDER | PREG_OFFSET_CAPTURE) === false) {
                 continue;
             }
 
@@ -360,7 +342,7 @@ class TranslationScanner
     }
 
     /**
-     * @param array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, offset: int|null, match: string|null}> $matches
+     * @param  array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, offset: int|null, match: string|null}>  $matches
      */
     private function recordDynamicMatches(array $matches, string $filePath, string $content): void
     {
@@ -394,8 +376,15 @@ class TranslationScanner
         }
     }
 
+    private function normalizeContext(string $text): string
+    {
+        $text = preg_replace('/\s+/', ' ', $text) ?? $text;
+
+        return trim($text);
+    }
+
     /**
-     * @param array<int, string> $lines
+     * @param  array<int, string>  $lines
      * @return array{line: int, before: string, after: string}
      */
     private function extractContext(string $content, array $lines, int $offset, int $length): array
@@ -431,13 +420,6 @@ class TranslationScanner
             'before' => $this->limitContext($this->normalizeContext(implode(' ', $beforeLines)), $limit, true),
             'after' => $this->limitContext($this->normalizeContext(implode(' ', $afterLines)), $limit, false),
         ];
-    }
-
-    private function normalizeContext(string $text): string
-    {
-        $text = preg_replace('/\s+/', ' ', $text) ?? $text;
-
-        return trim($text);
     }
 
     private function limitContext(string $text, int $limit, bool $fromEnd): string
@@ -491,5 +473,26 @@ class TranslationScanner
         $last = $matches[0][count($matches[0]) - 1];
 
         return $last[1] ?? null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function files(): array
+    {
+        if (! $this->filesLoaded) {
+            $this->lastFiles = $this->gatherFiles();
+            $this->filesLoaded = true;
+        }
+
+        return $this->lastFiles;
+    }
+
+    /**
+     * @return array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>
+     */
+    public function dynamicKeys(): array
+    {
+        return array_values($this->dynamicKeys);
     }
 }

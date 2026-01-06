@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use KeypointSolutions\LaravelVox\Http\Controllers\SettingsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncController;
 
 $configMiddleware = config('vox.system.middleware', []);
@@ -34,7 +35,6 @@ Route::prefix('vox')
             return Inertia::render('Audit');
         })->name('audit');
 
-        Route::get('/settings', function () {
-            return Inertia::render('Settings');
-        })->name('settings');
+        Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+        Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
     });
