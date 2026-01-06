@@ -42,6 +42,10 @@ Optionally, you can publish the views using
 php artisan vendor:publish --tag="vox-views"
 ```
 
+## Documentation
+
+Full documentation lives in [docs/README.md](docs/README.md).
+
 ## Authorization
 
 Vox's GUI routes are protected by the `viewVox` gate, similar to Horizon. Define it in your application's `App\Providers\AuthServiceProvider`, in the `boot` method:

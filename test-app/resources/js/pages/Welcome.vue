@@ -1,6 +1,6 @@
 <script lang="ts" setup>
-import {computed, ref} from 'vue';
-import {trans} from "laravel-vue-i18n";
+import { trans } from 'laravel-vue-i18n';
+import { computed, ref } from 'vue';
 
 type TestAppUser = {
     id: number;
@@ -21,22 +21,22 @@ const authLabel = computed(() =>
 
 const dynamicLabels = computed(() => {
     return {
-        'label1': trans('frontend.dynamicLabels.labels.Dynamic Label 1'),
-        'label2': trans('frontend.dynamicLabels.labels.Dynamic Label 2'),
+        label1: trans('frontend.dynamicLabels.labels.Dynamic Label 1'),
+        label2: trans('frontend.dynamicLabels.labels.Dynamic Label 2'),
     };
 });
 
 const dynamicLabels2 = computed(() => {
     return {
-        'label1': trans('frontend.dynamicLabels2.labels.Dynamic Label 1'),
-        'label2': trans('frontend.dynamicLabels2.labels.Dynamic Label 2'),
+        label1: trans('frontend.dynamicLabels2.labels.Dynamic Label 1'),
+        label2: trans('frontend.dynamicLabels2.labels.Dynamic Label 2'),
     };
 });
 </script>
 
 <template>
     <section class="space-y-6">
-        <p class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+        <p class="text-xs tracking-[0.2em] text-muted-foreground uppercase">
             Welcome
         </p>
         <h1 class="text-2xl font-semibold">Laravel Vox Test App</h1>
@@ -71,8 +71,8 @@ const dynamicLabels2 = computed(() => {
                     <p class="mt-2 text-sm">
                         <span class="text-muted-foreground">Current user:</span>
                         <span class="font-medium text-foreground">{{
-                                authLabel
-                            }}</span>
+                            authLabel
+                        }}</span>
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-3">
@@ -101,80 +101,99 @@ const dynamicLabels2 = computed(() => {
                     <p class="mt-2 text-sm">
                         <span class="text-muted-foreground">Regular: </span>
                         <span class="font-medium text-foreground">{{
-                                $t('frontend.Regular translation')
-                            }}</span>
+                            $t('frontend.Regular translation')
+                        }}</span>
                     </p>
                     <p class="mt-2 text-sm">
                         <span class="text-muted-foreground">Short 1: </span>
                         <span class="font-medium text-foreground">{{
-                                $t('frontend.Works.')
-                            }}</span>
+                            $t('frontend.Works.')
+                        }}</span>
                     </p>
                     <p class="mt-2 text-sm">
                         <span class="text-muted-foreground">Short 2: </span>
                         <span class="font-medium text-foreground">{{
-                                $t('frontend.Also works.')
-                            }}</span>
+                            $t('frontend.Also works.')
+                        }}</span>
                     </p>
                     <p class="mt-2 text-sm">
                         <span class="text-muted-foreground">Short 3: </span>
                         <span class="font-medium text-foreground">{{
-                                $t('frontend.grouped.Works.')
-                            }}</span>
+                            $t('frontend.grouped.Works.')
+                        }}</span>
                     </p>
                     <p class="mt-2 text-sm">
                         <span class="text-muted-foreground">Phrase 1: </span>
                         <span class="font-medium text-foreground">{{
-                                $t('frontend.Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.')
-                            }}</span>
+                            $t(
+                                'frontend.Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+                            )
+                        }}</span>
                     </p>
                     <p class="mt-2 text-sm">
                         <span class="text-muted-foreground">Phrase 2: </span>
                         <span class="font-medium text-foreground">{{
-                                $t('frontend.grouped.Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.')
-                            }}</span>
+                            $t(
+                                'frontend.grouped.Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+                            )
+                        }}</span>
                     </p>
                     <p class="mt-2 text-sm">
-                        <span class="text-muted-foreground">Multiline Phrase: </span>
+                        <span class="text-muted-foreground"
+                            >Multiline Phrase:
+                        </span>
                         <span class="font-medium text-foreground">{{
-                                $t(`frontend.Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                            $t(`frontend.Lorem ipsum dolor sit amet, consectetur adipiscing elit.
                                 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
                                 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.`)
-                            }}</span>
+                        }}</span>
                     </p>
                     <p class="mt-2 text-sm">
                         <span class="text-muted-foreground">JSON 1: </span>
                         <span class="font-medium text-foreground">{{
-                                $t('This ends up in JSON')
-                            }}</span>
+                            $t('This ends up in JSON')
+                        }}</span>
                     </p>
                     <p class="mt-2 text-sm">
                         <span class="text-muted-foreground">JSON 2: </span>
                         <span class="font-medium text-foreground">{{
-                                $t('This ends up in JSON too.')
-                            }}</span>
+                            $t('This ends up in JSON too.')
+                        }}</span>
                     </p>
                     <p class="mt-2 text-sm">
-                        <span class="text-muted-foreground">JSON Multiline Phrase: </span>
+                        <span class="text-muted-foreground"
+                            >JSON Multiline Phrase:
+                        </span>
                         <span class="font-medium text-foreground">{{
-                                $t(`Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                            $t(`Lorem ipsum dolor sit amet, consectetur adipiscing elit.
                                 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
                                 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.`)
-                            }}</span>
+                        }}</span>
                     </p>
                     <div class="mt-2 text-sm">
-                        <span class="text-muted-foreground">Parametrized: </span>
+                        <span class="text-muted-foreground"
+                            >Parametrized:
+                        </span>
                         <div>
-                            <span class="text-muted-foreground">Parametrized 1: </span>
+                            <span class="text-muted-foreground"
+                                >Parametrized 1:
+                            </span>
                             <span class="font-medium text-foreground">{{
-                                    $t('frontend.Today is :date', {date: new Date().toLocaleDateString()})
-                                }}</span>
+                                $t('frontend.Today is :date', {
+                                    date: new Date().toLocaleDateString(),
+                                })
+                            }}</span>
                         </div>
                         <div>
-                            <span class="text-muted-foreground">Parametrized 2: </span>
+                            <span class="text-muted-foreground"
+                                >Parametrized 2:
+                            </span>
                             <span class="font-medium text-foreground">{{
-                                    $t('frontend.Today is :date, :time.', {date: new Date().toLocaleDateString(), time: new Date().toLocaleTimeString()})
-                                }}</span>
+                                $t('frontend.Today is :date, :time.', {
+                                    date: new Date().toLocaleDateString(),
+                                    time: new Date().toLocaleTimeString(),
+                                })
+                            }}</span>
                         </div>
                     </div>
                     <div class="mt-2 text-sm">
@@ -195,7 +214,9 @@ const dynamicLabels2 = computed(() => {
                                 {{ label }}:
                             </span>
                             <span class="font-medium text-foreground">
-                                {{ $t(`frontend.dynamicLabels2.values.${key}`) }}
+                                {{
+                                    $t(`frontend.dynamicLabels2.values.${key}`)
+                                }}
                             </span>
                         </div>
                     </div>
@@ -205,9 +226,13 @@ const dynamicLabels2 = computed(() => {
 
         <section class="rounded-xl border bg-card p-6">
             <div class="flex flex-col gap-6">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div
+                    class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+                >
                     <div>
-                        <h2 class="text-lg font-semibold">{{ $t('form_section.title') }}</h2>
+                        <h2 class="text-lg font-semibold">
+                            {{ $t('form_section.title') }}
+                        </h2>
                         <p class="text-sm text-muted-foreground">
                             {{ $t('form_section.subtitle') }}
                         </p>
@@ -243,23 +268,32 @@ const dynamicLabels2 = computed(() => {
                             id="form-full-name"
                             class="h-10 rounded-md border border-input bg-background px-3 text-sm"
                             type="text"
-                            :placeholder="$t('form_section.fields.full_name.placeholder')"
-                        >
+                            :placeholder="
+                                $t('form_section.fields.full_name.placeholder')
+                            "
+                        />
                         <p class="text-xs text-muted-foreground">
                             {{ $t('form_section.fields.full_name.helper') }}
                         </p>
                     </div>
 
                     <div class="flex flex-col gap-2">
-                        <label class="text-sm font-medium" for="form-display-name">
+                        <label
+                            class="text-sm font-medium"
+                            for="form-display-name"
+                        >
                             {{ $t('form_section.fields.display_name.label') }}
                         </label>
                         <input
                             id="form-display-name"
                             class="h-10 rounded-md border border-input bg-background px-3 text-sm"
                             type="text"
-                            :placeholder="$t('form_section.fields.display_name.placeholder')"
-                        >
+                            :placeholder="
+                                $t(
+                                    'form_section.fields.display_name.placeholder',
+                                )
+                            "
+                        />
                     </div>
 
                     <div class="flex flex-col gap-2">
@@ -271,8 +305,10 @@ const dynamicLabels2 = computed(() => {
                             class="h-10 rounded-md border border-input bg-background px-3 text-sm"
                             type="email"
                             inputmode="email"
-                            :placeholder="$t('form_section.fields.email.placeholder')"
-                        >
+                            :placeholder="
+                                $t('form_section.fields.email.placeholder')
+                            "
+                        />
                         <p class="text-xs text-muted-foreground">
                             {{ $t('form_section.fields.email.helper') }}
                         </p>
@@ -287,8 +323,10 @@ const dynamicLabels2 = computed(() => {
                             class="h-10 rounded-md border border-input bg-background px-3 text-sm"
                             type="text"
                             inputmode="decimal"
-                            :placeholder="$t('form_section.fields.amount.placeholder')"
-                        >
+                            :placeholder="
+                                $t('form_section.fields.amount.placeholder')
+                            "
+                        />
                         <p class="text-xs text-muted-foreground">
                             {{ $t('form_section.fields.amount.helper') }}
                         </p>
@@ -303,16 +341,32 @@ const dynamicLabels2 = computed(() => {
                             class="h-10 rounded-md border border-input bg-background px-3 text-sm"
                         >
                             <option value="draft">
-                                {{ $t('form_section.fields.status.options.draft') }}
+                                {{
+                                    $t(
+                                        'form_section.fields.status.options.draft',
+                                    )
+                                }}
                             </option>
                             <option value="on-hold">
-                                {{ $t('form_section.fields.status.options.on_hold') }}
+                                {{
+                                    $t(
+                                        'form_section.fields.status.options.on_hold',
+                                    )
+                                }}
                             </option>
                             <option value="due-now">
-                                {{ $t('form_section.fields.status.options.due_now') }}
+                                {{
+                                    $t(
+                                        'form_section.fields.status.options.due_now',
+                                    )
+                                }}
                             </option>
                             <option value="paid">
-                                {{ $t('form_section.fields.status.options.paid') }}
+                                {{
+                                    $t(
+                                        'form_section.fields.status.options.paid',
+                                    )
+                                }}
                             </option>
                         </select>
                     </div>
@@ -325,8 +379,10 @@ const dynamicLabels2 = computed(() => {
                             id="form-reference"
                             class="h-10 rounded-md border border-input bg-background px-3 text-sm"
                             type="text"
-                            :placeholder="$t('form_section.fields.reference.placeholder')"
-                        >
+                            :placeholder="
+                                $t('form_section.fields.reference.placeholder')
+                            "
+                        />
                         <p class="text-xs text-muted-foreground">
                             {{
                                 $t(
@@ -348,7 +404,9 @@ const dynamicLabels2 = computed(() => {
                         <textarea
                             id="form-notes"
                             class="min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                            :placeholder="$t('form_section.fields.notes.placeholder')"
+                            :placeholder="
+                                $t('form_section.fields.notes.placeholder')
+                            "
                         ></textarea>
                     </div>
 
@@ -357,7 +415,7 @@ const dynamicLabels2 = computed(() => {
                             id="form-shipping"
                             class="h-4 w-4 rounded border border-input"
                             type="checkbox"
-                        >
+                        />
                         <label class="text-sm" for="form-shipping">
                             {{ $t('form_section.fields.shipping_same.label') }}
                         </label>
@@ -368,14 +426,16 @@ const dynamicLabels2 = computed(() => {
                             id="form-consent"
                             class="h-4 w-4 rounded border border-input"
                             type="checkbox"
-                        >
+                        />
                         <label class="text-sm" for="form-consent">
                             {{ $t('form_section.fields.consent.label') }}
                         </label>
                     </div>
                 </form>
 
-                <div class="flex flex-col gap-2 rounded-lg border border-dashed border-input bg-muted/40 p-4 text-sm">
+                <div
+                    class="flex flex-col gap-2 rounded-lg border border-dashed border-input bg-muted/40 p-4 text-sm"
+                >
                     <p class="font-medium">
                         {{ $t('form_section.helper.title') }}
                     </p>

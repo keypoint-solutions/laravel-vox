@@ -1,40 +1,36 @@
 <script setup lang="ts">
-import Layout from '@/layouts/Layout.vue';
-import { Head } from '@inertiajs/vue3';
+    import { Head } from '@inertiajs/vue3';
 
-defineOptions({
-    layout: Layout,
-});
+    import Layout from '@/layouts/Layout.vue';
+
+    defineOptions({
+        layout: Layout,
+    });
 </script>
 
 <template>
     <Head title="Sync" />
 
     <div class="space-y-6">
-        <section class="rounded-xl border bg-card p-6 shadow-sm">
-            <p class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Sync Center
-            </p>
+        <section class="bg-card rounded-xl border p-6 shadow-sm">
+            <p class="text-muted-foreground text-xs tracking-[0.2em] uppercase">Sync Center</p>
             <h1 class="mt-2 text-2xl font-semibold">Sync</h1>
-            <p class="mt-2 text-sm text-muted-foreground">
-                Configure remote environments, pull translations, and push updates
-                through a controlled workflow.
+            <p class="text-muted-foreground mt-2 text-sm">
+                Configure remote environments, pull translations, and push updates through a controlled workflow.
             </p>
         </section>
 
         <section class="grid gap-4 sm:grid-cols-2">
-            <div class="rounded-xl border bg-card p-5">
+            <div class="bg-card rounded-xl border p-5">
                 <h2 class="text-lg font-semibold">Remote environments</h2>
-                <p class="mt-2 text-sm text-muted-foreground">
-                    Register staging and production endpoints to pull translations
-                    with a secure sync key.
+                <p class="text-muted-foreground mt-2 text-sm">
+                    Register staging and production endpoints to pull translations with a secure sync key.
                 </p>
             </div>
-            <div class="rounded-xl border bg-card p-5">
+            <div class="bg-card rounded-xl border p-5">
                 <h2 class="text-lg font-semibold">Sync activity</h2>
-                <p class="mt-2 text-sm text-muted-foreground">
-                    Monitor the last run, changes discovered, and items awaiting
-                    review.
+                <p class="text-muted-foreground mt-2 text-sm">
+                    Monitor the last run, changes discovered, and items awaiting review.
                 </p>
             </div>
         </section>

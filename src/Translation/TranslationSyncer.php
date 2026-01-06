@@ -10,18 +10,16 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 
 class TranslationSyncer
 {
-    public function __construct(private TranslationFileRepository $files)
-    {
-    }
+    public function __construct(private TranslationFileRepository $files) {}
 
     /**
-     * @param array<int, string> $locales
-     * @param array<string, array<string, mixed>> $scanResults
+     * @param  array<int, string>  $locales
+     * @param  array<string, array<string, mixed>>  $scanResults
      */
     public function sync(array $locales, array $scanResults): SyncResult
     {
         $langPath = $this->files->langPath();
-        $result = new SyncResult();
+        $result = new SyncResult;
 
         $groupFiles = $this->collectGroupFiles($langPath, $locales);
         $jsonFiles = $this->collectJsonFiles($langPath, $locales);
@@ -62,20 +60,18 @@ class TranslationSyncer
                 );
             }
 
-            if ($payload['occurrences'] !== []) {
-                VoxTranslationOccurrence::query()
-                    ->where('translation_id', $translation->id)
-                    ->delete();
+            VoxTranslationOccurrence::query()
+                ->where('translation_id', $translation->id)
+                ->delete();
 
-                foreach ($payload['occurrences'] as $occurrence) {
-                    VoxTranslationOccurrence::query()->create([
-                        'translation_id' => $translation->id,
-                        'file_path' => $occurrence['file'],
-                        'line_number' => $occurrence['line'],
-                        'context_before' => $occurrence['before'],
-                        'context_after' => $occurrence['after'],
-                    ]);
-                }
+            foreach ($payload['occurrences'] ?? [] as $occurrence) {
+                VoxTranslationOccurrence::query()->create([
+                    'translation_id' => $translation->id,
+                    'file_path' => $occurrence['file'],
+                    'line_number' => $occurrence['line'],
+                    'context_before' => $occurrence['before'],
+                    'context_after' => $occurrence['after'],
+                ]);
             }
 
             $result->incrementTranslations();
@@ -85,7 +81,7 @@ class TranslationSyncer
     }
 
     /**
-     * @param array<int, string> $locales
+     * @param  array<int, string>  $locales
      * @return array<int, array{locale: string, group: string, path: string}>
      */
     private function collectGroupFiles(string $langPath, array $locales): array
@@ -146,7 +142,7 @@ class TranslationSyncer
     }
 
     /**
-     * @param array<int, string> $locales
+     * @param  array<int, string>  $locales
      * @return array<int, array{locale: string, path: string, namespace: string|null}>
      */
     private function collectJsonFiles(string $langPath, array $locales): array
@@ -193,8 +189,8 @@ class TranslationSyncer
     }
 
     /**
-     * @param array<int, array{locale: string, group: string, path: string}> $groupFiles
-     * @param array<int, array{locale: string, path: string, namespace: string|null}> $jsonFiles
+     * @param  array<int, array{locale: string, group: string, path: string}>  $groupFiles
+     * @param  array<int, array{locale: string, path: string, namespace: string|null}>  $jsonFiles
      * @return array<string, array{key: string, group: string|null, values: array<string, string>, is_frontend: bool, source: string|null, occurrences: array<int, array<string, mixed>>}>
      */
     private function loadTranslations(array $groupFiles, array $jsonFiles): array
@@ -206,6 +202,10 @@ class TranslationSyncer
             $flat = Arr::dot($entries);
 
             foreach ($flat as $key => $value) {
+                if (! is_string($value)) {
+                    continue;
+                }
+
                 $fullKey = $file['group'].'.'.$key;
                 $translations[$fullKey]['group'] = $file['group'];
                 $translations[$fullKey]['key'] = $key;
@@ -218,8 +218,12 @@ class TranslationSyncer
             $entries = $this->files->loadJson($file['locale'], $namespace);
 
             foreach ($entries as $key => $value) {
+                if (! is_string($value)) {
+                    continue;
+                }
+
                 $fullKey = $namespace !== null ? $namespace.'::'.$key : $key;
-                $translations[$fullKey]['group'] = null;
+                $translations[$fullKey]['group'] = 'json';
                 $translations[$fullKey]['key'] = $namespace !== null ? $namespace.'::'.$key : $key;
                 $translations[$fullKey]['values'][$file['locale']] = (string) $value;
             }
@@ -235,8 +239,8 @@ class TranslationSyncer
     }
 
     /**
-     * @param array<string, array<string, mixed>> $translations
-     * @param array<string, array<string, mixed>> $scanResults
+     * @param  array<string, array<string, mixed>>  $translations
+     * @param  array<string, array<string, mixed>>  $scanResults
      * @return array<string, array<string, mixed>>
      */
     private function applyScanMetadata(array $translations, array $scanResults): array

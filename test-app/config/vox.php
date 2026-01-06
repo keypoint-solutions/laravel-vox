@@ -66,7 +66,8 @@ return [
     ],
     'translate' => [
         'driver' => env('VOX_TRANSLATE_DRIVER', 'openai'),
-        'prompt' => 'You are a professional translator for a Laravel application. Translate the following string from :source to :target. Keep placeholders, HTML or markdown tags and new lines intact. Output only the translated string.',
+        'prompt' => env('VOX_TRANSLATE_PROMPT',
+            'You are a professional translator for a Laravel application. Translate the following string from :source to :target. Keep placeholders, HTML or markdown tags and new lines intact. Output only the translated string.'),
         'use_context' => env('VOX_TRANSLATE_USE_CONTEXT', true),
         'terms' => [
             'do_not_translate' => [],
@@ -83,6 +84,7 @@ return [
         ],
     ],
     'sync' => [
+        'enabled' => env('VOX_SYNC_ENABLED', true),
         'key' => env('VOX_SYNC_KEY'),
         'middleware' => [],
     ],

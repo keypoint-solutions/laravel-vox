@@ -10,44 +10,44 @@ return [
     // text-sm"> <span class="text-muted-foreground">Short 2: </span> <span class="font-medium text-foreground">{{ $t(KEY) }}</span> </p> <p class="mt-2 text-sm">
     // resources/js/pages/Welcome.vue:116
     'Also works.' => 'Also works.',
-    // <span class="text-muted-foreground">Multiline Phrase: </span> <span class="font-medium text-foreground">{{ $t(`KEY Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation
-    // resources/js/pages/Welcome.vue:140
+    // >Multiline Phrase: </span> <span class="font-medium text-foreground">{{ $t(`KEY Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation
+    // resources/js/pages/Welcome.vue:146
     'Lorem ipsum dolor sit amet, consectetur adipiscing elit.
                                 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
                                 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.
                                 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
                                 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-    // text-sm"> <span class="text-muted-foreground">Phrase 1: </span> <span class="font-medium text-foreground">{{ $t(KEY) }}</span> </p> <p class="mt-2 text-sm">
-    // resources/js/pages/Welcome.vue:128
+    // <span class="text-muted-foreground">Phrase 1: </span> <span class="font-medium text-foreground">{{ $t(KEY, ) }}</span> </p>
+    // resources/js/pages/Welcome.vue:129
     'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
     // text-sm"> <span class="text-muted-foreground">Regular: </span> <span class="font-medium text-foreground">{{ $t(KEY) }}</span> </p> <p class="mt-2 text-sm">
     // resources/js/pages/Welcome.vue:104
     'Regular translation' => 'Regular translation',
-    // <div> <span class="text-muted-foreground">Parametrized 1: </span> <span class="font-medium text-foreground">{{ $t(KEY, {date: new Date().toLocaleDateString()}) }}</span> </div> <div>
-    // resources/js/pages/Welcome.vue:170
+    // >Parametrized 1: </span> <span class="font-medium text-foreground">{{ $t(KEY, { date: new Date().toLocaleDateString(), }) }}</span>
+    // resources/js/pages/Welcome.vue:182
     'Today is :date' => 'Today is :date',
-    // <div> <span class="text-muted-foreground">Parametrized 2: </span> <span class="font-medium text-foreground">{{ $t(KEY, {date: new Date().toLocaleDateString(), time: new Date().toLocaleTimeString()}) }}</span> </div> </div>
-    // resources/js/pages/Welcome.vue:176
+    // >Parametrized 2: </span> <span class="font-medium text-foreground">{{ $t(KEY, { date: new Date().toLocaleDateString(), time: new Date().toLocaleTimeString(), })
+    // resources/js/pages/Welcome.vue:192
     'Today is :date, :time.' => 'Today is :date, :time.',
     // text-sm"> <span class="text-muted-foreground">Short 1: </span> <span class="font-medium text-foreground">{{ $t(KEY) }}</span> </p> <p class="mt-2 text-sm">
     // resources/js/pages/Welcome.vue:110
     'Works.' => 'Works.',
-    // const dynamicLabels = computed(() => { return { 'label1': trans(KEY), 'label2': trans('frontend.dynamicLabels.labels.Dynamic Label 2'), }; });
+    // const dynamicLabels = computed(() => { return { label1: trans(KEY), label2: trans('frontend.dynamicLabels.labels.Dynamic Label 2'), }; });
     // resources/js/pages/Welcome.vue:24
     'dynamicLabels.labels.Dynamic Label 1' => 'Dynamic Label 1',
-    // = computed(() => { return { 'label1': trans('frontend.dynamicLabels.labels.Dynamic Label 1'), 'label2': trans(KEY), }; });
+    // = computed(() => { return { label1: trans('frontend.dynamicLabels.labels.Dynamic Label 1'), label2: trans(KEY), }; });
     // resources/js/pages/Welcome.vue:25
     'dynamicLabels.labels.Dynamic Label 2' => 'Dynamic Label 2',
     'dynamicLabels.values.label1' => 'Label 1 value',
-    // const dynamicLabels2 = computed(() => { return { 'label1': trans(KEY), 'label2': trans('frontend.dynamicLabels2.labels.Dynamic Label 2'), }; });
+    // const dynamicLabels2 = computed(() => { return { label1: trans(KEY), label2: trans('frontend.dynamicLabels2.labels.Dynamic Label 2'), }; });
     // resources/js/pages/Welcome.vue:31
     'dynamicLabels2.labels.Dynamic Label 1' => 'Dynamic Label 1',
-    // = computed(() => { return { 'label1': trans('frontend.dynamicLabels2.labels.Dynamic Label 1'), 'label2': trans(KEY), }; }); </script>
+    // = computed(() => { return { label1: trans('frontend.dynamicLabels2.labels.Dynamic Label 1'), label2: trans(KEY), }; }); </script>
     // resources/js/pages/Welcome.vue:32
     'dynamicLabels2.labels.Dynamic Label 2' => 'Dynamic Label 2',
     'dynamicLabels2.values.label1' => 'Label 1 value',
-    // text-sm"> <span class="text-muted-foreground">Phrase 2: </span> <span class="font-medium text-foreground">{{ $t(KEY) }}</span> </p> <p class="mt-2 text-sm">
-    // resources/js/pages/Welcome.vue:134
+    // <span class="text-muted-foreground">Phrase 2: </span> <span class="font-medium text-foreground">{{ $t(KEY, ) }}</span> </p>
+    // resources/js/pages/Welcome.vue:137
     'grouped.Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
     // text-sm"> <span class="text-muted-foreground">Short 3: </span> <span class="font-medium text-foreground">{{ $t(KEY) }}</span> </p> <p class="mt-2 text-sm">
     // resources/js/pages/Welcome.vue:122

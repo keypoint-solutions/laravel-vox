@@ -2,10 +2,12 @@
 
 namespace KeypointSolutions\LaravelVox\Support;
 
-use KeypointSolutions\LaravelVox\Models\VoxSetting;
-
 class VoxSyncKey
 {
+    public function __construct(private VoxSettingsRepository $settings)
+    {
+    }
+
     public function get(): ?string
     {
         $configured = config('vox.sync.key');
@@ -14,14 +16,11 @@ class VoxSyncKey
             return $configured;
         }
 
-        return VoxSetting::query()->where('key', 'sync_key')->value('value');
+        return null;
     }
 
-    public function store(string $value): void
+    public function store(string $value): bool
     {
-        VoxSetting::query()->updateOrCreate(
-            ['key' => 'sync_key'],
-            ['value' => $value]
-        );
+        return $this->settings->save(['sync_key' => $value]);
     }
 }
