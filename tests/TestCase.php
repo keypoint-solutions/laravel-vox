@@ -59,12 +59,24 @@ class TestCase extends Orchestra
     protected function getPackageProviders($app)
     {
         return [
+            \Inertia\ServiceProvider::class,
             LaravelVoxServiceProvider::class,
         ];
     }
 
+    protected function defineWebRoutes($router): void
+    {
+        $routesPath = __DIR__.'/../routes/web.php';
+
+        if (file_exists($routesPath)) {
+            require $routesPath;
+        }
+    }
+
     public function getEnvironmentSetUp($app): void
     {
+        $app->usePublicPath(dirname(__DIR__).'/public');
+        config()->set('app.key', 'base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=');
         config()->set('database.default', 'testing');
         config()->set('database.connections.testing', [
             'driver' => 'sqlite',
@@ -72,20 +84,6 @@ class TestCase extends Orchestra
             'prefix' => '',
             'foreign_key_constraints' => true,
         ]);
-        config()->set('database.connections.vox', [
-            'driver' => 'sqlite',
-            'database' => ':memory:',
-            'prefix' => '',
-            'foreign_key_constraints' => true,
-        ]);
         config()->set('cache.default', 'array');
-        config()->set('vox.database.connection', 'vox');
-        config()->set('vox.database.path', ':memory:');
-
-        /*
-         foreach (\Illuminate\Support\Facades\File::allFiles(__DIR__ . '/../database/migrations') as $migration) {
-            (include $migration->getRealPath())->up();
-         }
-         */
     }
 }

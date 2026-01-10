@@ -2,6 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use KeypointSolutions\LaravelVox\Http\Controllers\ManageController;
+use KeypointSolutions\LaravelVox\Http\Controllers\ManageTranslationController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SettingsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncController;
 
@@ -23,9 +25,15 @@ Route::prefix('vox')
             return Inertia::render('Sync');
         })->name('sync');
 
-        Route::get('/manage', function () {
-            return Inertia::render('Manage');
-        })->name('manage');
+        Route::get('/manage', ManageController::class)->name('manage');
+
+        Route::patch('/manage/translations/{translation}', [ManageTranslationController::class, 'update'])
+            ->name('manage.translations.update');
+        Route::post('/manage/translations/{translation}/toggle-approval',
+            [ManageTranslationController::class, 'toggleApproval'])
+            ->name('manage.translations.toggle-approval');
+        Route::post('/manage/translations/{translation}/translate', [ManageTranslationController::class, 'translate'])
+            ->name('manage.translations.translate');
 
         Route::get('/publish', function () {
             return Inertia::render('Publish');

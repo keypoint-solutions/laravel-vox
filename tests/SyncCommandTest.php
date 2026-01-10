@@ -1,12 +1,11 @@
 <?php
 
-use Illuminate\Support\Facades\File;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationOccurrence;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 
 it('syncs translation files into the vox database', function () {
-    $targetRoot = prepareVoxFixtures();
+    prepareVoxFixtures();
 
     $this->artisan('vox:parse', ['--no-interaction' => true])->assertExitCode(0);
     $this->artisan('vox:sync')->assertExitCode(0);
@@ -39,6 +38,4 @@ it('syncs translation files into the vox database', function () {
         ->first();
 
     expect($vendorTranslation)->not->toBeNull();
-
-    File::deleteDirectory($targetRoot);
 });

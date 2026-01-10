@@ -2,10 +2,14 @@
 
 namespace KeypointSolutions\LaravelVox\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use KeypointSolutions\LaravelVox\Database\Factories\VoxTranslationFactory;
 
 class VoxTranslation extends VoxModel
 {
+    /** @use HasFactory<VoxTranslationFactory> */
+    use HasFactory;
     protected $table = 'vox_translations';
 
     protected $fillable = [

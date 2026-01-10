@@ -389,22 +389,46 @@ class TranslationScanner
      */
     private function extractContext(string $content, array $lines, int $offset, int $length): array
     {
-        $lineNumber = substr_count($content, "\n", 0, $offset) + 1;
-        $index = max(0, $lineNumber - 1);
-        $beforeStart = max(0, $index - $this->contextLines);
-        $afterStart = min(count($lines), $index + 1);
+        $startLineNumber = substr_count($content, "\n", 0, $offset) + 1;
+        $startIndex = max(0, $startLineNumber - 1);
+        $beforeStart = max(0, $startIndex - $this->contextLines);
 
-        $beforeLines = array_slice($lines, $beforeStart, $index - $beforeStart);
+        // Calculate the end position of the key and which line it ends on
+        $keyEndOffset = $offset + $length;
+        $keyContent = substr($content, $offset, $length);
+        $keyNewlines = $keyContent !== false ? substr_count($keyContent, "\n") : 0;
+        $endLineNumber = $startLineNumber + $keyNewlines;
+        $endIndex = max(0, $endLineNumber - 1);
+
+        // Get lines before the key starts
+        $beforeLines = array_slice($lines, $beforeStart, $startIndex - $beforeStart);
+
+        // Get lines after the key ends
+        $afterStart = min(count($lines), $endIndex + 1);
         $afterLines = array_slice($lines, $afterStart, $this->contextLines);
-        $currentLine = $lines[$index] ?? '';
+
+        // Get the portion of the start line before the key
+        $startLine = $lines[$startIndex] ?? '';
         $prefixSlice = substr($content, 0, $offset);
         $lineStart = $prefixSlice === false ? false : strrpos($prefixSlice, "\n");
         $lineStart = $lineStart === false ? -1 : $lineStart;
         $lineOffset = max(0, $offset - ($lineStart + 1));
-        $lineLength = strlen($currentLine);
-        $length = max(0, min($length, max(0, $lineLength - $lineOffset)));
-        $lineBefore = $lineOffset > 0 ? substr($currentLine, 0, $lineOffset) : '';
-        $lineAfter = $lineLength > 0 ? substr($currentLine, $lineOffset + $length) : '';
+        $lineBefore = $lineOffset > 0 ? substr($startLine, 0, $lineOffset) : '';
+
+        // Get the portion of the end line after the key
+        $endLine = $lines[$endIndex] ?? '';
+        if ($keyNewlines === 0) {
+            // Key is on a single line
+            $endLineLength = strlen($endLine);
+            $keyLengthOnLine = max(0, min($length, max(0, $endLineLength - $lineOffset)));
+            $lineAfter = $endLineLength > 0 ? substr($endLine, $lineOffset + $keyLengthOnLine) : '';
+        } else {
+            // Key spans multiple lines - find where it ends on the last line
+            $keyEndInContent = substr($content, 0, $keyEndOffset);
+            $lastNewlinePos = $keyEndInContent !== false ? strrpos($keyEndInContent, "\n") : false;
+            $keyEndOnLine = $lastNewlinePos === false ? $keyEndOffset : $keyEndOffset - ($lastNewlinePos + 1);
+            $lineAfter = strlen($endLine) > $keyEndOnLine ? substr($endLine, $keyEndOnLine) : '';
+        }
 
         if (is_string($lineBefore) && $lineBefore !== '') {
             $beforeLines[] = $lineBefore;
@@ -416,7 +440,7 @@ class TranslationScanner
         $limit = 120;
 
         return [
-            'line' => $lineNumber,
+            'line' => $startLineNumber,
             'before' => $this->limitContext($this->normalizeContext(implode(' ', $beforeLines)), $limit, true),
             'after' => $this->limitContext($this->normalizeContext(implode(' ', $afterLines)), $limit, false),
         ];

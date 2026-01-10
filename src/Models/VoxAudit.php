@@ -2,8 +2,13 @@
 
 namespace KeypointSolutions\LaravelVox\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use KeypointSolutions\LaravelVox\Database\Factories\VoxAuditFactory;
+
 class VoxAudit extends VoxModel
 {
+    /** @use HasFactory<VoxAuditFactory> */
+    use HasFactory;
     protected $table = 'vox_audits';
 
     public $timestamps = false;

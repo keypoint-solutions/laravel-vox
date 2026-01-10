@@ -1,0 +1,398 @@
+<?php
+
+namespace KeypointSolutions\LaravelVox\Http\Controllers;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Str;
+use Inertia\Inertia;
+use Inertia\Response;
+use KeypointSolutions\LaravelVox\Models\VoxAudit;
+use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+
+class ManageController
+{
+    public function __construct(private VoxLocaleResolver $localeResolver) {}
+
+    public function __invoke(Request $request): Response
+    {
+        $filters = $this->resolveFilters($request);
+        [$locales, $baseLocale] = $this->resolveLocales();
+
+        $lastSyncAt = VoxAudit::query()
+            ->whereIn('action', ['sync', 'sync-remote'])
+            ->orderByDesc('created_at')
+            ->first()?->created_at;
+
+        $totalTranslations = VoxTranslation::query()->count();
+
+        return Inertia::render('Manage', [
+            'groups' => $this->loadGroups(),
+            'translations' => $this->loadTranslations($request, $filters, $locales, $lastSyncAt),
+            'locales' => $locales,
+            'baseLocale' => $baseLocale,
+            'filters' => $filters,
+            'statusOptions' => $this->statusOptions(),
+            'sortOptions' => $this->sortOptions(),
+            'lastSyncAt' => $lastSyncAt?->toDateTimeString(),
+            'ai' => $this->aiStatus(),
+            'totalTranslations' => $totalTranslations,
+        ]);
+    }
+
+    /**
+     * @return array{group: string|null, search: string, status: string|null, sort: string, scope: string}
+     */
+    private function resolveFilters(Request $request): array
+    {
+        $group = $request->input('group');
+        $group = is_string($group) && $group !== '' ? $group : null;
+
+        $search = $request->input('search');
+        $search = is_string($search) ? trim($search) : '';
+
+        $status = $request->input('status');
+        $status = is_string($status) ? $status : null;
+
+        $sort = $request->input('sort');
+        $sort = is_string($sort) ? $sort : 'updated_desc';
+
+        $scope = $request->input('scope');
+        $scope = is_string($scope) ? $scope : null;
+
+        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing'];
+        if (! in_array($status, $allowedStatus, true)) {
+            $status = null;
+        }
+
+        $allowedSort = ['updated_desc', 'status'];
+        if (! in_array($sort, $allowedSort, true)) {
+            $sort = 'updated_desc';
+        }
+
+        if ($scope !== 'all' && $scope !== 'group') {
+            $scope = $group !== null ? 'group' : 'all';
+        }
+
+        return [
+            'group' => $group,
+            'search' => $search,
+            'status' => $status,
+            'sort' => $sort,
+            'scope' => $scope,
+        ];
+    }
+
+    /**
+     * @return array{0: array<int, string>, 1: string}
+     */
+    private function resolveLocales(): array
+    {
+        $locales = $this->localeResolver->resolveLocales();
+        $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
+
+        if (! in_array($baseLocale, $locales, true)) {
+            $locales[] = $baseLocale;
+        }
+
+        $locales = array_values(array_unique($locales));
+        $locales = array_values(array_unique(array_merge([$baseLocale], $locales)));
+
+        return [$locales, $baseLocale];
+    }
+
+    /**
+     * @return array<int, array{name: string, total: int, has_frontend: bool, is_json: bool}>
+     */
+    private function loadGroups(): array
+    {
+        $groups = VoxTranslation::query()
+            ->select('group')
+            ->selectRaw('count(*) as total')
+            ->selectRaw('max(case when is_frontend = 1 then 1 else 0 end) as has_frontend')
+            ->groupBy('group')
+            ->orderBy('group')
+            ->get();
+
+        return $groups
+            ->map(function (VoxTranslation $group): array {
+                $name = $group->group ?? 'default';
+
+                return [
+                    'name' => $name,
+                    'total' => (int) $group->total,
+                    'has_frontend' => (bool) $group->has_frontend,
+                    'is_json' => Str::startsWith($name, 'json'),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array{group: string|null, search: string, status: string|null, sort: string, scope: string}  $filters
+     * @param  array<int, string>  $locales
+     */
+    private function loadTranslations(
+        Request $request,
+        array $filters,
+        array $locales,
+        ?\Carbon\CarbonInterface $lastSyncAt
+    ): LengthAwarePaginator {
+        $perPage = (int) $request->input('per_page', 25);
+        if ($perPage < 1) {
+            $perPage = 25;
+        }
+
+        $perPage = min($perPage, 100);
+
+        $query = VoxTranslation::query()
+            ->with([
+                'values' => fn ($builder) => $builder->orderBy('locale'),
+                'occurrences' => fn ($builder) => $builder->orderBy('id'),
+            ]);
+
+        $applyGroup = $filters['scope'] === 'group' && $filters['group'] !== null;
+
+        if ($applyGroup) {
+            if ($filters['group'] === 'default') {
+                $query->whereNull('group');
+            } else {
+                $query->where('group', $filters['group']);
+            }
+        }
+
+        if ($filters['search'] !== '') {
+            $like = '%'.$filters['search'].'%';
+            $query->where(function (Builder $builder) use ($like): void {
+                $builder
+                    ->where('key', 'like', $like)
+                    ->orWhere('group', 'like', $like)
+                    ->orWhereHas('values', function (Builder $valueQuery) use ($like): void {
+                        $valueQuery->where('value', 'like', $like);
+                    });
+
+                if (Str::contains($like, '.')) {
+                    [$groupPart, $keyPart] = explode('.', trim($like, '%'), 2);
+
+                    if ($groupPart !== '' && $keyPart !== '') {
+                        $builder->orWhere(function (Builder $subQuery) use ($groupPart, $keyPart): void {
+                            $subQuery
+                                ->where('group', 'like', '%'.$groupPart.'%')
+                                ->where('key', 'like', '%'.$keyPart.'%');
+                        });
+                    }
+                }
+            });
+        }
+
+        $this->applyStatusFilter($query, $filters['status'], $lastSyncAt, $locales);
+        $this->applySort($query, $filters['sort'], $lastSyncAt);
+
+        return $query
+            ->paginate($perPage)
+            ->withQueryString()
+            ->through(function (VoxTranslation $translation) use ($locales, $lastSyncAt): array {
+                $values = array_fill_keys($locales, '');
+
+                foreach ($translation->values as $value) {
+                    $values[$value->locale] = $value->value;
+                }
+
+                return [
+                    'id' => $translation->id,
+                    'group' => $translation->group,
+                    'key' => $translation->key,
+                    'display_key' => $this->displayKey($translation),
+                    'status' => $translation->status,
+                    'virtual_status' => $this->virtualStatus($translation, $lastSyncAt),
+                    'is_frontend' => $translation->is_frontend,
+                    'source' => $translation->source,
+                    'updated_at' => $translation->updated_at?->toDateTimeString(),
+                    'values' => $values,
+                    'occurrences' => $translation->occurrences->map(function ($occurrence): array {
+                        return [
+                            'id' => $occurrence->id,
+                            'file_path' => $occurrence->file_path,
+                            'line_number' => $occurrence->line_number,
+                            'context_before' => $occurrence->context_before,
+                            'context_after' => $occurrence->context_after,
+                        ];
+                    })->all(),
+                ];
+            });
+    }
+
+    /**
+     * @param  array<int, string>  $locales
+     */
+    private function applyStatusFilter(Builder $query, ?string $status, ?\Carbon\CarbonInterface $lastSyncAt, array $locales): void
+    {
+        if ($status === null) {
+            return;
+        }
+
+        if ($status === 'missing') {
+            $this->applyMissingFilter($query, $locales);
+
+            return;
+        }
+
+        if ($lastSyncAt === null) {
+            if (in_array($status, ['new', 'updated'], true)) {
+                $query->whereRaw('1 = 0');
+
+                return;
+            }
+
+            $query->where('status', $status);
+
+            return;
+        }
+
+        if ($status === 'new') {
+            $query->where('created_at', '>=', $lastSyncAt);
+
+            return;
+        }
+
+        if ($status === 'updated') {
+            $query
+                ->where('created_at', '<', $lastSyncAt)
+                ->where('updated_at', '>=', $lastSyncAt);
+
+            return;
+        }
+
+        $query
+            ->where('status', $status)
+            ->where('created_at', '<', $lastSyncAt)
+            ->where('updated_at', '<', $lastSyncAt);
+    }
+
+    /**
+     * @param  array<int, string>  $locales
+     */
+    private function applyMissingFilter(Builder $query, array $locales): void
+    {
+        $flagPrefix = (string) config('vox.parse.flag_prefix', '🚩');
+
+        $query->where(function (Builder $builder) use ($locales, $flagPrefix): void {
+            foreach ($locales as $locale) {
+                $builder->orWhereDoesntHave('values', function (Builder $valueQuery) use ($locale): void {
+                    $valueQuery->where('locale', $locale);
+                });
+
+                $builder->orWhereHas('values', function (Builder $valueQuery) use ($locale, $flagPrefix): void {
+                    $valueQuery
+                        ->where('locale', $locale)
+                        ->where(function (Builder $q) use ($flagPrefix): void {
+                            $q->where('value', '')
+                                ->orWhereNull('value')
+                                ->orWhere('value', 'like', $flagPrefix.'%');
+                        });
+                });
+            }
+        });
+    }
+
+    private function applySort(Builder $query, string $sort, ?\Carbon\CarbonInterface $lastSyncAt): void
+    {
+        if ($sort === 'status') {
+            if ($lastSyncAt === null) {
+                $query->orderByRaw("case when status = 'pending' then 0 when status = 'approved' then 1 else 2 end");
+                $query->orderByDesc('updated_at');
+
+                return;
+            }
+
+            $query->orderByRaw(
+                "case
+                    when created_at >= ? then 0
+                    when updated_at >= ? and created_at < ? then 1
+                    when status = 'pending' then 2
+                    when status = 'approved' then 3
+                    else 4
+                end",
+                [$lastSyncAt, $lastSyncAt, $lastSyncAt]
+            );
+            $query->orderByDesc('updated_at');
+
+            return;
+        }
+
+        $query->orderByDesc('updated_at');
+    }
+
+    private function displayKey(VoxTranslation $translation): string
+    {
+        if ($translation->group === null || Str::startsWith($translation->group, 'json')) {
+            return $translation->key;
+        }
+
+        return $translation->group.'.'.$translation->key;
+    }
+
+    private function virtualStatus(VoxTranslation $translation, ?\Carbon\CarbonInterface $lastSyncAt): string
+    {
+        if ($lastSyncAt !== null) {
+            if ($translation->created_at?->greaterThanOrEqualTo($lastSyncAt)) {
+                return 'new';
+            }
+
+            if ($translation->updated_at?->greaterThanOrEqualTo($lastSyncAt)) {
+                return 'updated';
+            }
+        }
+
+        return $translation->status;
+    }
+
+    /**
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function statusOptions(): array
+    {
+        return [
+            ['value' => 'new', 'label' => 'New'],
+            ['value' => 'updated', 'label' => 'Updated'],
+            ['value' => 'pending', 'label' => 'Pending'],
+            ['value' => 'approved', 'label' => 'Approved'],
+            ['value' => 'missing', 'label' => 'Missing'],
+        ];
+    }
+
+    /**
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function sortOptions(): array
+    {
+        return [
+            ['value' => 'updated_desc', 'label' => 'Updated (newest)'],
+            ['value' => 'status', 'label' => 'Status'],
+        ];
+    }
+
+    /**
+     * @return array{available: bool, configured: bool, driver: string}
+     */
+    private function aiStatus(): array
+    {
+        $driver = (string) config('vox.translate.driver', 'openai');
+        $available = $driver !== 'null';
+        $configured = true;
+
+        if ($driver === 'openai') {
+            $apiKey = config('vox.translate.openai.api_key');
+            $configured = is_string($apiKey) && $apiKey !== '';
+        }
+
+        return [
+            'available' => $available && $configured,
+            'configured' => $configured,
+            'driver' => $driver,
+        ];
+    }
+}
