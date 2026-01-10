@@ -2,6 +2,7 @@
 
 namespace KeypointSolutions\LaravelVox;
 
+use KeypointSolutions\LaravelVox\Commands\CleanupCommand;
 use KeypointSolutions\LaravelVox\Commands\GenerateSyncKeyCommand;
 use KeypointSolutions\LaravelVox\Commands\InstallCommand;
 use KeypointSolutions\LaravelVox\Commands\ParseTranslationsCommand;
@@ -34,6 +35,7 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
 
         if ($this->app->runningInConsole()) {
             $this->commands([
+                CleanupCommand::class,
                 InstallCommand::class,
                 ParseTranslationsCommand::class,
                 TranslateMissingTranslationsCommand::class,

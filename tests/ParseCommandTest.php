@@ -26,6 +26,4 @@ it('parses translation keys and updates lang files', function () {
 
     $frJson = json_decode(File::get($targetRoot.'/lang/fr.json'), true);
     expect($frJson['Welcome'])->toStartWith('🚩');
-
-    File::deleteDirectory($targetRoot);
 });
