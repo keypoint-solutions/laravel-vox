@@ -18,44 +18,52 @@
 
     const page = usePage<{ stats: StatsProps }>();
     const stats = computed(() => page.props.stats ?? {});
+    const features = computed(() => page.props.vox?.features ?? {});
 
-    const modules = [
-        {
-            title: 'Sync',
-            description: 'Pull, compare, and merge translation files across environments.',
-            href: '/vox/sync',
-            icon: RefreshCw,
-            color: 'bg-blue-500/10 text-blue-500',
-        },
-        {
-            title: 'Manage',
-            description: 'Review keys, contexts, and moderation status in one place.',
-            href: '/vox/manage',
-            icon: Layers,
-            color: 'bg-emerald-500/10 text-emerald-500',
-        },
-        {
-            title: 'Publish',
-            description: 'Ship verified translations to production-ready bundles.',
-            href: '/vox/publish',
-            icon: UploadCloud,
-            color: 'bg-violet-500/10 text-violet-500',
-        },
-        {
-            title: 'Audit',
-            description: 'Trace command runs, approvals, and translation activity.',
-            href: '/vox/audit',
-            icon: FileText,
-            color: 'bg-amber-500/10 text-amber-500',
-        },
-        {
-            title: 'Settings',
-            description: 'Tune parsing, syncing, and translation driver preferences.',
-            href: '/vox/settings',
-            icon: Settings,
-            color: 'bg-slate-500/10 text-slate-500',
-        },
-    ];
+    const modules = computed(() =>
+        [
+            {
+                title: 'Sync',
+                description: 'Pull, compare, and merge translation files across environments.',
+                href: '/vox/sync',
+                icon: RefreshCw,
+                color: 'bg-blue-500/10 text-blue-500',
+                feature: 'sync',
+            },
+            {
+                title: 'Manage',
+                description: 'Review keys, contexts, and moderation status in one place.',
+                href: '/vox/manage',
+                icon: Layers,
+                color: 'bg-emerald-500/10 text-emerald-500',
+                feature: 'manage',
+            },
+            {
+                title: 'Publish',
+                description: 'Ship verified translations to production-ready bundles.',
+                href: '/vox/publish',
+                icon: UploadCloud,
+                color: 'bg-violet-500/10 text-violet-500',
+                feature: 'publish',
+            },
+            {
+                title: 'Audit',
+                description: 'Trace command runs, approvals, and translation activity.',
+                href: '/vox/audit',
+                icon: FileText,
+                color: 'bg-amber-500/10 text-amber-500',
+                feature: 'audit',
+            },
+            {
+                title: 'Settings',
+                description: 'Tune parsing, syncing, and translation driver preferences.',
+                href: '/vox/settings',
+                icon: Settings,
+                color: 'bg-slate-500/10 text-slate-500',
+                feature: 'settings',
+            },
+        ].filter((item) => features.value[item.feature] !== false)
+    );
 
     const overviewStats = computed(() => [
         {
