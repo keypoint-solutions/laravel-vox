@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use KeypointSolutions\LaravelVox\Http\Controllers\DashboardController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ManageController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ManageTranslationController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SettingsController;
@@ -17,9 +18,7 @@ Route::prefix('vox')
     ->name('vox.')
     ->middleware($configMiddleware)
     ->group(function (): void {
-        Route::get('/', function () {
-            return Inertia::render('Dashboard');
-        })->name('dashboard');
+        Route::get('/', DashboardController::class)->name('dashboard');
 
         Route::get('/sync', function () {
             return Inertia::render('Sync');

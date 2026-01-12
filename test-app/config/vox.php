@@ -6,10 +6,10 @@ return [
     ],
     'features' => [
         'dashboard' => true,
-        'sync' => true,
+        'sync' => false,
         'manage' => true,
         'publish' => true,
-        'audit' => true,
+        'audit' => false,
         'settings' => true,
     ],
     'system' => [

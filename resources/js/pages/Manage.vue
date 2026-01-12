@@ -539,7 +539,7 @@
 <template>
     <Head title="Manage" />
 
-    <div :class="['space-y-6', isCompactMode ? 'pt-32 sm:pt-14' : '']">
+    <div :class="['space-y-4', isCompactMode ? 'pt-32 sm:pt-14' : '']">
         <!-- Page Header -->
         <div>
             <h1 class="text-2xl font-semibold tracking-tight">Manage Translations</h1>
@@ -547,7 +547,7 @@
         </div>
 
         <!-- Stats Cards -->
-        <div class="grid gap-6 sm:grid-cols-3">
+        <div class="grid gap-4 sm:grid-cols-3">
             <div class="bg-card rounded-xl border p-4">
                 <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Groups</p>
                 <p class="mt-1 text-2xl font-semibold tabular-nums">{{ groups.length }}</p>
@@ -567,9 +567,9 @@
         <!-- Compact Sticky Header (appears on scroll) -->
         <div
             v-if="isCompactMode"
-            class="bg-background/95 supports-[backdrop-filter]:bg-background/60 fixed inset-x-0 top-0 z-50 border-b backdrop-blur"
+            class="bg-background/95 supports-backdrop-filter:bg-background/60 fixed inset-x-0 top-0 z-50 border-b backdrop-blur"
         >
-            <div class="mx-auto max-w-7xl space-y-2 px-4 py-2 sm:space-y-0 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-7xl space-y-2 px-4 py-2 sm:space-y-0 sm:px-4 lg:px-8">
                 <!-- Row 1: Groups + Search + Reset -->
                 <div class="flex items-center gap-2 sm:gap-3">
                     <!-- Groups Dropdown -->
@@ -579,9 +579,7 @@
                             type="button"
                             @click="showGroupsDropdown = !showGroupsDropdown"
                         >
-                            <span class="max-w-[100px] truncate sm:max-w-[120px]">{{
-                                selectedGroup ?? 'All groups'
-                            }}</span>
+                            <span class="max-w-25 truncate sm:max-w-30">{{ selectedGroup ?? 'All groups' }}</span>
                             <ChevronDown class="size-4 shrink-0 opacity-50" />
                         </button>
                         <div
@@ -660,7 +658,7 @@
                     </Button>
 
                     <!-- Desktop: Status Toggle + Sort + Reset -->
-                    <div class="hidden items-center gap-3 sm:flex">
+                    <div class="hidden items-center gap-4 sm:flex">
                         <ToggleGroup
                             v-model="status"
                             :options="statusToggleOptions"
@@ -715,7 +713,7 @@
         />
 
         <!-- Main Content -->
-        <div :class="['grid gap-6', isCompactMode ? '' : 'lg:grid-cols-[240px,1fr]']">
+        <div :class="['grid gap-4', isCompactMode ? '' : 'lg:grid-cols-[240px,1fr]']">
             <!-- Sidebar: Groups (hidden in compact mode) -->
             <aside
                 v-if="!isCompactMode"
@@ -791,7 +789,7 @@
                 >
                     <div class="flex flex-col gap-4">
                         <!-- Search Row -->
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
                             <SearchInput
                                 v-model="search"
                                 class="flex-1"
@@ -823,7 +821,7 @@
                         </div>
 
                         <!-- Status Toggle -->
-                        <div class="flex flex-wrap items-center gap-3">
+                        <div class="flex flex-wrap items-center gap-4">
                             <ToggleGroup
                                 v-model="status"
                                 :options="statusToggleOptions"
@@ -862,7 +860,7 @@
                         >
                             <!-- Row Header -->
                             <div
-                                class="hover:bg-muted/30 flex cursor-pointer items-center gap-3 overflow-hidden px-4 py-3 transition-colors"
+                                class="hover:bg-muted/30 flex cursor-pointer items-center gap-4 overflow-hidden px-4 py-3 transition-colors"
                                 @click="openEdit(translation)"
                             >
                                 <!-- Status Indicator -->
@@ -1095,7 +1093,7 @@
         <!-- Occurrences Section -->
         <div
             v-if="editTranslation?.occurrences?.length"
-            class="mt-6 border-t pt-6"
+            class="mt-4 border-t pt-4"
         >
             <button
                 class="flex w-full cursor-pointer items-center justify-between text-sm font-semibold"
