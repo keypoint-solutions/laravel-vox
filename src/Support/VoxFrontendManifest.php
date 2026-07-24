@@ -32,6 +32,7 @@ class VoxFrontendManifest
         $groups = VoxTranslation::query()
             ->where('is_frontend', true)
             ->whereNotNull('group')
+            ->where('group', '!=', 'json')
             ->distinct()
             ->orderBy('group')
             ->pluck('group')
@@ -73,6 +74,46 @@ class VoxFrontendManifest
     }
 
     /**
+     * @return array<int, string>
+     */
+    public function groups(): array
+    {
+        $configured = $this->configuredGroups();
+
+        if ($configured !== null) {
+            return $this->normalizeGroups($configured);
+        }
+
+        $path = $this->path();
+
+        if (File::exists($path)) {
+            $manifest = json_decode(File::get($path), true);
+            $groups = is_array($manifest) ? ($manifest['groups'] ?? []) : [];
+
+            if (is_array($groups)) {
+                return $this->normalizeGroups($groups);
+            }
+        }
+
+        return VoxTranslation::query()
+            ->where('is_frontend', true)
+            ->where('is_orphan', false)
+            ->whereNotNull('group')
+            ->where('group', '!=', 'json')
+            ->distinct()
+            ->orderBy('group')
+            ->pluck('group')
+            ->filter(fn (mixed $group): bool => is_string($group) && $group !== '')
+            ->values()
+            ->all();
+    }
+
+    public function usesConfiguredGroups(): bool
+    {
+        return $this->configuredGroups() !== null;
+    }
+
+    /**
      * @return array<int, string>|null
      */
     private function configuredGroups(): ?array
@@ -88,5 +129,23 @@ class VoxFrontendManifest
         }
 
         return array_values(array_filter(array_map('trim', explode(',', $configured))));
+    }
+
+    /**
+     * @param  array<int, mixed>  $groups
+     * @return array<int, string>
+     */
+    private function normalizeGroups(array $groups): array
+    {
+        $groups = array_values(array_unique(array_filter(
+            array_map(
+                static fn (mixed $group): string => is_string($group) ? trim($group) : '',
+                $groups
+            ),
+            static fn (string $group): bool => $group !== ''
+        )));
+        sort($groups);
+
+        return $groups;
     }
 }

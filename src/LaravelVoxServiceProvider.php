@@ -14,6 +14,8 @@ use KeypointSolutions\LaravelVox\Support\AiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\OpenAiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\UnavailableAiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\VoxDatabaseManager;
+use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
+use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -21,6 +23,13 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
 {
     public function packageRegistered(): void
     {
+        $this->app->bind(
+            VoxKeyProtector::class,
+            fn ($app): VoxKeyProtector => new VoxKeyProtector(
+                $app->make(VoxSettingsRepository::class)->protectedKeys()
+            )
+        );
+
         $this->app->bind(AiModelDiscovery::class, function ($app): AiModelDiscovery {
             if (config('vox.translate.driver', 'openai') === 'openai') {
                 return $app->make(OpenAiModelDiscovery::class);

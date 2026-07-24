@@ -19,6 +19,7 @@
 
     interface SettingsProps {
         settings: {
+            protected_keys: string[];
             translate_guidance: string;
             sync_enabled: boolean;
             sync_key_set: boolean;
@@ -55,8 +56,13 @@
         section: 'sync',
         sync_enabled: settings.value.sync_enabled,
     });
+    const protectionForm = useForm({
+        section: 'protection',
+        protected_keys: settings.value.protected_keys.join('\n'),
+    });
 
     const aiSaved = ref(false);
+    const protectionSaved = ref(false);
     const syncSaved = ref(false);
     const refreshingModels = ref(false);
     const modelRefreshSuccess = ref(false);
@@ -100,6 +106,15 @@
     );
 
     watch(
+        () => protectionForm.protected_keys,
+        () => {
+            if (protectionForm.isDirty) {
+                protectionSaved.value = false;
+            }
+        }
+    );
+
+    watch(
         () => syncForm.sync_enabled,
         () => {
             if (syncForm.isDirty) {
@@ -128,6 +143,18 @@
             onSuccess: () => {
                 syncForm.defaults();
                 syncSaved.value = true;
+            },
+        });
+    }
+
+    function saveProtectionSettings(): void {
+        protectionSaved.value = false;
+
+        protectionForm.post(settingsUpdateRoute.value, {
+            preserveScroll: true,
+            onSuccess: () => {
+                protectionForm.defaults();
+                protectionSaved.value = true;
             },
         });
     }
@@ -312,6 +339,70 @@
                     </p>
                 </aside>
             </div>
+        </section>
+
+        <section class="bg-card rounded-xl border">
+            <div class="border-b p-6">
+                <div class="flex items-start gap-3">
+                    <ShieldCheck class="mt-0.5 size-5 shrink-0 text-emerald-500" />
+                    <div>
+                        <h2 class="text-lg font-semibold">Protected translation keys</h2>
+                        <p class="text-muted-foreground mt-1 max-w-2xl text-sm">
+                            Protected values remain owned by their language files. Parse will not remove them and
+                            Publish will never overwrite them.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <form
+                class="space-y-6 p-6"
+                @submit.prevent="saveProtectionSettings"
+            >
+                <div
+                    v-if="protectionForm.errors.general"
+                    role="alert"
+                    class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border p-3 text-sm"
+                >
+                    {{ protectionForm.errors.general }}
+                </div>
+
+                <FormField
+                    id="protected_keys"
+                    :error="protectionForm.errors.protected_keys"
+                    description="Enter one complete key or prefix per line. A trailing dot protects the whole group or prefix, for example auth. or messages.legal."
+                    label="Keys and prefixes"
+                >
+                    <Textarea
+                        id="protected_keys"
+                        v-model="protectionForm.protected_keys"
+                        :rows="7"
+                        placeholder="auth.&#10;validation.&#10;messages.legal."
+                    />
+                </FormField>
+
+                <div class="flex flex-wrap items-center gap-3 border-t pt-5">
+                    <Button
+                        :disabled="protectionForm.processing || !protectionForm.isDirty"
+                        type="submit"
+                    >
+                        <Loader2
+                            v-if="protectionForm.processing"
+                            class="size-4 animate-spin"
+                        />
+                        <span>{{ protectionForm.processing ? 'Saving…' : 'Save protected keys' }}</span>
+                    </Button>
+                    <span
+                        v-if="protectionSaved"
+                        role="status"
+                        aria-live="polite"
+                        class="flex items-center gap-1.5 text-sm text-emerald-600"
+                    >
+                        <Check class="size-4" />
+                        Protected keys saved
+                    </span>
+                </div>
+            </form>
         </section>
 
         <section class="bg-card rounded-xl border">

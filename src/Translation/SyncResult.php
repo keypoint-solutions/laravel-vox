@@ -10,6 +10,12 @@ class SyncResult
 
     private int $reopenedTranslations = 0;
 
+    private int $orphanTranslations = 0;
+
+    private int $addedLanguageKeys = 0;
+
+    private int $removedLanguageKeys = 0;
+
     public function incrementTranslations(): void
     {
         $this->translations++;
@@ -38,5 +44,31 @@ class SyncResult
     public function reopenedTranslations(): int
     {
         return $this->reopenedTranslations;
+    }
+
+    public function setOrphanTranslations(int $orphanTranslations): void
+    {
+        $this->orphanTranslations = $orphanTranslations;
+    }
+
+    public function orphanTranslations(): int
+    {
+        return $this->orphanTranslations;
+    }
+
+    public function setLanguageFileChanges(int $addedLanguageKeys, int $removedLanguageKeys): void
+    {
+        $this->addedLanguageKeys = $addedLanguageKeys;
+        $this->removedLanguageKeys = $removedLanguageKeys;
+    }
+
+    public function addedLanguageKeys(): int
+    {
+        return $this->addedLanguageKeys;
+    }
+
+    public function removedLanguageKeys(): int
+    {
+        return $this->removedLanguageKeys;
     }
 }

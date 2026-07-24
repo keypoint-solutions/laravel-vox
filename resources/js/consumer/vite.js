@@ -52,8 +52,8 @@ export async function loadVoxLocale(locale) {
 }
 
 function resolveFrontendGroups(root, options) {
-    if (Array.isArray(options.groups)) {
-        return options.groups;
+    if (Array.isArray(options.frontendGroups)) {
+        return options.frontendGroups;
     }
 
     const manifestPath = resolve(root, options.manifestPath ?? 'storage/vox/frontend.json');
@@ -97,7 +97,7 @@ function filterPhpTranslations(langPath, groups) {
  * Make a Laravel application's PHP and JSON translations available to the
  * Laravel Vox Vue integration.
  *
- * @param {{ langPath?: string, groups?: string[], manifestPath?: string }} options
+ * @param {{ langPath?: string, frontendGroups?: string[], manifestPath?: string }} options
  * @returns {import('vite').PluginOption[]}
  */
 export default function laravelVox(options = {}) {

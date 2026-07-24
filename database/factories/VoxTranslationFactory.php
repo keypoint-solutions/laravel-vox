@@ -21,6 +21,7 @@ class VoxTranslationFactory extends Factory
             'group' => $this->faker->word(),
             'key' => $this->faker->words(2, true),
             'is_frontend' => false,
+            'is_orphan' => false,
             'source' => '__',
             'status' => 'pending',
         ];
@@ -38,6 +39,15 @@ class VoxTranslationFactory extends Factory
     {
         return $this->state([
             'group' => 'json',
+            'source' => null,
+        ]);
+    }
+
+    public function orphan(): static
+    {
+        return $this->state([
+            'is_frontend' => false,
+            'is_orphan' => true,
             'source' => null,
         ]);
     }

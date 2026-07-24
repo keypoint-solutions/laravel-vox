@@ -5,6 +5,7 @@ namespace KeypointSolutions\LaravelVox\Translation;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 
 class TranslationPublisher
@@ -12,6 +13,7 @@ class TranslationPublisher
     public function __construct(
         private TranslationFileRepository $files,
         private VoxLocaleResolver $localeResolver,
+        private VoxKeyProtector $keyProtector,
     ) {}
 
     public function publish(): PublishResult
@@ -28,7 +30,9 @@ class TranslationPublisher
         $groupUpdates = [];
         $jsonUpdates = [];
         $valueCount = 0;
-        $skippedTranslations = 0;
+        $incompleteTranslations = 0;
+        $protectedTranslations = 0;
+        $orphanTranslations = 0;
 
         $translations = VoxTranslation::query()
             ->where('status', 'approved')
@@ -38,6 +42,18 @@ class TranslationPublisher
             ->get();
 
         foreach ($translations as $translation) {
+            if ($translation->is_orphan) {
+                $orphanTranslations++;
+
+                continue;
+            }
+
+            if ($this->isProtected($translation)) {
+                $protectedTranslations++;
+
+                continue;
+            }
+
             $values = $translation->values->keyBy('locale');
             $isComplete = collect($locales)->every(function (string $locale) use ($values, $prefix): bool {
                 $value = $values->get($locale)?->value;
@@ -46,7 +62,7 @@ class TranslationPublisher
             });
 
             if (! $isComplete) {
-                $skippedTranslations++;
+                $incompleteTranslations++;
 
                 continue;
             }
@@ -129,7 +145,23 @@ class TranslationPublisher
 
         sort($changedFiles);
 
-        return new PublishResult($valueCount, $changedFiles, $skippedTranslations);
+        return new PublishResult(
+            $valueCount,
+            $changedFiles,
+            $incompleteTranslations,
+            $protectedTranslations,
+            $orphanTranslations,
+        );
+    }
+
+    private function isProtected(VoxTranslation $translation): bool
+    {
+        return $this->keyProtector->isProtected(
+            $translation->key,
+            $translation->group === null || $translation->group === 'json'
+                ? null
+                : $translation->group
+        );
     }
 
     /**

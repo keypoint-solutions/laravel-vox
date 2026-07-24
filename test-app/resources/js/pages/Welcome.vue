@@ -1,10 +1,10 @@
 <script setup lang="ts">
-    import { availableVoxLocales } from '@keypoint-solutions/laravel-vox/vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { availableVoxLocales, trans } from '@laravel-vox/vue.js';
     import { computed } from 'vue';
 
     const currentLocale = computed(() => document.documentElement.lang.replace('-', '_'));
     const dynamicValueKey = 'label1';
+    const backendOnlyKey = ['validation', 'accepted'].join('.');
 
     function pageUrl(locale: string, page: 'blade' | 'vue'): string {
         return `/${locale}/${page}`;
@@ -117,7 +117,7 @@
                         data-test="backend-only-translation"
                         class="mt-2 text-lg font-medium"
                     >
-                        {{ $t('validation.accepted') }}
+                        {{ $t(backendOnlyKey) }}
                     </p>
                     <p class="mt-1 text-xs text-slate-400">
                         This backend-only key deliberately remains unresolved because its group is not exported.

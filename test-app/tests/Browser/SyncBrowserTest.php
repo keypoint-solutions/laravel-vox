@@ -9,7 +9,6 @@ use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 beforeEach(function (): void {
     config()->set('vox.translate.locales', ['en', 'fr']);
     config()->set('vox.translate.base_locale', 'en');
-    config()->set('vox.parse.paths', []);
 
     $this->actingAs(User::factory()->create(['email' => 'admin@keypoint.ro']));
 });
@@ -20,6 +19,17 @@ afterEach(function (): void {
         lang_path('fr/vox_browser_sync.php'),
         storage_path('framework/testing/vox-browser-remote.zip'),
     );
+});
+
+it('asks whether to update language files before local sync', function (): void {
+    visit('/vox/sync')
+        ->press('Sync local files')
+        ->assertSee('Update language files from source first?')
+        ->assertSee('Sync files as they are')
+        ->assertSee('Update files & sync')
+        ->pressAndWaitFor('Sync files as they are')
+        ->assertSee('Synchronized')
+        ->assertNoJavaScriptErrors();
 });
 
 it('pulls production values, preserves local-only keys, and reopens conflicts', function (): void {

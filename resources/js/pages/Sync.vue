@@ -31,6 +31,7 @@
     const routes = computed(() => page.props.vox?.routes);
     const editingId = ref<number | null>(null);
     const isSyncingLocal = ref(false);
+    const showLocalSyncOptions = ref(false);
     const pullingId = ref<number | null>(null);
     const success = ref<string | null>(null);
     const actionError = ref<string | null>(null);
@@ -108,14 +109,15 @@
         );
     }
 
-    function syncLocal(): void {
+    function syncLocal(updateLanguageFiles: boolean): void {
         isSyncingLocal.value = true;
+        showLocalSyncOptions.value = false;
         success.value = null;
         actionError.value = null;
 
         router.post(
             routes.value?.sync_local ?? '',
-            {},
+            { update_language_files: updateLanguageFiles },
             {
                 preserveScroll: true,
                 onError: (errors) => {
@@ -194,9 +196,11 @@
                 </div>
             </div>
             <Button
+                aria-haspopup="dialog"
+                data-test="sync-local-open"
                 :disabled="isSyncingLocal || pullingId !== null"
                 variant="outline"
-                @click="syncLocal"
+                @click="showLocalSyncOptions = true"
             >
                 {{ isSyncingLocal ? 'Synchronizing…' : 'Sync local files' }}
             </Button>
@@ -371,6 +375,59 @@
                     </Button>
                 </div>
             </form>
+        </section>
+    </div>
+
+    <div
+        v-if="showLocalSyncOptions"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        @click.self="showLocalSyncOptions = false"
+    >
+        <section
+            aria-describedby="local-sync-description"
+            aria-labelledby="local-sync-title"
+            aria-modal="true"
+            class="bg-card w-full max-w-lg rounded-xl border p-6 shadow-xl"
+            data-test="sync-local-dialog"
+            role="dialog"
+        >
+            <h2
+                id="local-sync-title"
+                class="text-lg font-semibold"
+            >
+                Update language files from source first?
+            </h2>
+            <p
+                id="local-sync-description"
+                class="text-muted-foreground mt-2 text-sm"
+            >
+                Both choices scan source code and refresh occurrences. Updating first also adds discovered keys and
+                applies your obsolete-key and protected-key rules before importing the files into Vox.
+            </p>
+            <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                    type="button"
+                    variant="ghost"
+                    @click="showLocalSyncOptions = false"
+                >
+                    Cancel
+                </Button>
+                <Button
+                    data-test="sync-without-file-update"
+                    type="button"
+                    variant="outline"
+                    @click="syncLocal(false)"
+                >
+                    Sync files as they are
+                </Button>
+                <Button
+                    data-test="sync-with-file-update"
+                    type="button"
+                    @click="syncLocal(true)"
+                >
+                    Update files & sync
+                </Button>
+            </div>
         </section>
     </div>
 </template>

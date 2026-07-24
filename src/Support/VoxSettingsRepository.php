@@ -14,6 +14,7 @@ class VoxSettingsRepository
     private const EDITABLE_KEYS = [
         'translate_guidance',
         'translate_model',
+        'protected_keys',
         'sync_enabled',
     ];
 
@@ -27,9 +28,32 @@ class VoxSettingsRepository
                 'translate_guidance',
                 config('vox.translate.guidance', '')
             ),
+            'protected_keys' => $this->protectedKeys(),
             'sync_enabled' => (bool) $this->get('sync_enabled', config('vox.sync.enabled', true)),
             'sync_key_set' => filled(config('vox.sync.key')),
         ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function protectedKeys(): array
+    {
+        $configured = config('vox.parse.protected_keys', []);
+        $defaults = is_array($configured) ? $configured : [];
+        $protectedKeys = $this->get('protected_keys', $defaults);
+
+        if (! is_array($protectedKeys)) {
+            return $defaults;
+        }
+
+        return array_values(array_unique(array_filter(
+            array_map(
+                static fn (mixed $key): string => is_string($key) ? trim($key) : '',
+                $protectedKeys
+            ),
+            static fn (string $key): bool => $key !== ''
+        )));
     }
 
     /**

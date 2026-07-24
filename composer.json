@@ -52,6 +52,8 @@
         "test:ui": [
             "npm run build",
             "@php test-app/artisan vendor:publish --tag=vox-assets --force",
+            "@php test-app/artisan migrate --force",
+            "@php test-app/artisan vox:sync --no-interaction",
             "npm --prefix test-app run build",
             "composer --working-dir=test-app test:browser"
         ],

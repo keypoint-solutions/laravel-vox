@@ -53,6 +53,7 @@ it('allows an explicit frontend group override', function (): void {
 
 it('can refresh the frontend manifest from synchronized database flags', function (): void {
     VoxTranslation::factory()->frontend()->create(['group' => 'frontend']);
+    VoxTranslation::factory()->frontend()->json()->create();
     VoxTranslation::factory()->create(['group' => 'backend', 'is_frontend' => false]);
 
     app(VoxFrontendManifest::class)->writeFromDatabase();

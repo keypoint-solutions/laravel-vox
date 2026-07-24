@@ -55,6 +55,7 @@ function manageTranslations(TestResponse $response): Collection
 }
 
 it('returns manage data with groups, statuses, and occurrences', function (): void {
+    config()->set('vox.frontend.groups', ['frontend']);
     seedManageTranslations();
 
     $response = $this->get('/vox/manage');
@@ -76,10 +77,44 @@ it('returns manage data with groups, statuses, and occurrences', function (): vo
     ])->and($translations['frontend.welcome']['freshness_status'])->toBe('new')
         ->and($translations['backend.dashboard']['freshness_status'])->toBe('updated')
         ->and($translations['frontend.welcome']['is_frontend'])->toBeTrue()
+        ->and($response->inertiaPage()['props']['groups'][0]['is_frontend_exported'])->toBeFalse()
+        ->and(collect($response->inertiaPage()['props']['groups'])->firstWhere('name', 'frontend'))
+        ->toMatchArray([
+            'is_frontend_exported' => true,
+            'frontend_export_source' => 'configured',
+        ])
+        ->and(collect($response->inertiaPage()['props']['groups'])->firstWhere('name', 'json'))
+        ->toMatchArray([
+            'is_frontend_exported' => true,
+            'frontend_export_source' => 'json',
+        ])
         ->and($lastSyncAt)->toMatch('/T.*(?:Z|[+-]\d{2}:\d{2})$/')
         ->and($translations['frontend.welcome']['updated_at'])->toMatch('/T.*(?:Z|[+-]\d{2}:\d{2})$/')
         ->and($translations['frontend.welcome']['occurrences'][0]['file_path'])
         ->toBe('resources/views/welcome.blade.php');
+});
+
+it('marks protected and orphan translations and filters orphans separately', function (): void {
+    config()->set('vox.parse.protected_keys', ['messages.legal.']);
+
+    VoxTranslation::factory()
+        ->withValues(['en' => 'Terms', 'fr' => 'Conditions'])
+        ->create(['group' => 'messages', 'key' => 'legal.terms']);
+
+    VoxTranslation::factory()
+        ->orphan()
+        ->approved()
+        ->withValues(['en' => 'Old', 'fr' => 'Ancien'])
+        ->create(['group' => 'messages', 'key' => 'old']);
+
+    $all = manageTranslations($this->get('/vox/manage'))->keyBy('display_key');
+    $orphans = manageTranslations($this->get('/vox/manage?status=orphan'));
+    $approved = manageTranslations($this->get('/vox/manage?status=approved'));
+
+    expect($all['messages.legal.terms']['is_protected'])->toBeTrue()
+        ->and($all['messages.old']['is_orphan'])->toBeTrue()
+        ->and($orphans->pluck('display_key')->all())->toBe(['messages.old'])
+        ->and($approved)->toBeEmpty();
 });
 
 it('filters translations by group scope', function (): void {
@@ -188,6 +223,118 @@ it('bulk approves translations without changing their content timestamps', funct
             ->where('action', 'translations-bulk-approved')
             ->where('context->count', 2)
             ->exists())->toBeTrue();
+});
+
+it('bulk translates only missing target values and returns affected translations to review', function (): void {
+    $this->withoutMiddleware(PreventRequestForgery::class);
+
+    config()->set('vox.translate.driver', 'openai');
+    config()->set('vox.translate.providers.openai.api_key', 'test-key');
+    config()->set('vox.translate.model', 'gpt-5.4-mini');
+
+    Http::fakeSequence()
+        ->push([
+            'output' => [[
+                'type' => 'message',
+                'content' => [[
+                    'type' => 'output_text',
+                    'text' => 'Bonjour __LARAVEL_PLACEHOLDER_0__.',
+                ]],
+            ]],
+        ])
+        ->push([
+            'output' => [[
+                'type' => 'message',
+                'content' => [[
+                    'type' => 'output_text',
+                    'text' => 'Au revoir',
+                ]],
+            ]],
+        ]);
+
+    $missing = VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => 'Hello :name.', 'fr' => ''])
+        ->create(['group' => 'messages', 'key' => 'hello']);
+    $flagged = VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => 'Goodbye', 'fr' => '🚩Goodbye'])
+        ->create(['group' => 'messages', 'key' => 'goodbye']);
+    $complete = VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => 'Ready', 'fr' => 'Prêt'])
+        ->create(['group' => 'messages', 'key' => 'ready']);
+    $orphan = VoxTranslation::factory()
+        ->orphan()
+        ->approved()
+        ->withValues(['en' => 'Old', 'fr' => ''])
+        ->create(['group' => 'messages', 'key' => 'old']);
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/bulk-translate', [
+            'ids' => [$missing->id, $flagged->id, $complete->id, $orphan->id],
+        ])
+        ->assertRedirect('/vox/manage')
+        ->assertInertiaFlash('success', 'AI translated 2 missing values across 2 translations.');
+
+    expect($missing->values()->where('locale', 'fr')->value('value'))->toBe('Bonjour :name.')
+        ->and($missing->fresh()->status)->toBe('pending')
+        ->and($flagged->values()->where('locale', 'fr')->value('value'))->toBe('Au revoir')
+        ->and($flagged->fresh()->status)->toBe('pending')
+        ->and($complete->values()->where('locale', 'fr')->value('value'))->toBe('Prêt')
+        ->and($complete->fresh()->status)->toBe('approved')
+        ->and($orphan->values()->where('locale', 'fr')->value('value'))->toBe('')
+        ->and($orphan->fresh()->status)->toBe('approved')
+        ->and(VoxAudit::query()
+            ->where('action', 'translations-bulk-translated')
+            ->where('context->translations', 2)
+            ->where('context->values', 2)
+            ->exists())->toBeTrue();
+
+    Http::assertSentCount(2);
+});
+
+it('does not persist partial bulk translations when the AI provider fails', function (): void {
+    $this->withoutMiddleware(PreventRequestForgery::class);
+
+    config()->set('vox.translate.driver', 'openai');
+    config()->set('vox.translate.providers.openai.api_key', 'test-key');
+
+    Http::fakeSequence()
+        ->push([
+            'output' => [[
+                'type' => 'message',
+                'content' => [[
+                    'type' => 'output_text',
+                    'text' => 'Premier',
+                ]],
+            ]],
+        ])
+        ->push(['output' => []]);
+
+    $translations = VoxTranslation::factory()
+        ->count(2)
+        ->approved()
+        ->withValues(['en' => 'Source', 'fr' => ''])
+        ->create();
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/bulk-translate', [
+            'ids' => $translations->pluck('id')->all(),
+        ])
+        ->assertRedirect('/vox/manage')
+        ->assertSessionHasErrors('translate');
+
+    expect($translations->every(
+        fn (VoxTranslation $translation): bool => $translation
+            ->values()
+            ->where('locale', 'fr')
+            ->value('value') === ''
+    ))->toBeTrue()
+        ->and($translations->every(
+            fn (VoxTranslation $translation): bool => $translation->fresh()->status === 'approved'
+        ))->toBeTrue()
+        ->and(VoxAudit::query()->where('action', 'translations-bulk-translated')->exists())->toBeFalse();
 });
 
 it('protects Laravel placeholders when translating from the management UI', function (): void {

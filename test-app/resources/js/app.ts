@@ -1,6 +1,6 @@
 import '../css/app.css';
 
-import { createVoxI18n } from '@keypoint-solutions/laravel-vox/vue';
+import { createVoxI18n } from '@laravel-vox/vue.js';
 import { createApp } from 'vue';
 
 import Welcome from './pages/Welcome.vue';

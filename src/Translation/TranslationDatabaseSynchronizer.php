@@ -3,6 +3,7 @@
 namespace KeypointSolutions\LaravelVox\Translation;
 
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
+use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 
 class TranslationDatabaseSynchronizer
@@ -11,9 +12,10 @@ class TranslationDatabaseSynchronizer
         private TranslationFileRepository $files,
         private VoxLocaleResolver $localeResolver,
         private VoxFrontendManifest $frontendManifest,
+        private VoxKeyProtector $keyProtector,
     ) {}
 
-    public function sync(): SyncResult
+    public function sync(bool $updateLanguageFiles = false): SyncResult
     {
         $scanner = new TranslationScanner(
             base_path(),
@@ -30,7 +32,22 @@ class TranslationDatabaseSynchronizer
             $locales[] = $baseLocale;
         }
 
+        $languageFileResult = null;
+
+        if ($updateLanguageFiles) {
+            $languageFileResult = (new TranslationFileUpdater($this->files, $this->keyProtector))
+                ->updateFromScan($scanResults, $locales, $baseLocale);
+        }
+
         $result = (new TranslationSyncer($this->files))->sync($locales, $scanResults);
+
+        if ($languageFileResult !== null) {
+            $result->setLanguageFileChanges(
+                $languageFileResult->added(),
+                $languageFileResult->removed()
+            );
+        }
+
         $this->frontendManifest->writeFromDatabase();
 
         return $result;

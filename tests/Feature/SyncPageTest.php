@@ -64,6 +64,30 @@ it('synchronizes local language files into the database from the UI', function (
         ->toBeString();
 });
 
+it('can update language files from the source scan before local sync', function (): void {
+    $sourcePath = $this->syncRoot.'/resources/views';
+    File::makeDirectory($sourcePath, 0755, true);
+    File::put($sourcePath.'/demo.blade.php', "{{ __('source_demo.message') }}");
+    config()->set('vox.parse.paths', [$sourcePath]);
+
+    $this->from('/vox/sync')
+        ->post('/vox/sync/local', ['update_language_files' => true])
+        ->assertRedirect('/vox/sync')
+        ->assertInertiaFlash(
+            'success',
+            'Synchronized 1 local translation. Language files were updated first (2 added, 0 removed).'
+        );
+
+    expect(require $this->syncLangPath.'/en/source_demo.php')
+        ->toHaveKey('message')
+        ->and(require $this->syncLangPath.'/fr/source_demo.php')
+        ->toHaveKey('message')
+        ->and(VoxTranslation::query()
+            ->where('group', 'source_demo')
+            ->where('key', 'message')
+            ->exists())->toBeTrue();
+});
+
 it('manages remote environments without exposing saved secrets', function (): void {
     $this->from('/vox/sync')->post('/vox/sync/environments', [
         'name' => 'Demo remote',

@@ -84,9 +84,14 @@ The management UI separates workflow state from source freshness:
 - new and changed values are `pending`;
 - approved values changed by a later local or remote sync return to `pending`;
 - unchanged approved values remain approved;
+- database rows absent from both source code and language files are shown as `Orphan`;
 - only complete approved translations are eligible for publishing.
 
-From `/vox/manage`, translations can be edited, AI-translated, selected in bulk, approved, or returned to review. `/vox/publish` writes complete approved values to PHP and JSON language files without publishing pending changes.
+From `/vox/manage`, translations can be edited, AI-translated individually, or selected in bulk to fill only missing target values. Bulk AI results return to pending review; selected translations can then be approved or returned to review together. Successful saves close the editor and appear in an accessible toast. `/vox/publish` writes complete approved values to PHP and JSON language files without publishing pending changes.
+
+Protected keys and prefixes can be maintained in `/vox/settings`. The configured defaults are shown until an
+application saves its own list. Protected keys stay visible in Manage, are retained by Parse, and are never
+overwritten by Publish.
 
 ## AI translation
 
@@ -105,6 +110,10 @@ The driver masks and restores Laravel parameters such as `:name`, `%count%`, `{v
 ## Vue frontend translations
 
 Vox integrates with [`laravel-vue-i18n`](https://github.com/xiCO2k/laravel-vue-i18n) so the frontend uses the same Laravel PHP and JSON language files, including parameter replacement and pluralization.
+
+You can use either the published npm package or the JavaScript sources already installed by Composer.
+
+### npm package
 
 Install the JavaScript package:
 
@@ -136,9 +145,66 @@ import App from './App.vue';
 createApp(App).use(createVoxI18n()).mount('#app');
 ```
 
+`createVoxI18n()` boots `laravel-vue-i18n` for the application. Installing it with Vue makes `$t` available
+in components and initializes the helpers re-exported from the same Vox entry point:
+
+```ts
+import { createVoxI18n, trans, transChoice } from '@keypoint-solutions/laravel-vox/vue';
+```
+
+Importing both the plugin and helpers from Vox guarantees that they share one initialized runtime. Do not omit the
+`.use(createVoxI18n())` call.
+
+### Composer vendor integration
+
+For a Ziggy-style setup without a second Laravel Vox installation, install the frontend runtime:
+
+```bash
+npm install laravel-vue-i18n
+```
+
+Then import the Vite plugin from Composer's `vendor` directory and define a short alias for application code:
+
+```js
+// vite.config.js
+import { fileURLToPath, URL } from 'node:url';
+
+import vue from '@vitejs/plugin-vue';
+import vox from './vendor/keypoint-solutions/laravel-vox/resources/js/consumer/vite.js';
+import { defineConfig } from 'vite';
+import laravel from 'laravel-vite-plugin';
+
+export default defineConfig({
+    resolve: {
+        alias: {
+            '@laravel-vox': fileURLToPath(
+                new URL('./vendor/keypoint-solutions/laravel-vox/resources/js/consumer', import.meta.url)
+            ),
+        },
+    },
+    plugins: [laravel({ input: ['resources/js/app.ts'] }), vue(), vox()],
+});
+```
+
+Install the Vue plugin from that alias:
+
+```ts
+// resources/js/app.ts
+import { createVoxI18n, trans } from '@laravel-vox/vue.js';
+import { createApp } from 'vue';
+
+import App from './App.vue';
+
+createApp(App).use(createVoxI18n()).mount('#app');
+```
+
+No files need to be copied or linked into `node_modules`. The package repository's test application uses Composer's
+local path repository, so its `vendor/keypoint-solutions/laravel-vox` entry is a development symlink; a normal
+Composer installation contains the same importable files as regular vendor files.
+
 The current locale is read from `<html lang>`. Laravel JSON translations remain available, while PHP groups are allow-listed by `storage/vox/frontend.json`. The manifest is generated from frontend occurrences found by `vox:parse` and refreshed by `vox:sync`.
 
-Applications that prefer a fixed list can use `vox({ groups: ['frontend', 'checkout'] })` or set `vox.frontend.groups` explicitly.
+Applications that prefer a fixed list can use `vox({ frontendGroups: ['frontend', 'checkout'] })` or set `vox.frontend.groups` explicitly.
 
 ## Local and remote synchronization
 
@@ -148,7 +214,10 @@ Local sync imports the current application's language files into the Vox databas
 php artisan vox:sync
 ```
 
-It is also available from `/vox/sync`.
+Use `php artisan vox:sync --parse` to update language files from discovered source keys first, then import the result
+with the same scan. In `/vox/sync`, choosing local sync asks whether to perform that file-updating step or import the
+files as they are. Both paths refresh source occurrences and frontend metadata. Rows found in neither source nor
+language files are retained as Orphans for deliberate review instead of silently disappearing.
 
 Remote sync addresses production-edited translations. On the source application, generate a shared key:
 
@@ -171,6 +240,9 @@ The published `config/vox.php` controls:
 - locales, base locale, AI driver, model, guidance, and provider credentials;
 - frontend group auto-detection or explicit overrides;
 - remote sync enablement, key, and endpoint middleware.
+
+`VOX_FRONTEND_GROUPS` and `VOX_TRANSLATE_LOCALES` accept `auto`, one value, or a comma-separated list such as
+`frontend,checkout` and `en,fr,ro`.
 
 ## Development and testing
 

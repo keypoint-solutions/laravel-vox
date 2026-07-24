@@ -26,6 +26,7 @@ class TranslationSyncer
 
         $translations = $this->loadTranslations($groupFiles, $jsonFiles);
         $translations = $this->applyScanMetadata($translations, $scanResults);
+        $seenTranslationIds = [];
 
         foreach ($translations as $fullKey => $payload) {
             $translation = VoxTranslation::query()->firstOrNew([
@@ -37,9 +38,17 @@ class TranslationSyncer
             if ($isNew) {
                 $translation->fill([
                     'is_frontend' => $payload['is_frontend'],
+                    'is_orphan' => false,
                     'source' => $payload['source'],
                     'status' => 'pending',
                 ])->save();
+            }
+
+            if ($translation->is_orphan) {
+                $translation->timestamps = false;
+                $translation->is_orphan = false;
+                $translation->save();
+                $translation->timestamps = true;
             }
 
             if ($translation->is_frontend !== $payload['is_frontend']) {
@@ -105,8 +114,34 @@ class TranslationSyncer
                 ]);
             }
 
+            $seenTranslationIds[] = $translation->id;
             $result->incrementTranslations();
         }
+
+        $orphanQuery = VoxTranslation::query();
+
+        if ($seenTranslationIds !== []) {
+            $orphanQuery->whereNotIn('id', $seenTranslationIds);
+        }
+
+        $orphanIds = $orphanQuery->pluck('id');
+
+        if ($orphanIds->isNotEmpty()) {
+            VoxTranslation::query()
+                ->whereIn('id', $orphanIds)
+                ->toBase()
+                ->update([
+                    'is_frontend' => false,
+                    'is_orphan' => true,
+                    'source' => null,
+                ]);
+
+            VoxTranslationOccurrence::query()
+                ->whereIn('translation_id', $orphanIds)
+                ->delete();
+        }
+
+        $result->setOrphanTranslations($orphanIds->count());
 
         return $result;
     }

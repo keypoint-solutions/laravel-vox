@@ -61,9 +61,69 @@ it('shows real publish readiness statistics', function (): void {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('Publish', false)
             ->where('stats.approved', 3)
+            ->where('stats.publishable', 2)
             ->where('stats.pending', 1)
             ->where('stats.incomplete', 1)
+            ->where('stats.protected', 0)
+            ->where('stats.orphan', 0)
         );
+});
+
+it('does not overwrite protected or orphan translation values', function (): void {
+    config()->set('vox.parse.protected_keys', [
+        'messages.protected.',
+        'Protected JSON',
+    ]);
+
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+
+    foreach (['en', 'fr'] as $locale) {
+        $files->saveGroup($locale, 'messages', [
+            'protected' => [
+                'notice' => $locale === 'en' ? 'File-owned notice' : 'Avis du fichier',
+            ],
+            'orphan' => $locale === 'en' ? 'Existing orphan' : 'Orphelin existant',
+            'publishable' => 'Old',
+        ]);
+        $files->saveJson($locale, [
+            'Protected JSON' => $locale === 'en' ? 'File-owned JSON' : 'JSON du fichier',
+        ]);
+    }
+
+    VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => 'Database notice', 'fr' => 'Avis de la base'])
+        ->create(['group' => 'messages', 'key' => 'protected.notice']);
+    VoxTranslation::factory()
+        ->json()
+        ->approved()
+        ->withValues(['en' => 'Database JSON', 'fr' => 'JSON de la base'])
+        ->create(['key' => 'Protected JSON']);
+    VoxTranslation::factory()
+        ->orphan()
+        ->approved()
+        ->withValues(['en' => 'Database orphan', 'fr' => 'Orphelin de la base'])
+        ->create(['group' => 'messages', 'key' => 'orphan']);
+    VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => 'Published', 'fr' => 'Publié'])
+        ->create(['group' => 'messages', 'key' => 'publishable']);
+
+    $this->from('/vox/publish')
+        ->post('/vox/publish')
+        ->assertRedirect('/vox/publish')
+        ->assertInertiaFlash('success', 'Published 2 translation values across 2 files.');
+
+    $english = require $this->publishLangPath.'/en/messages.php';
+    $englishJson = json_decode(File::get($this->publishLangPath.'/en.json'), true);
+    $audit = VoxAudit::query()->where('action', 'publish')->latest('id')->firstOrFail();
+
+    expect($english['protected']['notice'])->toBe('File-owned notice')
+        ->and($english['orphan'])->toBe('Existing orphan')
+        ->and($english['publishable'])->toBe('Published')
+        ->and($englishJson['Protected JSON'])->toBe('File-owned JSON')
+        ->and($audit->context['protected_translations'])->toBe(2)
+        ->and($audit->context['orphan_translations'])->toBe(1);
 });
 
 it('publishes approved complete values without overwriting pending values', function (): void {

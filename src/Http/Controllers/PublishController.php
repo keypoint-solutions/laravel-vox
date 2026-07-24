@@ -8,12 +8,16 @@ use Inertia\Response;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
+use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
 
 class PublishController
 {
-    public function __construct(private VoxLocaleResolver $localeResolver) {}
+    public function __construct(
+        private VoxLocaleResolver $localeResolver,
+        private VoxKeyProtector $keyProtector,
+    ) {}
 
     public function index(): Response
     {
@@ -34,6 +38,9 @@ class PublishController
             'values' => $result->values(),
             'files' => $result->fileCount(),
             'skipped_translations' => $result->skippedTranslations(),
+            'incomplete_translations' => $result->incompleteTranslations(),
+            'protected_translations' => $result->protectedTranslations(),
+            'orphan_translations' => $result->orphanTranslations(),
         ]);
 
         $message = "Published {$result->values()} translation values across {$result->fileCount()} files.";
@@ -43,12 +50,15 @@ class PublishController
                 'values' => $result->values(),
                 'files' => $result->fileCount(),
                 'skipped_translations' => $result->skippedTranslations(),
+                'incomplete_translations' => $result->incompleteTranslations(),
+                'protected_translations' => $result->protectedTranslations(),
+                'orphan_translations' => $result->orphanTranslations(),
             ])
             ->back();
     }
 
     /**
-     * @return array{approved: int, pending: int, incomplete: int}
+     * @return array{approved: int, publishable: int, pending: int, incomplete: int, protected: int, orphan: int}
      */
     private function stats(): array
     {
@@ -61,7 +71,11 @@ class PublishController
 
         $prefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
         $approved = VoxTranslation::query()->where('status', 'approved')->with('values')->get();
-        $incomplete = $approved->filter(function (VoxTranslation $translation) use ($locales, $prefix): bool {
+        $orphan = $approved->where('is_orphan', true)->count();
+        $active = $approved->where('is_orphan', false);
+        $protected = $active->filter(fn (VoxTranslation $translation): bool => $this->isProtected($translation))->count();
+        $candidates = $active->reject(fn (VoxTranslation $translation): bool => $this->isProtected($translation));
+        $incomplete = $candidates->filter(function (VoxTranslation $translation) use ($locales, $prefix): bool {
             $values = $translation->values->keyBy('locale');
 
             foreach ($locales as $locale) {
@@ -77,8 +91,21 @@ class PublishController
 
         return [
             'approved' => $approved->count(),
+            'publishable' => $candidates->count() - $incomplete,
             'pending' => VoxTranslation::query()->where('status', 'pending')->count(),
             'incomplete' => $incomplete,
+            'protected' => $protected,
+            'orphan' => $orphan,
         ];
+    }
+
+    private function isProtected(VoxTranslation $translation): bool
+    {
+        return $this->keyProtector->isProtected(
+            $translation->key,
+            $translation->group === null || $translation->group === 'json'
+                ? null
+                : $translation->group
+        );
     }
 }
