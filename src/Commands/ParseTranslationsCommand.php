@@ -10,6 +10,7 @@ use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileUpdater;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
@@ -96,7 +97,7 @@ class ParseTranslationsCommand extends Command
         $fileRepository = new TranslationFileRepository(new TranslationFileWriter);
         $beforeSnapshot = $this->snapshotLangFiles($fileRepository->langPath());
         $this->handleDynamicKeys($scanner->dynamicKeys(), $fileRepository, $baseLocale);
-        $protector = new VoxKeyProtector(config('vox.parse.protected_keys', []));
+        $protector = app(VoxKeyProtector::class);
         $updater = new TranslationFileUpdater($fileRepository, $protector);
 
         $result = $updater->updateFromScan($scanResults, $locales, $baseLocale);
@@ -129,7 +130,7 @@ class ParseTranslationsCommand extends Command
             return;
         }
 
-        $protector = new VoxKeyProtector(config('vox.parse.protected_keys', []));
+        $protector = app(VoxKeyProtector::class);
         $suggestions = $this->buildDynamicSuggestions($dynamicKeys, $protector);
 
         if ($suggestions === []) {
@@ -335,14 +336,12 @@ class ParseTranslationsCommand extends Command
             fn (array $suggestion) => $suggestion['prefix'],
             $suggestions
         )));
-        $existing = config('vox.parse.protected_keys', []);
-
-        if (! is_array($existing)) {
-            $existing = [];
-        }
+        $settings = app(VoxSettingsRepository::class);
+        $existing = $settings->protectedKeys();
 
         $protected = array_values(array_unique(array_merge($existing, $prefixes)));
         config()->set('vox.parse.protected_keys', $protected);
+        $settings->save(['protected_keys' => $protected]);
 
         $configPath = config_path('vox.php');
 

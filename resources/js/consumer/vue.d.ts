@@ -1,5 +1,7 @@
 import type { Plugin } from 'vue';
 
+export { trans, trans_choice, transChoice, wTrans, wTransChoice } from 'laravel-vue-i18n';
+
 export interface VoxI18nOptions {
     locale?: string;
     fallbackLocale?: string;

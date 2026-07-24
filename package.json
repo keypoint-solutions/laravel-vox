@@ -28,7 +28,7 @@
     "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@tailwindcss/vite": "^4.1.18",
-        "@types/node": "^22.19.3",
+        "@types/node": "^26.1.1",
         "@vitejs/plugin-vue": "^6.0.3",
         "blade-formatter": "^1.44.2",
         "eslint": "^10.7.0",

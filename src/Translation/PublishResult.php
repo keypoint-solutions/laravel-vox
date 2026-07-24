@@ -10,7 +10,9 @@ class PublishResult
     public function __construct(
         private int $values,
         private array $files,
-        private int $skippedTranslations,
+        private int $incompleteTranslations,
+        private int $protectedTranslations,
+        private int $orphanTranslations,
     ) {}
 
     public function values(): int
@@ -33,6 +35,23 @@ class PublishResult
 
     public function skippedTranslations(): int
     {
-        return $this->skippedTranslations;
+        return $this->incompleteTranslations
+            + $this->protectedTranslations
+            + $this->orphanTranslations;
+    }
+
+    public function incompleteTranslations(): int
+    {
+        return $this->incompleteTranslations;
+    }
+
+    public function protectedTranslations(): int
+    {
+        return $this->protectedTranslations;
+    }
+
+    public function orphanTranslations(): int
+    {
+        return $this->orphanTranslations;
     }
 }

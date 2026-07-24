@@ -54,6 +54,7 @@ The repository should follow a conventional Laravel package layout. The consumer
 | Stale frontend flags are removed on a later sync when a key is no longer used by frontend code.                                | Complete |
 | Standard Laravel framework language sources and optional Cashier sources are scanned by default.                               | Complete |
 | Dynamic keys are surfaced and can be protected from destructive cleanup.                                                       | Complete |
+| Database rows absent from both scanned source and language files are retained and classified as Orphans.                       | Complete |
 | Displayed timestamps are ISO values from the server and formatted in the browser's local timezone through a shared composable. | Complete |
 
 ### Frontend consumption
@@ -62,6 +63,7 @@ The repository should follow a conventional Laravel package layout. The consumer
 | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
 | The package exposes a Vite plugin that prepares Laravel PHP translations through `laravel-vue-i18n`.                                                   | Complete |
 | The package exposes a Vue plugin that selects the current `<html lang>`, loads the locale, and preserves `laravel-vue-i18n` parameter/plural handling. | Complete |
+| Installing the Vox Vue plugin boots `laravel-vue-i18n`, providing component `$t` and helpers re-exported from the same initialized runtime.            | Complete |
 | JSON translations remain available to frontend consumers.                                                                                              | Complete |
 | Only PHP translation groups marked for frontend use are included in the browser bundle.                                                                | Complete |
 | Frontend groups are maintained automatically from scanner results.                                                                                     | Complete |
@@ -87,24 +89,32 @@ import { createVoxI18n } from '@keypoint-solutions/laravel-vox/vue';
 createApp(App).use(createVoxI18n()).mount('#app');
 ```
 
-The Vite plugin reads the generated Vox frontend manifest by default. `vox({ groups: [...] })` is the explicit override for applications that need a fixed list.
+The Vite plugin reads the generated Vox frontend manifest by default. `vox({ frontendGroups: [...] })` is the explicit override for applications that need a fixed list.
+
+The npm package is optional. Composer consumers may import the Vite and Vue modules from
+`vendor/keypoint-solutions/laravel-vox/resources/js/consumer`; the test application exercises this vendor-backed path.
+Its Composer path-repository symlink is a development detail, not an end-user installation step.
 
 `laravel-vue-i18n` remains the frontend translation runtime. Vox must integrate with it rather than reimplement its parameter replacement, pluralization, or locale-loading behavior.
 
 ### Management workflow
 
-| Contract                                                                                               | Status   |
-| ------------------------------------------------------------------------------------------------------ | -------- |
-| Workflow state (`pending` or `approved`) is independent from sync freshness (`new` or `updated`).      | Complete |
-| Approving a translation does not change its content `updated_at` timestamp.                            | Complete |
-| Approved filtering includes approved translations regardless of sync freshness.                        | Complete |
-| Saving and moderation actions display an accessible success cue.                                       | Complete |
-| Missing-value filtering honors the configured missing translation prefix.                              | Complete |
-| Moderation actions are recorded in the audit trail.                                                    | Complete |
-| Users can select individual or all visible translations and approve or return them to review in bulk.  | Complete |
-| Bulk moderation preserves content timestamps and records one structured audit action.                  | Complete |
-| Status dots and icon-only actions have hover and keyboard-focus tooltips.                              | Complete |
-| Frontend/backend group and occurrence indicators explain their meaning without relying on color alone. | Complete |
+| Contract                                                                                                    | Status   |
+| ----------------------------------------------------------------------------------------------------------- | -------- |
+| Workflow state (`pending` or `approved`) is independent from sync freshness (`new` or `updated`).           | Complete |
+| Approving a translation does not change its content `updated_at` timestamp.                                 | Complete |
+| Approved filtering includes approved translations regardless of sync freshness.                             | Complete |
+| Successful saves close the editor and display an accessible toast; save errors keep the editor open.        | Complete |
+| Missing-value filtering honors the configured missing translation prefix.                                   | Complete |
+| Moderation actions are recorded in the audit trail.                                                         | Complete |
+| Users can select individual or all visible translations and approve or return them to review in bulk.       | Complete |
+| Bulk moderation preserves content timestamps and records one structured audit action.                       | Complete |
+| Users can AI-translate only missing target values across the selected visible translations in bulk.         | Complete |
+| Bulk AI results are persisted atomically, returned to pending review, and recorded in the audit trail.      | Complete |
+| Status dots and icon-only actions have hover and keyboard-focus tooltips.                                   | Complete |
+| Frontend/backend group and occurrence indicators explain their meaning without relying on color alone.      | Complete |
+| Frontend group indicators describe whether export is automatic, explicitly configured, or inherent to JSON. | Complete |
+| Orphans and protected keys are visibly identified and can be filtered or inspected in Manage.               | Complete |
 
 ### AI translation
 
@@ -123,22 +133,26 @@ The Vite plugin reads the generated Vox frontend manifest by default. `vox({ gro
 
 ### Routing and settings
 
-| Contract                                                                                   | Status   |
-| ------------------------------------------------------------------------------------------ | -------- |
-| Package routes can register automatically using the configured prefix.                     | Complete |
-| Automatic route registration can be disabled.                                              | Complete |
-| Applications can inject the complete package route set where desired.                      | Complete |
-| Settings validate constrained choices and do not expose environment-owned credentials.     | Complete |
-| The settings UI describes provider-neutral concepts even when OpenAI is the active driver. | Complete |
+| Contract                                                                                        | Status   |
+| ----------------------------------------------------------------------------------------------- | -------- |
+| Package routes can register automatically using the configured prefix.                          | Complete |
+| Automatic route registration can be disabled.                                                   | Complete |
+| Applications can inject the complete package route set where desired.                           | Complete |
+| Settings validate constrained choices and do not expose environment-owned credentials.          | Complete |
+| The settings UI describes provider-neutral concepts even when OpenAI is the active driver.      | Complete |
+| Protected keys and prefixes can be maintained in Settings and use the same resolver everywhere. | Complete |
+| List-valued environment settings accept `auto`, a single value, or comma-separated values.      | Complete |
 
 ### Publish
 
 | Contract                                                                                       | Status   |
 | ---------------------------------------------------------------------------------------------- | -------- |
-| The UI reports approved, pending, and incomplete translation counts.                           | Complete |
+| The UI reports publishable, pending, incomplete, protected, and orphan translation counts.     | Complete |
 | Publishing writes approved database values to Laravel PHP and JSON language files.             | Complete |
 | Publishing preserves existing PHP comments and obsolete-key comments.                          | Complete |
 | Pending database changes do not overwrite language files.                                      | Complete |
+| Protected PHP and JSON values remain owned by language files and are never overwritten.        | Complete |
+| Orphan database rows are never written back into language files.                               | Complete |
 | Publish activity and affected-file counts are audited.                                         | Complete |
 | The UI reports a clear success result after publishing.                                        | Complete |
 | The package does not execute an application's arbitrary deployment command from a web request. | Complete |
@@ -149,6 +163,8 @@ The Vite plugin reads the generated Vox frontend manifest by default. `vox({ gro
 | --------------------------------------------------------------------------------------------------------------------- | -------- |
 | Local sync scans current source and language files into the Vox database.                                             | Complete |
 | Local sync can be triggered from both CLI and UI with the same service.                                               | Complete |
+| Local sync asks whether source-discovered keys should update language files before database import.                   | Complete |
+| CLI users can request the same combined scan, file update, and database sync with `vox:sync --parse`.                 | Complete |
 | A keyed endpoint can provide a language archive to another Vox application.                                           | Complete |
 | Remote environments can be configured and triggered from the UI.                                                      | Complete |
 | Remote archive extraction rejects unsafe paths.                                                                       | Complete |
@@ -175,7 +191,7 @@ The settings page is a safe editor for supported package behavior, not a free-fo
 
 - Secrets remain environment-owned and are represented only by configured/not-configured status.
 - Provider credentials, locale discovery, and the base locale remain environment/configuration owned.
-- The settings UI edits only the active provider's supported model, translation guidance, and remote-sync enablement.
+- The settings UI edits only the active provider's supported model, translation guidance, protected keys, and remote-sync enablement.
 - OpenAI model discovery may refresh the supported model list, with a maintained fallback catalog when discovery is unavailable.
 - Low-level provider endpoints are package implementation details unless a future driver has a concrete, validated need to expose one.
 - User feedback is visible after saving, refreshing provider data, or encountering a validation/provider error.
@@ -216,9 +232,9 @@ The required browser flows are:
 | -------- | --------------------------------------------------------------------------------------------------- |
 | Consumer | Switch locales and verify matching Blade and Vue PHP-group, JSON, nested, and parameterized values. |
 | Manage   | Search/filter, edit/save, approve/reopen, inspect tooltips, and verify the Approved tab.            |
-| Settings | Save constrained settings, refresh provider models, and observe success/error feedback.             |
+| Settings | Save constrained AI and protected-key settings, refresh provider models, and observe feedback.      |
 | Publish  | Publish an approved value, observe success, and verify the resulting language file.                 |
-| Sync     | Configure the headless fixture, pull it, observe success, and verify the imported translation.      |
+| Sync     | Choose a local-sync mode, then pull the headless fixture and verify the imported translation.       |
 | Audit    | Verify the preceding actions appear with locally formatted timestamps and useful context.           |
 
 ## Current milestone
@@ -238,22 +254,26 @@ The current milestone is complete when:
 - Workflow approval and source freshness are separate dimensions.
 - `pending` is the review state for new translations and for previously approved values changed by local or remote synchronization.
 - Frontend detection is automatic from scanned source calls; explicit frontend group configuration is an override.
+- The public Vite override is named `frontendGroups`; `VOX_FRONTEND_GROUPS` and locale env lists normalize single or comma-separated values.
 - `laravel-vue-i18n` remains a dependency of the JavaScript integration.
 - Vox exposes package-owned Vite and Vue entry points so consuming apps do not copy bootstrap logic.
+- The npm package is optional; a Composer-vendor import path is supported and exercised by the test application.
 - JSON translations are frontend-addressable; PHP group export is allow-listed by the frontend manifest.
 - The package keeps a small provider-neutral translation-driver abstraction instead of adding `laravel/ai` as a mandatory Composer dependency.
 - Remote-sync visual testing uses a deterministic headless fixture in the current Laravel 13 test app.
 - Remote sync treats the selected production/staging app as authoritative for matching keys while retaining newly developed local-only keys.
 - Publishing updates language artifacts only; application deployment remains the consuming application's responsibility.
+- Protected keys are one shared Parse, Manage, Settings, and Publish contract; Publish leaves their existing file values untouched.
+- Orphan is independent metadata for DB-only rows, and orphan values never re-enter source files through Publish.
 
 ## Verification log
 
-| Check                                                    | Latest result                                                                                                   |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Baseline package and browser suite before this milestone | 41 tests, 246 assertions; passed                                                                                |
-| Manage and synchronization regression tests              | 16 tests, 148 assertions; passed                                                                                |
-| Package feature and unit suite                           | 59 tests, 381 assertions; passed                                                                                |
-| Consumer Vite build                                      | Passed; frontend PHP/JSON plus backend-only negative boundary verified                                          |
-| Herd-hosted Pest Browser suite                           | 8 tests, 58 assertions; passed                                                                                  |
-| Final `composer test`                                    | Passed: package tests, package build, asset publish, consumer build, and browser suite                          |
-| Live Herd browser audit                                  | Passed: Manage bulk controls/tooltips/footer, Sync demo environment, and Vue bundle boundary; no console errors |
+| Check                                                    | Latest result                                                                                             |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Baseline package and browser suite before this milestone | 41 tests, 246 assertions; passed                                                                          |
+| Manage and synchronization regression tests              | 16 tests, 148 assertions; passed                                                                          |
+| Package feature and unit suite                           | 68 tests, 506 assertions; passed                                                                          |
+| Consumer Vite build                                      | Passed; frontend PHP/JSON plus backend-only negative boundary verified                                    |
+| Herd-hosted Pest Browser suite                           | 9 tests, 69 assertions; passed                                                                            |
+| Final `composer test`                                    | Passed: package tests, package build, asset publish, consumer build, and browser suite                    |
+| Live Herd browser audit                                  | Passed: bulk AI control, save dismissal/toast, tooltips/footer, Sync, and Vue boundary; no console errors |

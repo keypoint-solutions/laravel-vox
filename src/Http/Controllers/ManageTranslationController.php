@@ -4,6 +4,8 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
@@ -122,6 +124,128 @@ class ManageTranslationController
         return Inertia::flash('success', "{$verb} ".count($ids)." {$noun}.")->back();
     }
 
+    public function bulkTranslate(
+        Request $request,
+        TranslationDriverFactory $driverFactory,
+        VoxAuditLogger $auditLogger,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:100'],
+            'ids.*' => ['required', 'integer', 'distinct'],
+        ]);
+
+        if (config('vox.translate.driver', 'openai') === 'null') {
+            return redirect()->back()->withErrors(['translate' => 'AI translation is not configured.']);
+        }
+
+        [$availableLocales, $baseLocale] = $this->resolveLocales();
+        $targetLocales = array_values(array_filter(
+            $availableLocales,
+            fn (string $locale): bool => $locale !== $baseLocale
+        ));
+        $translations = VoxTranslation::query()
+            ->with(['values', 'occurrences'])
+            ->whereIn('id', $validated['ids'])
+            ->get();
+        $driver = $driverFactory->make();
+        $missingPrefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
+
+        /** @var array<int, array{translation: VoxTranslation, values: array<string, string>}> $translated */
+        $translated = [];
+
+        try {
+            foreach ($translations as $translation) {
+                if ($translation->is_orphan) {
+                    continue;
+                }
+
+                $values = $translation->values->keyBy('locale');
+                $baseValue = $values->get($baseLocale)?->value;
+
+                if ($this->isMissingValue($baseValue, $missingPrefix)) {
+                    continue;
+                }
+
+                $translatedValues = [];
+                $context = $this->buildTranslationContext($translation);
+
+                foreach ($targetLocales as $locale) {
+                    if (! $this->isMissingValue($values->get($locale)?->value, $missingPrefix)) {
+                        continue;
+                    }
+
+                    $translatedValues[$locale] = $driver->translate(
+                        $baseValue,
+                        $baseLocale,
+                        $locale,
+                        $context
+                    );
+                }
+
+                if ($translatedValues !== []) {
+                    $translated[] = [
+                        'translation' => $translation,
+                        'values' => $translatedValues,
+                    ];
+                }
+            }
+        } catch (Throwable $exception) {
+            return redirect()->back()->withErrors(['translate' => $exception->getMessage()]);
+        }
+
+        if ($translated === []) {
+            return Inertia::flash(
+                'success',
+                'No missing target values were found in the selected translations.'
+            )->back();
+        }
+
+        $translatedValueCount = array_sum(array_map(
+            fn (array $result): int => count($result['values']),
+            $translated
+        ));
+        $translatedIds = array_map(
+            fn (array $result): int => $result['translation']->id,
+            $translated
+        );
+
+        DB::connection(config('vox.database.connection', 'vox'))
+            ->transaction(function () use ($translated, $translatedIds, $translatedValueCount, $auditLogger): void {
+                foreach ($translated as $result) {
+                    foreach ($result['values'] as $locale => $value) {
+                        VoxTranslationValue::query()->updateOrCreate(
+                            [
+                                'translation_id' => $result['translation']->id,
+                                'locale' => $locale,
+                            ],
+                            [
+                                'value' => $value,
+                                'is_obsolete' => false,
+                            ]
+                        );
+                    }
+
+                    $result['translation']->status = 'pending';
+                    $result['translation']->save();
+                }
+
+                $auditLogger->record('translations-bulk-translated', [
+                    'translation_ids' => $translatedIds,
+                    'translations' => count($translatedIds),
+                    'values' => $translatedValueCount,
+                ]);
+            });
+
+        $translationNoun = count($translatedIds) === 1 ? 'translation' : 'translations';
+        $valueNoun = $translatedValueCount === 1 ? 'value' : 'values';
+
+        return Inertia::flash(
+            'success',
+            "AI translated {$translatedValueCount} missing {$valueNoun} across "
+                .count($translatedIds)." {$translationNoun}."
+        )->back();
+    }
+
     public function translate(
         Request $request,
         VoxTranslation $translation,
@@ -174,6 +298,13 @@ class ManageTranslationController
         }
 
         return Inertia::flash('translated_values', $translatedValues)->back();
+    }
+
+    private function isMissingValue(mixed $value, string $missingPrefix): bool
+    {
+        return ! is_string($value)
+            || $value === ''
+            || Str::startsWith($value, $missingPrefix);
     }
 
     /**

@@ -12,11 +12,17 @@ use Inertia\Inertia;
 use Inertia\Response;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
+use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 
 class ManageController
 {
-    public function __construct(private VoxLocaleResolver $localeResolver) {}
+    public function __construct(
+        private VoxLocaleResolver $localeResolver,
+        private VoxFrontendManifest $frontendManifest,
+        private VoxKeyProtector $keyProtector,
+    ) {}
 
     public function __invoke(Request $request): Response
     {
@@ -65,7 +71,7 @@ class ManageController
         $scope = $request->input('scope');
         $scope = is_string($scope) ? $scope : null;
 
-        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing'];
+        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing', 'orphan'];
         if (! in_array($status, $allowedStatus, true)) {
             $status = null;
         }
@@ -107,27 +113,33 @@ class ManageController
     }
 
     /**
-     * @return array<int, array{name: string, total: int, has_frontend: bool, is_json: bool}>
+     * @return array<int, array{name: string, total: int, is_frontend_exported: bool, frontend_export_source: string|null, is_json: bool}>
      */
     private function loadGroups(): array
     {
+        $frontendGroups = $this->frontendManifest->groups();
+        $frontendSource = $this->frontendManifest->usesConfiguredGroups() ? 'configured' : 'detected';
         $groups = VoxTranslation::query()
             ->select('group')
             ->selectRaw('count(*) as total')
-            ->selectRaw('max(case when is_frontend = 1 then 1 else 0 end) as has_frontend')
             ->groupBy('group')
             ->orderBy('group')
             ->get();
 
         return $groups
-            ->map(function (VoxTranslation $group): array {
+            ->map(function (VoxTranslation $group) use ($frontendGroups, $frontendSource): array {
                 $name = $group->group ?? 'default';
+                $isJson = $name === 'json';
+                $isFrontendExported = $isJson || in_array($name, $frontendGroups, true);
 
                 return [
                     'name' => $name,
                     'total' => (int) $group->total,
-                    'has_frontend' => (bool) $group->has_frontend,
-                    'is_json' => Str::startsWith($name, 'json'),
+                    'is_frontend_exported' => $isFrontendExported,
+                    'frontend_export_source' => $isFrontendExported
+                        ? ($isJson ? 'json' : $frontendSource)
+                        : null,
+                    'is_json' => $isJson,
                 ];
             })
             ->values()
@@ -213,6 +225,11 @@ class ManageController
                     'freshness_status' => $this->freshnessStatus($translation, $lastSyncAt),
                     'has_missing_values' => $this->hasMissingValues($translation, $locales),
                     'is_frontend' => $translation->is_frontend,
+                    'is_orphan' => $translation->is_orphan,
+                    'is_protected' => $this->keyProtector->isProtected(
+                        $translation->key,
+                        $translation->group === 'json' ? null : $translation->group
+                    ),
                     'source' => $translation->source,
                     'updated_at' => $translation->updated_at?->toIso8601String(),
                     'values' => $values,
@@ -237,6 +254,14 @@ class ManageController
         if ($status === null) {
             return;
         }
+
+        if ($status === 'orphan') {
+            $query->where('is_orphan', true);
+
+            return;
+        }
+
+        $query->where('is_orphan', false);
 
         if ($status === 'missing') {
             $this->applyMissingFilter($query, $locales);
@@ -338,7 +363,7 @@ class ManageController
 
     private function freshnessStatus(VoxTranslation $translation, ?CarbonInterface $lastSyncAt): ?string
     {
-        if ($lastSyncAt === null) {
+        if ($lastSyncAt === null || $translation->is_orphan) {
             return null;
         }
 
@@ -394,6 +419,7 @@ class ManageController
             ['value' => 'pending', 'label' => 'Pending'],
             ['value' => 'approved', 'label' => 'Approved'],
             ['value' => 'missing', 'label' => 'Missing'],
+            ['value' => 'orphan', 'label' => 'Orphan'],
         ];
     }
 

@@ -108,6 +108,10 @@ class HandleInertiaRequests extends Middleware
                 $routeNamePrefix.'manage.translations.bulk-approval',
                 absolute: false
             ),
+            'manage_translation_bulk_translate' => route(
+                $routeNamePrefix.'manage.translations.bulk-translate',
+                absolute: false
+            ),
             'manage_translation_translate' => route(
                 $routeNamePrefix.'manage.translations.translate',
                 ['translation' => '__translation__'],

@@ -1,6 +1,6 @@
 <script setup lang="ts">
     import { Head, router, usePage } from '@inertiajs/vue3';
-    import { Check, CircleAlert, FileCheck2, UploadCloud } from '@lucide/vue';
+    import { Check, CircleAlert, FileCheck2, ShieldCheck, UploadCloud } from '@lucide/vue';
     import { computed, ref } from 'vue';
 
     import { Button } from '@/components/ui';
@@ -14,15 +14,28 @@
     interface PublishPageProps {
         stats: {
             approved: number;
+            publishable: number;
             pending: number;
             incomplete: number;
+            protected: number;
+            orphan: number;
         };
         lastPublishAt: string | null;
     }
 
     const page = usePage<PublishPageProps>();
     const { formatDateTime } = useDateTime();
-    const stats = computed(() => page.props.stats ?? { approved: 0, pending: 0, incomplete: 0 });
+    const stats = computed(
+        () =>
+            page.props.stats ?? {
+                approved: 0,
+                publishable: 0,
+                pending: 0,
+                incomplete: 0,
+                protected: 0,
+                orphan: 0,
+            }
+    );
     const routes = computed(() => page.props.vox?.routes);
     const isPublishing = ref(false);
     const success = ref<string | null>(null);
@@ -62,12 +75,12 @@
                 <p class="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">Language files</p>
                 <h1 class="mt-2 text-2xl font-semibold">Publish approved translations</h1>
                 <p class="text-muted-foreground mt-2 max-w-2xl text-sm">
-                    Write reviewed database values back to Laravel PHP and JSON files. Pending and incomplete
-                    translations remain untouched.
+                    Write reviewed database values back to Laravel PHP and JSON files. Pending, incomplete, protected,
+                    and orphan translations remain untouched.
                 </p>
             </div>
             <Button
-                :disabled="isPublishing || stats.approved === 0"
+                :disabled="isPublishing || stats.publishable === 0"
                 class="shrink-0"
                 @click="publish"
             >
@@ -95,11 +108,11 @@
         </div>
 
         <section class="bg-card rounded-xl border">
-            <div class="grid divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <div class="grid divide-y sm:grid-cols-5 sm:divide-x sm:divide-y-0">
                 <div class="p-5">
-                    <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Approved</p>
-                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.approved }}</p>
-                    <p class="text-muted-foreground mt-1 text-xs">Eligible after coverage checks</p>
+                    <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Publishable</p>
+                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.publishable }}</p>
+                    <p class="text-muted-foreground mt-1 text-xs">Approved and eligible</p>
                 </div>
                 <div class="p-5">
                     <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Pending review</p>
@@ -110,6 +123,16 @@
                     <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Incomplete approved</p>
                     <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.incomplete }}</p>
                     <p class="text-muted-foreground mt-1 text-xs">Skipped until every locale is complete</p>
+                </div>
+                <div class="p-5">
+                    <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Protected approved</p>
+                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.protected }}</p>
+                    <p class="text-muted-foreground mt-1 text-xs">Language-file values stay untouched</p>
+                </div>
+                <div class="p-5">
+                    <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Orphan approved</p>
+                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.orphan }}</p>
+                    <p class="text-muted-foreground mt-1 text-xs">No longer found locally</p>
                 </div>
             </div>
         </section>
@@ -142,6 +165,29 @@
                 {{ stats.incomplete }} approved
                 {{ stats.incomplete === 1 ? 'translation is' : 'translations are' }} incomplete and will be skipped.
                 Complete every configured locale in Manage before publishing.
+            </p>
+        </section>
+
+        <section
+            v-if="stats.protected > 0"
+            class="flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4"
+        >
+            <ShieldCheck class="mt-0.5 size-5 shrink-0 text-emerald-500" />
+            <p class="text-sm">
+                {{ stats.protected }} approved
+                {{ stats.protected === 1 ? 'translation is' : 'translations are' }} protected and will keep the value
+                already present in each language file.
+            </p>
+        </section>
+
+        <section
+            v-if="stats.orphan > 0"
+            class="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"
+        >
+            <CircleAlert class="mt-0.5 size-5 shrink-0 text-amber-500" />
+            <p class="text-sm">
+                {{ stats.orphan }} approved {{ stats.orphan === 1 ? 'translation is' : 'translations are' }} orphaned
+                and will not be published. Review the Orphan filter in Manage.
             </p>
         </section>
     </div>

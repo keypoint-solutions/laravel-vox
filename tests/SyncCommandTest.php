@@ -83,3 +83,31 @@ it('keeps an unchanged approved translation approved during sync', function (): 
 
     expect($translation->fresh()->status)->toBe('approved');
 });
+
+it('marks database-only translations as orphans and restores them when they reappear', function (): void {
+    prepareVoxFixtures();
+    $translation = VoxTranslation::factory()
+        ->frontend()
+        ->approved()
+        ->withValues(['en' => 'Database only', 'fr' => 'Base uniquement'])
+        ->withOccurrence('resources/js/Removed.vue')
+        ->create(['group' => 'removed', 'key' => 'message']);
+    $updatedAt = $translation->updated_at;
+
+    $this->artisan('vox:sync')->assertExitCode(0);
+
+    expect($translation->fresh())
+        ->is_orphan->toBeTrue()
+        ->is_frontend->toBeFalse()
+        ->source->toBeNull()
+        ->updated_at->equalTo($updatedAt)->toBeTrue()
+        ->and($translation->occurrences()->count())->toBe(0);
+
+    $repository = new TranslationFileRepository(new TranslationFileWriter);
+    $repository->saveGroup('en', 'removed', ['message' => 'Database only']);
+    $repository->saveGroup('fr', 'removed', ['message' => 'Base uniquement']);
+
+    $this->artisan('vox:sync')->assertExitCode(0);
+
+    expect($translation->fresh()->is_orphan)->toBeFalse();
+});

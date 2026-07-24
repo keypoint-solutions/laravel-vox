@@ -30,6 +30,10 @@ class ConfiguredRouteRegistrationTest extends TestCase
                     'vox.routes.manage_translation_update',
                     '/translations/manage/translations/__translation__'
                 )
+                ->where(
+                    'vox.routes.manage_translation_bulk_translate',
+                    '/translations/manage/translations/bulk-translate'
+                )
             );
 
         $this->get('/vox/manage')->assertNotFound();

@@ -12,7 +12,9 @@
         Laptop,
         RotateCcw,
         Server,
+        ShieldCheck,
         Sparkles,
+        X,
     } from '@lucide/vue';
     import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
@@ -42,7 +44,8 @@
     interface GroupItem {
         name: string;
         total: number;
-        has_frontend: boolean;
+        is_frontend_exported: boolean;
+        frontend_export_source: 'configured' | 'detected' | 'json' | null;
         is_json: boolean;
     }
 
@@ -63,6 +66,8 @@
         freshness_status: string | null;
         has_missing_values: boolean;
         is_frontend: boolean;
+        is_orphan: boolean;
+        is_protected: boolean;
         source: string | null;
         updated_at: string | null;
         values: Record<string, string>;
@@ -122,6 +127,7 @@
         { value: 'new', label: 'New' },
         { value: 'updated', label: 'Updated' },
         { value: 'missing', label: 'Missing' },
+        { value: 'orphan', label: 'Orphan' },
         { value: 'pending', label: 'Pending' },
         { value: 'approved', label: 'Approved' },
     ]);
@@ -138,12 +144,13 @@
     const isSaving = ref(false);
     const isTranslating = ref(false);
     const actionError = ref<string | null>(null);
-    const actionSuccess = ref<string | null>(null);
-    const pageActionSuccess = ref<string | null>(null);
+    const toast = ref<{ message: string; tone: 'success' | 'error' } | null>(null);
     const selectedIds = ref<number[]>([]);
     const isBulkUpdating = ref(false);
+    const isBulkTranslating = ref(false);
     const showOccurrences = ref(false);
     const searchDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+    const toastTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 
     // Compact sticky header state
     const isCompactMode = ref(false);
@@ -261,6 +268,14 @@
 
     onUnmounted(() => {
         window.removeEventListener('scroll', handleScroll);
+
+        if (searchDebounceTimer.value) {
+            clearTimeout(searchDebounceTimer.value);
+        }
+
+        if (toastTimer.value) {
+            clearTimeout(toastTimer.value);
+        }
     });
 
     // Watch for locale changes from server
@@ -444,23 +459,54 @@
         editTranslation.value = translation;
         editValues.value = buildEditValues(translation);
         actionError.value = null;
-        actionSuccess.value = null;
     }
 
     function closeEdit(): void {
         editTranslation.value = null;
         editValues.value = {};
         actionError.value = null;
-        actionSuccess.value = null;
     }
 
     function handleError(errors: Record<string, string>): void {
-        actionSuccess.value = null;
         actionError.value = Object.values(errors)[0] ?? 'Request failed.';
+    }
+
+    function dismissToast(): void {
+        if (toastTimer.value) {
+            clearTimeout(toastTimer.value);
+            toastTimer.value = null;
+        }
+
+        toast.value = null;
+    }
+
+    function showToast(message: string, tone: 'success' | 'error' = 'success'): void {
+        dismissToast();
+        toast.value = { message, tone };
+        toastTimer.value = setTimeout(() => {
+            toast.value = null;
+            toastTimer.value = null;
+        }, 5000);
+    }
+
+    function handleBulkError(errors: Record<string, string>): void {
+        showToast(Object.values(errors)[0] ?? 'Request failed.', 'error');
     }
 
     function workflowStatusLabel(translation: TranslationItem): string {
         return translation.status === 'approved' ? 'Approved' : 'Pending review';
+    }
+
+    function frontendGroupTooltip(group: GroupItem): string {
+        if (group.frontend_export_source === 'json') {
+            return 'JSON translations are included in the frontend bundle';
+        }
+
+        if (group.frontend_export_source === 'configured') {
+            return 'Included in the frontend bundle by configuration';
+        }
+
+        return 'Automatically included from frontend source usage';
     }
 
     function approvalActionLabel(translation: TranslationItem): string {
@@ -491,7 +537,6 @@
         }
 
         isBulkUpdating.value = true;
-        pageActionSuccess.value = null;
         actionError.value = null;
 
         router.post(
@@ -502,14 +547,40 @@
             },
             {
                 preserveScroll: true,
-                onError: handleError,
+                preserveState: true,
+                onError: handleBulkError,
                 onSuccess: (successPage) => {
-                    pageActionSuccess.value =
-                        (successPage.flash?.success as string | undefined) ?? 'Translation statuses updated.';
+                    showToast((successPage.flash?.success as string | undefined) ?? 'Translation statuses updated.');
                     selectedIds.value = [];
                 },
                 onFinish: () => {
                     isBulkUpdating.value = false;
+                },
+            }
+        );
+    }
+
+    function bulkTranslateMissing(): void {
+        if (selectedIds.value.length === 0 || !aiStatus.value.available) {
+            return;
+        }
+
+        isBulkTranslating.value = true;
+
+        router.post(
+            voxRoutes.value?.manage_translation_bulk_translate ?? '',
+            { ids: selectedIds.value },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onError: handleBulkError,
+                onSuccess: (successPage) => {
+                    showToast(
+                        (successPage.flash?.success as string | undefined) ?? 'Missing translations were translated.'
+                    );
+                },
+                onFinish: () => {
+                    isBulkTranslating.value = false;
                 },
             }
         );
@@ -521,17 +592,16 @@
 
     function toggleApproval(translation: TranslationItem): void {
         actionError.value = null;
-        pageActionSuccess.value = null;
 
         router.post(
             translationActionUrl(voxRoutes.value?.manage_translation_toggle_approval, translation.id),
             {},
             {
                 preserveScroll: true,
-                onError: handleError,
+                preserveState: true,
+                onError: handleBulkError,
                 onSuccess: (successPage) => {
-                    pageActionSuccess.value =
-                        (successPage.flash?.success as string | undefined) ?? 'Translation status updated.';
+                    showToast((successPage.flash?.success as string | undefined) ?? 'Translation status updated.');
                 },
             }
         );
@@ -543,7 +613,6 @@
         }
 
         actionError.value = null;
-        actionSuccess.value = null;
         isSaving.value = true;
 
         router.patch(
@@ -556,7 +625,9 @@
                 },
                 onError: handleError,
                 onSuccess: (successPage) => {
-                    actionSuccess.value = (successPage.flash?.success as string | undefined) ?? 'Translations saved.';
+                    const message = (successPage.flash?.success as string | undefined) ?? 'Translations saved.';
+                    closeEdit();
+                    showToast(message);
                 },
             }
         );
@@ -568,7 +639,6 @@
         }
 
         actionError.value = null;
-        actionSuccess.value = null;
         isTranslating.value = true;
         isTranslatingValues.value = true;
 
@@ -618,16 +688,6 @@
         <div>
             <h1 class="text-2xl font-semibold tracking-tight">Manage Translations</h1>
             <p class="text-muted-foreground mt-1 text-sm">Browse, edit, and approve translations across all locales.</p>
-        </div>
-
-        <div
-            v-if="pageActionSuccess"
-            role="status"
-            aria-live="polite"
-            class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-600"
-        >
-            <Check class="size-4 shrink-0" />
-            {{ pageActionSuccess }}
         </div>
 
         <!-- Stats Cards -->
@@ -707,8 +767,8 @@
                             >
                                 <span class="flex min-w-0 items-center gap-1.5">
                                     <Tooltip
-                                        v-if="group.has_frontend"
-                                        text="Contains translations used by frontend code"
+                                        v-if="group.is_frontend_exported"
+                                        :text="frontendGroupTooltip(group)"
                                     >
                                         <Laptop class="size-3 shrink-0 text-emerald-500" />
                                     </Tooltip>
@@ -854,8 +914,8 @@
                         >
                             <span class="flex min-w-0 items-center gap-1.5">
                                 <Tooltip
-                                    v-if="group.has_frontend"
-                                    text="Contains translations used by frontend code"
+                                    v-if="group.is_frontend_exported"
+                                    :text="frontendGroupTooltip(group)"
                                 >
                                     <Laptop class="size-3.5 shrink-0 text-emerald-500" />
                                 </Tooltip>
@@ -952,10 +1012,20 @@
                         </div>
                         <div
                             v-if="selectedIds.length > 0"
-                            class="flex items-center gap-2"
+                            class="flex flex-wrap items-center gap-2"
                         >
                             <Button
-                                :disabled="isBulkUpdating"
+                                data-test="bulk-translate-missing"
+                                :disabled="isBulkUpdating || isBulkTranslating || !aiStatus.available"
+                                size="sm"
+                                variant="outline"
+                                @click="bulkTranslateMissing"
+                            >
+                                <Sparkles class="size-4" />
+                                {{ isBulkTranslating ? 'Translating…' : 'AI translate missing' }}
+                            </Button>
+                            <Button
+                                :disabled="isBulkUpdating || isBulkTranslating"
                                 size="sm"
                                 variant="outline"
                                 @click="bulkApproval('pending')"
@@ -963,7 +1033,7 @@
                                 Return to review
                             </Button>
                             <Button
-                                :disabled="isBulkUpdating"
+                                :disabled="isBulkUpdating || isBulkTranslating"
                                 size="sm"
                                 @click="bulkApproval('approved')"
                             >
@@ -1042,6 +1112,13 @@
                                         >
                                             {{ translation.freshness_status }}
                                         </Badge>
+                                        <Badge
+                                            v-if="translation.is_orphan"
+                                            class="shrink-0"
+                                            variant="warning"
+                                        >
+                                            Orphan
+                                        </Badge>
                                     </div>
                                     <p class="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
                                         {{ translation.values?.[baseLocale] || '—' }}
@@ -1072,6 +1149,15 @@
                                                 class="size-3"
                                             />
                                         </span>
+                                    </Tooltip>
+                                    <Tooltip
+                                        v-if="translation.is_protected"
+                                        text="Protected: Parse keeps this key and Publish will not overwrite its file value"
+                                    >
+                                        <ShieldCheck
+                                            aria-label="Protected translation key"
+                                            class="size-3 text-emerald-500"
+                                        />
                                     </Tooltip>
                                     <Tooltip
                                         v-if="translation.occurrences.length"
@@ -1162,11 +1248,26 @@
         @close="closeEdit"
     >
         <template #header>
-            <div class="min-w-0 flex-1">
+            <div
+                data-test="translation-edit-panel"
+                class="min-w-0 flex-1"
+            >
                 <p class="text-muted-foreground text-xs tracking-[0.2em] uppercase">Editing</p>
                 <h2 class="mt-1 truncate text-lg font-semibold">{{ editTranslation?.display_key }}</h2>
                 <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
                     <Badge variant="secondary">{{ editTranslation?.group ?? 'default' }}</Badge>
+                    <Badge
+                        v-if="editTranslation?.is_orphan"
+                        variant="warning"
+                    >
+                        Orphan
+                    </Badge>
+                    <Badge
+                        v-if="editTranslation?.is_protected"
+                        variant="success"
+                    >
+                        Protected
+                    </Badge>
                     <span class="text-muted-foreground">Updated {{ formatDateTime(editTranslation?.updated_at) }}</span>
                 </div>
             </div>
@@ -1179,16 +1280,6 @@
             class="text-destructive border-destructive/40 bg-destructive/10 mb-4 rounded-lg border p-3 text-sm"
         >
             {{ actionError }}
-        </div>
-
-        <div
-            v-if="actionSuccess"
-            role="status"
-            aria-live="polite"
-            class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-600"
-        >
-            <Check class="size-4 shrink-0" />
-            {{ actionSuccess }}
         </div>
 
         <!-- Locale Order Control -->
@@ -1280,7 +1371,6 @@
                     :data-test="`translation-value-${locale}`"
                     :rows="2"
                     class="resize-none"
-                    @update:model-value="actionSuccess = null"
                 />
             </div>
         </div>
@@ -1346,4 +1436,46 @@
             </div>
         </template>
     </SlidePanel>
+
+    <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="translate-y-2 opacity-0"
+        enter-to-class="translate-y-0 opacity-100"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="translate-y-0 opacity-100"
+        leave-to-class="translate-y-2 opacity-0"
+    >
+        <div
+            v-if="toast"
+            data-test="success-toast"
+            :role="toast.tone === 'error' ? 'alert' : 'status'"
+            :aria-live="toast.tone === 'error' ? 'assertive' : 'polite'"
+            :class="
+                cn(
+                    'bg-card fixed top-4 right-4 z-[70] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg sm:max-w-md',
+                    toast.tone === 'error'
+                        ? 'border-destructive/40 text-destructive'
+                        : 'border-emerald-500/40 text-emerald-600'
+                )
+            "
+        >
+            <CircleAlert
+                v-if="toast.tone === 'error'"
+                class="size-4 shrink-0"
+            />
+            <Check
+                v-else
+                class="size-4 shrink-0"
+            />
+            <span class="min-w-0 flex-1">{{ toast.message }}</span>
+            <button
+                aria-label="Dismiss notification"
+                class="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2"
+                type="button"
+                @click="dismissToast"
+            >
+                <X class="size-4" />
+            </button>
+        </div>
+    </Transition>
 </template>

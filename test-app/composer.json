@@ -43,6 +43,7 @@
             "npm install --ignore-scripts",
             "npm --prefix .. run build",
             "@php artisan vendor:publish --tag=vox-assets --force",
+            "@php artisan vox:sync --no-interaction",
             "npm run build"
         ],
         "dev": "npm run dev",

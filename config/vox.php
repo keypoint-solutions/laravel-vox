@@ -3,6 +3,27 @@
 use KeypointSolutions\LaravelVox\Http\Middleware\Authorize;
 use KeypointSolutions\LaravelVox\Http\Middleware\HandleInertiaRequests;
 
+$listOrAuto = static function (mixed $value): array|string {
+    if (is_array($value)) {
+        return array_values(array_filter(
+            array_map(
+                static fn (mixed $item): string => is_string($item) ? trim($item) : '',
+                $value
+            ),
+            static fn (string $item): bool => $item !== ''
+        ));
+    }
+
+    if (! is_string($value) || trim($value) === '' || strtolower(trim($value)) === 'auto') {
+        return 'auto';
+    }
+
+    return array_values(array_filter(
+        array_map('trim', explode(',', $value)),
+        static fn (string $item): bool => $item !== ''
+    ));
+};
+
 return [
     'gui' => [
         'enabled' => env('VOX_GUI_ENABLED', true),
@@ -20,7 +41,7 @@ return [
         'settings' => true,
     ],
     'frontend' => [
-        'groups' => env('VOX_FRONTEND_GROUPS', 'auto'),
+        'groups' => $listOrAuto(env('VOX_FRONTEND_GROUPS', 'auto')),
         'manifest' => storage_path('vox/frontend.json'),
     ],
     'system' => [
@@ -77,7 +98,7 @@ return [
         'driver' => env('VOX_TRANSLATE_DRIVER', 'openai'),
         'model' => env('VOX_TRANSLATE_MODEL', env('VOX_OPENAI_MODEL', 'gpt-5.4-mini')),
         'prompt' => env('VOX_TRANSLATE_PROMPT',
-            'You are a professional translator for a Laravel application. Translate the following string from :source to :target. Keep placeholders, HTML or markdown tags and new lines intact. Output only the translated string.'),
+            'Translate the user message from :source to :target. Return only the translation. Preserve Laravel placeholders, tokens, whitespace, line breaks, and all HTML or Markdown markup exactly.'),
         'guidance' => env('VOX_TRANSLATE_GUIDANCE', ''),
         'use_context' => env('VOX_TRANSLATE_USE_CONTEXT', true),
         'terms' => [
@@ -85,7 +106,7 @@ return [
             'fixed' => [],
         ],
         'placeholder_prefixes' => [],
-        'locales' => env('VOX_TRANSLATE_LOCALES', 'auto'),
+        'locales' => $listOrAuto(env('VOX_TRANSLATE_LOCALES', 'auto')),
         'base_locale' => env('VOX_TRANSLATE_BASE_LOCALE', 'auto'),
         'providers' => [
             'openai' => [

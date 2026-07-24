@@ -1,6 +1,8 @@
 import { i18nVue, loadLanguageAsync } from 'laravel-vue-i18n';
 import { availableVoxLocales, loadVoxLocale } from 'virtual:laravel-vox/translations';
 
+export { trans, trans_choice, transChoice, wTrans, wTransChoice } from 'laravel-vue-i18n';
+
 function normalizeLocale(locale) {
     return locale.trim().replace('-', '_');
 }

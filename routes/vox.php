@@ -44,6 +44,8 @@ Route::middleware($configMiddleware)
             ->name('manage.translations.toggle-approval');
         Route::post('/manage/translations/bulk-approval', [ManageTranslationController::class, 'bulkApproval'])
             ->name('manage.translations.bulk-approval');
+        Route::post('/manage/translations/bulk-translate', [ManageTranslationController::class, 'bulkTranslate'])
+            ->name('manage.translations.bulk-translate');
         Route::post('/manage/translations/{translation}/translate', [ManageTranslationController::class, 'translate'])
             ->name('manage.translations.translate');
 

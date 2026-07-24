@@ -17,12 +17,14 @@ class VoxTranslation extends VoxModel
         'key',
         'group',
         'is_frontend',
+        'is_orphan',
         'source',
         'status',
     ];
 
     protected $casts = [
         'is_frontend' => 'bool',
+        'is_orphan' => 'bool',
     ];
 
     public function values(): HasMany
