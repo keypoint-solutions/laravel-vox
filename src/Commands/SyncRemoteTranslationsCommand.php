@@ -9,6 +9,7 @@ use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Support\VoxArchive;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
+
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\select;
 use function Laravel\Prompts\warning;
@@ -25,6 +26,7 @@ class SyncRemoteTranslationsCommand extends Command
 
         if ($environments->isEmpty()) {
             warning('No environments configured.');
+
             return self::FAILURE;
         }
 
@@ -37,17 +39,19 @@ class SyncRemoteTranslationsCommand extends Command
 
         if ($environment === null) {
             warning('Environment not found.');
+
             return self::FAILURE;
         }
 
         if ($environment->secret_key === '') {
             warning('Environment is missing a secret key.');
+
             return self::FAILURE;
         }
 
         $endpoint = rtrim($environment->url, '/');
 
-        if (! Str::endsWith($endpoint, '/vox/sync')) {
+        if (! Str::endsWith($endpoint, '/sync')) {
             $endpoint .= '/vox/sync';
         }
 
@@ -56,6 +60,7 @@ class SyncRemoteTranslationsCommand extends Command
 
         if (! $response->successful()) {
             warning('Remote sync failed.');
+
             return self::FAILURE;
         }
 
@@ -68,7 +73,7 @@ class SyncRemoteTranslationsCommand extends Command
 
         File::put($archivePath, $response->body());
 
-        $archive = new VoxArchive();
+        $archive = new VoxArchive;
         $archive->extractArchive($archivePath, config('vox.paths.lang', resource_path('lang')));
         File::delete($archivePath);
 

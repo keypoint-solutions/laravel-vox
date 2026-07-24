@@ -101,6 +101,7 @@
     const lastSyncAt = computed(() => page.props.lastSyncAt ?? null);
     const totalTranslations = computed(() => page.props.totalTranslations ?? 0);
     const aiStatus = computed(() => page.props.ai ?? { available: false, configured: false, driver: 'null' });
+    const voxRoutes = computed(() => page.props.vox?.routes);
 
     const statusToggleOptions = computed<ToggleOption[]>(() => [
         { value: '', label: 'All' },
@@ -373,7 +374,7 @@
     }
 
     function applyFilters(pageOverride = 1): void {
-        router.get('/vox/manage', buildQuery(pageOverride), {
+        router.get(voxRoutes.value?.manage ?? page.url.split('?')[0], buildQuery(pageOverride), {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -435,11 +436,15 @@
         router.reload({ only: ['translations'] });
     }
 
+    function translationActionUrl(route: string | undefined, translationId: number): string {
+        return route?.replace('__translation__', String(translationId)) ?? '';
+    }
+
     function toggleApproval(translation: TranslationItem): void {
         actionError.value = null;
 
         router.post(
-            `/vox/manage/translations/${translation.id}/toggle-approval`,
+            translationActionUrl(voxRoutes.value?.manage_translation_toggle_approval, translation.id),
             {},
             {
                 preserveScroll: true,
@@ -458,7 +463,7 @@
         isSaving.value = true;
 
         router.patch(
-            `/vox/manage/translations/${editTranslation.value.id}`,
+            translationActionUrl(voxRoutes.value?.manage_translation_update, editTranslation.value.id),
             { values: editValues.value },
             {
                 preserveScroll: true,
@@ -481,7 +486,7 @@
         isTranslatingValues.value = true;
 
         router.post(
-            `/vox/manage/translations/${editTranslation.value.id}/translate`,
+            translationActionUrl(voxRoutes.value?.manage_translation_translate, editTranslation.value.id),
             {
                 locales,
                 base_value: editValues.value[baseLocale.value] ?? '',

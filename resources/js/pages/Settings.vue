@@ -32,6 +32,7 @@
     }>();
     const settings = computed(() => page.props.settings);
     const drivers = computed(() => page.props.drivers);
+    const settingsUpdateRoute = computed(() => page.props.vox?.routes?.settings_update ?? page.url.split('?')[0]);
 
     const form = useForm({
         translate_driver: settings.value.translate_driver,
@@ -60,7 +61,7 @@
     );
 
     function submitForm(): void {
-        form.post('/vox/settings', {
+        form.post(settingsUpdateRoute.value, {
             preserveScroll: true,
             onSuccess: () => {
                 showSuccess.value = true;

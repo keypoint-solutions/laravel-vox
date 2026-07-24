@@ -65,11 +65,6 @@ class TestCase extends Orchestra
         ];
     }
 
-    protected function defineWebRoutes($router): void
-    {
-        require __DIR__.'/../routes/web.php';
-    }
-
     public function getEnvironmentSetUp($app): void
     {
         config()->set('app.key', 'base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=');

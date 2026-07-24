@@ -8,6 +8,7 @@
 
     const page = usePage();
     const features = computed(() => page.props.vox?.features ?? {});
+    const routes = computed(() => page.props.vox?.routes);
     const { appearance, updateAppearance } = useAppearance();
     const mobileMenuOpen = ref(false);
 
@@ -19,23 +20,23 @@
 
     const navigation = computed(() =>
         [
-            { label: 'Dashboard', href: '/vox', icon: Home, feature: 'dashboard' },
-            { label: 'Sync', href: '/vox/sync', icon: RefreshCw, feature: 'sync' },
-            { label: 'Manage', href: '/vox/manage', icon: Layers, feature: 'manage' },
+            { label: 'Dashboard', href: routes.value?.dashboard ?? '', icon: Home, feature: 'dashboard' },
+            { label: 'Sync', href: routes.value?.sync ?? '', icon: RefreshCw, feature: 'sync' },
+            { label: 'Manage', href: routes.value?.manage ?? '', icon: Layers, feature: 'manage' },
             {
                 label: 'Publish',
-                href: '/vox/publish',
+                href: routes.value?.publish ?? '',
                 icon: UploadCloud,
                 feature: 'publish',
             },
-            { label: 'Audit', href: '/vox/audit', icon: FileText, feature: 'audit' },
+            { label: 'Audit', href: routes.value?.audit ?? '', icon: FileText, feature: 'audit' },
             {
                 label: 'Settings',
-                href: '/vox/settings',
+                href: routes.value?.settings ?? '',
                 icon: Settings,
                 feature: 'settings',
             },
-        ].filter((item) => features.value[item.feature] !== false)
+        ].filter((item) => item.href && features.value[item.feature] !== false)
     );
 
     function closeMobileMenu() {

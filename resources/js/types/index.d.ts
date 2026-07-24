@@ -1,6 +1,20 @@
 export interface AppPageProps {
     vox?: {
         features?: Record<string, boolean>;
+        routes?: {
+            dashboard: string;
+            sync: string;
+            sync_remote: string;
+            manage: string;
+            manage_translation_update: string;
+            manage_translation_toggle_approval: string;
+            manage_translation_translate: string;
+            publish: string;
+            audit: string;
+            settings: string;
+            settings_update: string;
+        };
+        sync_enabled?: boolean;
     };
 }
 
