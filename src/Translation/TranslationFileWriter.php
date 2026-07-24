@@ -5,10 +5,10 @@ namespace KeypointSolutions\LaravelVox\Translation;
 class TranslationFileWriter
 {
     /**
-     * @param array<string, mixed> $data
-     * @param array<string, mixed> $commented
-     * @param array<string, array<int, string>> $lineComments
-     * @param array<int, string> $rawCommented
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $commented
+     * @param  array<string, array<int, string>>  $lineComments
+     * @param  array<int, string>  $rawCommented
      */
     public function toPhp(array $data, array $commented = [], array $lineComments = [], array $rawCommented = []): string
     {
@@ -28,7 +28,7 @@ class TranslationFileWriter
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     public function toJson(array $data): string
     {
@@ -43,7 +43,7 @@ class TranslationFileWriter
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     private function sortArray(array $data): array
@@ -62,7 +62,7 @@ class TranslationFileWriter
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      * @return array<int, string>
      */
     private function formatArrayLines(array $data, int $indent, string $prefix, array $lineComments): array
@@ -83,6 +83,7 @@ class TranslationFileWriter
                 }
 
                 $lines[count($lines) - 1] .= ',';
+
                 continue;
             }
 
@@ -98,7 +99,7 @@ class TranslationFileWriter
     }
 
     /**
-     * @param array<string, mixed> $commented
+     * @param  array<string, mixed>  $commented
      * @return array<int, string>
      */
     private function formatCommentLines(array $commented, int $indent): array
@@ -114,7 +115,7 @@ class TranslationFileWriter
     }
 
     /**
-     * @param array<int, string> $rawCommented
+     * @param  array<int, string>  $rawCommented
      * @return array<int, string>
      */
     private function formatRawCommentLines(array $rawCommented, int $indent): array
@@ -152,7 +153,7 @@ class TranslationFileWriter
     }
 
     /**
-     * @param array<string, array<int, string>> $lineComments
+     * @param  array<string, array<int, string>>  $lineComments
      * @return array<int, string>
      */
     private function formatInlineComments(string $key, int $indent, array $lineComments): array

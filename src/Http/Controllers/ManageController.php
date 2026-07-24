@@ -2,6 +2,7 @@
 
 namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -22,22 +23,23 @@ class ManageController
         $filters = $this->resolveFilters($request);
         [$locales, $baseLocale] = $this->resolveLocales();
 
-        $lastSyncAt = VoxAudit::query()
+        $lastSync = VoxAudit::query()
             ->whereIn('action', ['sync', 'sync-remote'])
             ->orderByDesc('created_at')
-            ->first()?->created_at;
+            ->first();
+        $lastSyncBoundary = $this->syncBoundary($lastSync);
 
         $totalTranslations = VoxTranslation::query()->count();
 
         return Inertia::render('Manage', [
             'groups' => $this->loadGroups(),
-            'translations' => $this->loadTranslations($request, $filters, $locales, $lastSyncAt),
+            'translations' => $this->loadTranslations($request, $filters, $locales, $lastSyncBoundary),
             'locales' => $locales,
             'baseLocale' => $baseLocale,
             'filters' => $filters,
             'statusOptions' => $this->statusOptions(),
             'sortOptions' => $this->sortOptions(),
-            'lastSyncAt' => $lastSyncAt?->toIso8601String(),
+            'lastSyncAt' => $lastSync?->created_at?->toIso8601String(),
             'ai' => $this->aiStatus(),
             'totalTranslations' => $totalTranslations,
         ]);
@@ -208,7 +210,8 @@ class ManageController
                     'key' => $translation->key,
                     'display_key' => $this->displayKey($translation),
                     'status' => $translation->status,
-                    'virtual_status' => $this->virtualStatus($translation, $lastSyncAt),
+                    'freshness_status' => $this->freshnessStatus($translation, $lastSyncAt),
+                    'has_missing_values' => $this->hasMissingValues($translation, $locales),
                     'is_frontend' => $translation->is_frontend,
                     'source' => $translation->source,
                     'updated_at' => $translation->updated_at?->toIso8601String(),
@@ -267,10 +270,7 @@ class ManageController
             return;
         }
 
-        $query
-            ->where('status', $status)
-            ->where('created_at', '<', $lastSyncAt)
-            ->where('updated_at', '<', $lastSyncAt);
+        $query->where('status', $status);
     }
 
     /**
@@ -278,7 +278,7 @@ class ManageController
      */
     private function applyMissingFilter(Builder $query, array $locales): void
     {
-        $flagPrefix = (string) config('vox.parse.flag_prefix', '🚩');
+        $flagPrefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
 
         $query->where(function (Builder $builder) use ($locales, $flagPrefix): void {
             foreach ($locales as $locale) {
@@ -336,19 +336,51 @@ class ManageController
         return $translation->group.'.'.$translation->key;
     }
 
-    private function virtualStatus(VoxTranslation $translation, ?CarbonInterface $lastSyncAt): string
+    private function freshnessStatus(VoxTranslation $translation, ?CarbonInterface $lastSyncAt): ?string
     {
-        if ($lastSyncAt !== null) {
-            if ($translation->created_at?->greaterThanOrEqualTo($lastSyncAt)) {
-                return 'new';
-            }
+        if ($lastSyncAt === null) {
+            return null;
+        }
 
-            if ($translation->updated_at?->greaterThanOrEqualTo($lastSyncAt)) {
-                return 'updated';
+        if ($translation->created_at?->greaterThanOrEqualTo($lastSyncAt)) {
+            return 'new';
+        }
+
+        if ($translation->updated_at?->greaterThanOrEqualTo($lastSyncAt)) {
+            return 'updated';
+        }
+
+        return null;
+    }
+
+    private function syncBoundary(?VoxAudit $audit): ?CarbonInterface
+    {
+        $startedAt = $audit?->context['started_at'] ?? null;
+
+        if (is_string($startedAt) && $startedAt !== '') {
+            return CarbonImmutable::parse($startedAt);
+        }
+
+        return $audit?->created_at;
+    }
+
+    /**
+     * @param  array<int, string>  $locales
+     */
+    private function hasMissingValues(VoxTranslation $translation, array $locales): bool
+    {
+        $flagPrefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
+        $values = $translation->values->keyBy('locale');
+
+        foreach ($locales as $locale) {
+            $value = $values->get($locale)?->value;
+
+            if (! is_string($value) || $value === '' || Str::startsWith($value, $flagPrefix)) {
+                return true;
             }
         }
 
-        return $translation->status;
+        return false;
     }
 
     /**

@@ -7,6 +7,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
+use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
@@ -14,6 +15,7 @@ use KeypointSolutions\LaravelVox\Translation\TranslationFileUpdater;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
 use KeypointSolutions\LaravelVox\Translation\TranslationKey;
 use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
+
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\select;
@@ -37,6 +39,7 @@ class ParseTranslationsCommand extends Command
 
             if (! $this->input->isInteractive()) {
                 warning('Run "php artisan lang:publish" or create the directory before parsing.');
+
                 return self::FAILURE;
             }
 
@@ -56,11 +59,13 @@ class ParseTranslationsCommand extends Command
 
             if ($exitCode !== self::SUCCESS) {
                 warning('lang:publish did not complete successfully.');
+
                 return $exitCode;
             }
 
             if (! File::isDirectory($langPath)) {
                 warning("Lang path still missing after publish: {$langPath}");
+
                 return self::FAILURE;
             }
         }
@@ -74,12 +79,13 @@ class ParseTranslationsCommand extends Command
         );
 
         $scanResults = spin(fn () => $scanner->scan(), 'Scanning translation keys');
+        app(VoxFrontendManifest::class)->writeFromScanResults($scanResults);
 
         if ($this->output->isVerbose()) {
             $this->outputAnalyzedFiles($scanner);
         }
 
-        $localeResolver = new VoxLocaleResolver();
+        $localeResolver = new VoxLocaleResolver;
         $locales = $localeResolver->resolveLocales();
         $baseLocale = $localeResolver->resolveBaseLocale($locales);
 
@@ -87,7 +93,7 @@ class ParseTranslationsCommand extends Command
             $locales[] = $baseLocale;
         }
 
-        $fileRepository = new TranslationFileRepository(new TranslationFileWriter());
+        $fileRepository = new TranslationFileRepository(new TranslationFileWriter);
         $beforeSnapshot = $this->snapshotLangFiles($fileRepository->langPath());
         $this->handleDynamicKeys($scanner->dynamicKeys(), $fileRepository, $baseLocale);
         $protector = new VoxKeyProtector(config('vox.parse.protected_keys', []));
@@ -115,7 +121,7 @@ class ParseTranslationsCommand extends Command
     }
 
     /**
-     * @param array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}> $dynamicKeys
+     * @param  array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>  $dynamicKeys
      */
     private function handleDynamicKeys(array $dynamicKeys, TranslationFileRepository $fileRepository, string $baseLocale): void
     {
@@ -146,6 +152,7 @@ class ParseTranslationsCommand extends Command
 
         if (! $this->input->isInteractive()) {
             info('Run vox:parse interactively to add protected prefixes and sample keys.');
+
             return;
         }
 
@@ -184,8 +191,8 @@ class ParseTranslationsCommand extends Command
     }
 
     /**
-     * @param array<string, string> $before
-     * @param array<string, string> $after
+     * @param  array<string, string>  $before
+     * @param  array<string, string>  $after
      */
     private function outputModifiedFiles(string $langPath, array $before, array $after): void
     {
@@ -199,6 +206,7 @@ class ParseTranslationsCommand extends Command
 
         if ($modified === []) {
             info('No translation files modified.');
+
             return;
         }
 
@@ -217,7 +225,7 @@ class ParseTranslationsCommand extends Command
     }
 
     /**
-     * @param array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}> $dynamicKeys
+     * @param  array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>  $dynamicKeys
      * @return array<int, array{prefix: string, sample_full_key: string, group: string|null, key: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>
      */
     private function buildDynamicSuggestions(array $dynamicKeys, VoxKeyProtector $protector): array
@@ -267,7 +275,7 @@ class ParseTranslationsCommand extends Command
     }
 
     /**
-     * @param array{source: string|null, is_frontend: bool, context: string|null} $suggestion
+     * @param  array{source: string|null, is_frontend: bool, context: string|null}  $suggestion
      */
     private function formatDynamicSource(array $suggestion): string
     {
@@ -283,7 +291,7 @@ class ParseTranslationsCommand extends Command
     }
 
     /**
-     * @param array{file: string, line: int|null} $suggestion
+     * @param  array{file: string, line: int|null}  $suggestion
      */
     private function formatDynamicLocation(array $suggestion): string
     {
@@ -302,6 +310,7 @@ class ParseTranslationsCommand extends Command
 
         if ($files === []) {
             info('No files analyzed.');
+
             return;
         }
 
@@ -318,7 +327,7 @@ class ParseTranslationsCommand extends Command
     }
 
     /**
-     * @param array<int, array{prefix: string, sample_full_key: string, group: string|null, key: string, source: string|null, is_frontend: bool, file: string}> $suggestions
+     * @param  array<int, array{prefix: string, sample_full_key: string, group: string|null, key: string, source: string|null, is_frontend: bool, file: string}>  $suggestions
      */
     private function appendProtectedPrefixes(array $suggestions): void
     {
@@ -339,6 +348,7 @@ class ParseTranslationsCommand extends Command
 
         if (! File::exists($configPath)) {
             warning('Unable to update vox.php. Publish the config file to persist protected keys.');
+
             return;
         }
 
@@ -350,7 +360,7 @@ class ParseTranslationsCommand extends Command
             $entry .= "            '".$sanitized."',\n";
         }
 
-        $entry .= "        ],";
+        $entry .= '        ],';
 
         $pattern = "/'protected_keys' => \\[[^\\]]*\\],/s";
 
@@ -364,7 +374,7 @@ class ParseTranslationsCommand extends Command
     }
 
     /**
-     * @param array<int, array{prefix: string, sample_full_key: string, group: string|null, key: string, source: string|null, is_frontend: bool, file: string}> $suggestions
+     * @param  array<int, array{prefix: string, sample_full_key: string, group: string|null, key: string, source: string|null, is_frontend: bool, file: string}>  $suggestions
      */
     private function addSampleEntries(array $suggestions, TranslationFileRepository $fileRepository, string $baseLocale): void
     {

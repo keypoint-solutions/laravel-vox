@@ -11,3 +11,4 @@ export { default as SlidePanel } from './SlidePanel.vue';
 export { default as Textarea } from './Textarea.vue';
 export type { ToggleOption } from './ToggleGroup.vue';
 export { default as ToggleGroup } from './ToggleGroup.vue';
+export { default as Tooltip } from './Tooltip.vue';

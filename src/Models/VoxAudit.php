@@ -9,6 +9,7 @@ class VoxAudit extends VoxModel
 {
     /** @use HasFactory<VoxAuditFactory> */
     use HasFactory;
+
     protected $table = 'vox_audits';
 
     public $timestamps = false;

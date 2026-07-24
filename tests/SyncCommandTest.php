@@ -3,6 +3,9 @@
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationOccurrence;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
+use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
+use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
+use KeypointSolutions\LaravelVox\Translation\TranslationSyncer;
 
 it('syncs translation files into the vox database', function () {
     prepareVoxFixtures();
@@ -38,4 +41,45 @@ it('syncs translation files into the vox database', function () {
         ->first();
 
     expect($vendorTranslation)->not->toBeNull();
+});
+
+it('removes a stale frontend flag when a key is no longer used in frontend code', function (): void {
+    $targetRoot = prepareVoxFixtures();
+    $translation = VoxTranslation::factory()
+        ->frontend()
+        ->withValues(['en' => 'Hello', 'fr' => 'Bonjour'])
+        ->create(['group' => 'messages', 'key' => 'hello']);
+
+    $repository = new TranslationFileRepository(new TranslationFileWriter);
+    $syncer = new TranslationSyncer($repository);
+    $syncer->sync(['en', 'fr'], [
+        'messages.hello' => [
+            'group' => 'messages',
+            'key' => 'hello',
+            'is_frontend' => false,
+            'source' => '__',
+            'occurrences' => [[
+                'file' => $targetRoot.'/app/Example.php',
+                'line' => 1,
+                'before' => null,
+                'after' => null,
+            ]],
+        ],
+    ]);
+
+    expect($translation->fresh())
+        ->is_frontend->toBeFalse()
+        ->source->toBe('__');
+});
+
+it('keeps an unchanged approved translation approved during sync', function (): void {
+    prepareVoxFixtures();
+    $translation = VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => 'Hello', 'fr' => '🚩 Hello'])
+        ->create(['group' => 'messages', 'key' => 'hello']);
+
+    $this->artisan('vox:sync')->assertExitCode(0);
+
+    expect($translation->fresh()->status)->toBe('approved');
 });

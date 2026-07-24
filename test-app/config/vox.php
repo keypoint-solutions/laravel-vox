@@ -13,11 +13,15 @@ return [
     ],
     'features' => [
         'dashboard' => true,
-        'sync' => false,
+        'sync' => true,
         'manage' => true,
         'publish' => true,
-        'audit' => false,
+        'audit' => true,
         'settings' => true,
+    ],
+    'frontend' => [
+        'groups' => ['frontend', 'form_section'],
+        'manifest' => storage_path('vox/frontend.json'),
     ],
     'system' => [
         'middleware' => [

@@ -7,11 +7,9 @@ use Illuminate\Support\Str;
 class VoxKeyProtector
 {
     /**
-     * @param array<int, string> $protectedKeys
+     * @param  array<int, string>  $protectedKeys
      */
-    public function __construct(private array $protectedKeys)
-    {
-    }
+    public function __construct(private array $protectedKeys) {}
 
     public function isProtected(string $key, ?string $group): bool
     {

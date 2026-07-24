@@ -51,6 +51,8 @@
         "test:package": "vendor/bin/pest",
         "test:ui": [
             "npm run build",
+            "@php test-app/artisan vendor:publish --tag=vox-assets --force",
+            "npm --prefix test-app run build",
             "composer --working-dir=test-app test:browser"
         ],
         "test-coverage": "vendor/bin/pest --coverage",

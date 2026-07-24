@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,11 +16,18 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        User::query()->updateOrCreate(
+            ['email' => 'test@example.com'],
+            ['name' => 'Test User', 'password' => bcrypt('password')]
+        );
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        VoxEnvironment::query()->updateOrCreate(
+            ['name' => 'Demo production'],
+            [
+                'type' => 'testing',
+                'url' => rtrim((string) config('app.url'), '/').'/vox-demo-remote/sync',
+                'secret_key' => 'vox-demo-key',
+            ]
+        );
     }
 }

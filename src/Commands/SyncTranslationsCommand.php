@@ -4,11 +4,7 @@ namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
-use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
-use KeypointSolutions\LaravelVox\Translation\TranslationSyncer;
+use KeypointSolutions\LaravelVox\Translation\TranslationDatabaseSynchronizer;
 
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\spin;
@@ -22,31 +18,17 @@ class SyncTranslationsCommand extends Command
 
     public function handle(): int
     {
-        $scanner = new TranslationScanner(
-            base_path(),
-            config('vox.parse.paths', []),
-            config('vox.parse.exclude', []),
-            config('vox.parse.extensions', []),
-            (int) config('vox.parse.context_lines', 3)
+        $startedAt = now();
+        $result = spin(
+            fn () => app(TranslationDatabaseSynchronizer::class)->sync(),
+            'Scanning translation keys and syncing the database'
         );
 
-        $scanResults = spin(fn () => $scanner->scan(), 'Scanning translation keys');
-
-        $localeResolver = new VoxLocaleResolver;
-        $locales = $localeResolver->resolveLocales();
-        $baseLocale = $localeResolver->resolveBaseLocale($locales);
-
-        if (! in_array($baseLocale, $locales, true)) {
-            $locales[] = $baseLocale;
-        }
-
-        $fileRepository = new TranslationFileRepository(new TranslationFileWriter);
-        $syncer = new TranslationSyncer($fileRepository);
-
-        $result = $syncer->sync($locales, $scanResults);
-
         app(VoxAuditLogger::class)->record('sync', [
+            'started_at' => $startedAt->toIso8601String(),
             'translations' => $result->translations(),
+            'changed_translations' => $result->changedTranslations(),
+            'reopened_translations' => $result->reopenedTranslations(),
         ]);
 
         info('Database synced.');

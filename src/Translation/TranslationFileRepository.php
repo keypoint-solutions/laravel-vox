@@ -6,9 +6,7 @@ use Illuminate\Support\Facades\File;
 
 class TranslationFileRepository
 {
-    public function __construct(private TranslationFileWriter $writer)
-    {
-    }
+    public function __construct(private TranslationFileWriter $writer) {}
 
     /**
      * @return array<string, mixed>
@@ -44,10 +42,10 @@ class TranslationFileRepository
     }
 
     /**
-     * @param array<string, mixed> $data
-     * @param array<string, mixed> $commented
-     * @param array<string, array<int, string>> $lineComments
-     * @param array<int, string> $rawCommented
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $commented
+     * @param  array<string, array<int, string>>  $lineComments
+     * @param  array<int, string>  $rawCommented
      */
     public function saveGroup(string $locale, string $group, array $data, array $commented = [], array $lineComments = [], array $rawCommented = []): void
     {
@@ -147,6 +145,7 @@ class TranslationFileRepository
 
             if ($trimmed === '') {
                 $buffer = [];
+
                 continue;
             }
 
@@ -166,6 +165,7 @@ class TranslationFileRepository
                 }
 
                 $buffer[] = $payload;
+
                 continue;
             }
 
@@ -175,6 +175,7 @@ class TranslationFileRepository
                 }
 
                 $buffer = [];
+
                 continue;
             }
 
@@ -183,10 +184,12 @@ class TranslationFileRepository
             if ($parsed === null) {
                 if (preg_match('/^\s*\'/', $line) === 1) {
                     $pendingKey = $line;
+
                     continue;
                 }
 
                 $buffer = [];
+
                 continue;
             }
 
@@ -222,7 +225,7 @@ class TranslationFileRepository
             $value = substr($value, 1, -1);
         }
 
-        return str_replace(["\\\\", "\\'"], ["\\", "'"], $value);
+        return str_replace(['\\\\', "\\'"], ['\\', "'"], $value);
     }
 
     /**
@@ -263,7 +266,7 @@ class TranslationFileRepository
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     public function saveJson(string $locale, array $data, ?string $namespace = null): void
     {

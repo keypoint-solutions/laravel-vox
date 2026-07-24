@@ -43,6 +43,9 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
     {
         app(VoxDatabaseManager::class)->ensureConnection();
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->publishes([
+            __DIR__.'/../dist/vox' => public_path('vendor/vox'),
+        ], 'vox-assets');
 
         if ($this->app->runningInConsole()) {
             $this->commands([

@@ -4,6 +4,8 @@
 
     import { cn } from '@/lib/utils';
 
+    import Tooltip from './Tooltip.vue';
+
     const props = defineProps<{
         modelValue: string;
         placeholder?: string;
@@ -46,13 +48,19 @@
             class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-lg border py-2 pr-9 pl-9 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             @keydown="handleKeydown"
         />
-        <button
+        <Tooltip
             v-if="inputValue"
-            type="button"
-            class="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 transition-colors"
-            @click="handleClear"
+            class="absolute top-1/2 right-2 -translate-y-1/2"
+            text="Clear search"
         >
-            <X class="size-4" />
-        </button>
+            <button
+                aria-label="Clear search"
+                type="button"
+                class="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
+                @click="handleClear"
+            >
+                <X class="size-4" />
+            </button>
+        </Tooltip>
     </div>
 </template>

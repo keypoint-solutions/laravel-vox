@@ -5,6 +5,7 @@
         ChevronDown,
         ChevronLeft,
         ChevronRight,
+        CircleAlert,
         Code,
         FileText,
         GripVertical,
@@ -16,7 +17,17 @@
     import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
     import type { SelectOption, ToggleOption } from '@/components/ui';
-    import { Badge, Button, SearchInput, Select, SlidePanel, Textarea, ToggleGroup } from '@/components/ui';
+    import {
+        Badge,
+        Button,
+        Checkbox,
+        SearchInput,
+        Select,
+        SlidePanel,
+        Textarea,
+        ToggleGroup,
+        Tooltip,
+    } from '@/components/ui';
     import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
     import { cn } from '@/lib/utils';
@@ -49,7 +60,8 @@
         key: string;
         display_key: string;
         status: string;
-        virtual_status: string;
+        freshness_status: string | null;
+        has_missing_values: boolean;
         is_frontend: boolean;
         source: string | null;
         updated_at: string | null;
@@ -127,6 +139,9 @@
     const isTranslating = ref(false);
     const actionError = ref<string | null>(null);
     const actionSuccess = ref<string | null>(null);
+    const pageActionSuccess = ref<string | null>(null);
+    const selectedIds = ref<number[]>([]);
+    const isBulkUpdating = ref(false);
     const showOccurrences = ref(false);
     const searchDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 
@@ -273,6 +288,11 @@
     }));
     const hasPrev = computed(() => pagination.value.current_page > 1);
     const hasNext = computed(() => pagination.value.current_page < pagination.value.last_page);
+    const allVisibleSelected = computed(
+        () =>
+            translations.value.data.length > 0 &&
+            translations.value.data.every((translation) => selectedIds.value.includes(translation.id))
+    );
 
     const baseLocaleValue = computed(() => {
         if (!editTranslation.value) {
@@ -377,6 +397,7 @@
     }
 
     function applyFilters(pageOverride = 1): void {
+        selectedIds.value = [];
         router.get(voxRoutes.value?.manage ?? page.url.split('?')[0], buildQuery(pageOverride), {
             preserveState: true,
             preserveScroll: true,
@@ -438,8 +459,60 @@
         actionError.value = Object.values(errors)[0] ?? 'Request failed.';
     }
 
-    function refreshTranslations(): void {
-        router.reload({ only: ['translations'] });
+    function workflowStatusLabel(translation: TranslationItem): string {
+        return translation.status === 'approved' ? 'Approved' : 'Pending review';
+    }
+
+    function approvalActionLabel(translation: TranslationItem): string {
+        return translation.status === 'approved' ? 'Return to review' : 'Approve translation';
+    }
+
+    function setSelected(translationId: number, selected: boolean): void {
+        selectedIds.value = selected
+            ? Array.from(new Set([...selectedIds.value, translationId]))
+            : selectedIds.value.filter((id) => id !== translationId);
+    }
+
+    function selectAllVisible(selected: boolean): void {
+        const visibleIds = translations.value.data.map((translation) => translation.id);
+
+        if (selected) {
+            selectedIds.value = Array.from(new Set([...selectedIds.value, ...visibleIds]));
+
+            return;
+        }
+
+        selectedIds.value = selectedIds.value.filter((id) => !visibleIds.includes(id));
+    }
+
+    function bulkApproval(targetStatus: 'pending' | 'approved'): void {
+        if (selectedIds.value.length === 0) {
+            return;
+        }
+
+        isBulkUpdating.value = true;
+        pageActionSuccess.value = null;
+        actionError.value = null;
+
+        router.post(
+            voxRoutes.value?.manage_translation_bulk_approval ?? '',
+            {
+                ids: selectedIds.value,
+                status: targetStatus,
+            },
+            {
+                preserveScroll: true,
+                onError: handleError,
+                onSuccess: (successPage) => {
+                    pageActionSuccess.value =
+                        (successPage.flash?.success as string | undefined) ?? 'Translation statuses updated.';
+                    selectedIds.value = [];
+                },
+                onFinish: () => {
+                    isBulkUpdating.value = false;
+                },
+            }
+        );
     }
 
     function translationActionUrl(route: string | undefined, translationId: number): string {
@@ -448,6 +521,7 @@
 
     function toggleApproval(translation: TranslationItem): void {
         actionError.value = null;
+        pageActionSuccess.value = null;
 
         router.post(
             translationActionUrl(voxRoutes.value?.manage_translation_toggle_approval, translation.id),
@@ -455,7 +529,10 @@
             {
                 preserveScroll: true,
                 onError: handleError,
-                onSuccess: refreshTranslations,
+                onSuccess: (successPage) => {
+                    pageActionSuccess.value =
+                        (successPage.flash?.success as string | undefined) ?? 'Translation status updated.';
+                },
             }
         );
     }
@@ -543,6 +620,16 @@
             <p class="text-muted-foreground mt-1 text-sm">Browse, edit, and approve translations across all locales.</p>
         </div>
 
+        <div
+            v-if="pageActionSuccess"
+            role="status"
+            aria-live="polite"
+            class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-600"
+        >
+            <Check class="size-4 shrink-0" />
+            {{ pageActionSuccess }}
+        </div>
+
         <!-- Stats Cards -->
         <div class="grid gap-4 sm:grid-cols-3">
             <div class="bg-card rounded-xl border p-4">
@@ -619,10 +706,12 @@
                                 "
                             >
                                 <span class="flex min-w-0 items-center gap-1.5">
-                                    <Laptop
+                                    <Tooltip
                                         v-if="group.has_frontend"
-                                        class="size-3 shrink-0 text-emerald-500"
-                                    />
+                                        text="Contains translations used by frontend code"
+                                    >
+                                        <Laptop class="size-3 shrink-0 text-emerald-500" />
+                                    </Tooltip>
                                     <span class="truncate">{{ group.name }}</span>
                                 </span>
                                 <span class="text-muted-foreground text-xs tabular-nums">{{ group.total }}</span>
@@ -644,15 +733,19 @@
                     />
 
                     <!-- Reset (visible on mobile, hidden on desktop where it's in row with filters) -->
-                    <Button
-                        class="shrink-0 sm:hidden"
-                        size="icon"
-                        title="Reset filters"
-                        variant="ghost"
-                        @click="clearFilters"
-                    >
-                        <RotateCcw class="size-4" />
-                    </Button>
+                    <span class="sm:hidden">
+                        <Tooltip text="Reset all filters">
+                            <Button
+                                aria-label="Reset all filters"
+                                class="shrink-0"
+                                size="icon"
+                                variant="ghost"
+                                @click="clearFilters"
+                            >
+                                <RotateCcw class="size-4" />
+                            </Button>
+                        </Tooltip>
+                    </span>
 
                     <!-- Desktop: Status Toggle + Sort + Reset -->
                     <div class="hidden items-center gap-4 sm:flex">
@@ -668,15 +761,17 @@
                             class="w-36"
                             @update:model-value="applyFilters(1)"
                         />
-                        <Button
-                            class="shrink-0"
-                            size="icon"
-                            title="Reset filters"
-                            variant="ghost"
-                            @click="clearFilters"
-                        >
-                            <RotateCcw class="size-4" />
-                        </Button>
+                        <Tooltip text="Reset all filters">
+                            <Button
+                                aria-label="Reset all filters"
+                                class="shrink-0"
+                                size="icon"
+                                variant="ghost"
+                                @click="clearFilters"
+                            >
+                                <RotateCcw class="size-4" />
+                            </Button>
+                        </Tooltip>
                     </div>
                 </div>
 
@@ -758,10 +853,12 @@
                             @click="selectGroup(group.name)"
                         >
                             <span class="flex min-w-0 items-center gap-1.5">
-                                <Laptop
+                                <Tooltip
                                     v-if="group.has_frontend"
-                                    class="size-3.5 shrink-0 text-emerald-500"
-                                />
+                                    text="Contains translations used by frontend code"
+                                >
+                                    <Laptop class="size-3.5 shrink-0 text-emerald-500" />
+                                </Tooltip>
                                 <span class="truncate">{{ group.name }}</span>
                                 <Badge
                                     v-if="group.is_json"
@@ -805,15 +902,17 @@
                                     class="w-40"
                                     @update:model-value="applyFilters(1)"
                                 />
-                                <Button
-                                    class="shrink-0"
-                                    size="icon"
-                                    title="Reset filters"
-                                    variant="ghost"
-                                    @click="clearFilters"
-                                >
-                                    <RotateCcw class="size-4" />
-                                </Button>
+                                <Tooltip text="Reset all filters">
+                                    <Button
+                                        aria-label="Reset all filters"
+                                        class="shrink-0"
+                                        size="icon"
+                                        variant="ghost"
+                                        @click="clearFilters"
+                                    >
+                                        <RotateCcw class="size-4" />
+                                    </Button>
+                                </Tooltip>
                             </div>
                         </div>
 
@@ -830,7 +929,50 @@
                 </section>
 
                 <!-- Translations List -->
-                <section class="bg-card overflow-hidden rounded-xl border">
+                <section class="bg-card rounded-xl border">
+                    <div
+                        v-if="translations.data.length > 0"
+                        class="bg-muted/20 flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <div class="flex items-center gap-2">
+                            <span @click.stop>
+                                <Checkbox
+                                    aria-label="Select all visible translations"
+                                    :model-value="allVisibleSelected"
+                                    @update:model-value="selectAllVisible"
+                                />
+                            </span>
+                            <span class="text-muted-foreground text-xs">
+                                {{
+                                    selectedIds.length > 0
+                                        ? `${selectedIds.length} selected`
+                                        : 'Select all visible translations'
+                                }}
+                            </span>
+                        </div>
+                        <div
+                            v-if="selectedIds.length > 0"
+                            class="flex items-center gap-2"
+                        >
+                            <Button
+                                :disabled="isBulkUpdating"
+                                size="sm"
+                                variant="outline"
+                                @click="bulkApproval('pending')"
+                            >
+                                Return to review
+                            </Button>
+                            <Button
+                                :disabled="isBulkUpdating"
+                                size="sm"
+                                @click="bulkApproval('approved')"
+                            >
+                                <Check class="size-4" />
+                                Approve
+                            </Button>
+                        </div>
+                    </div>
+
                     <!-- Empty State -->
                     <div
                         v-if="translations.data.length === 0"
@@ -853,28 +995,33 @@
                         <div
                             v-for="translation in translations.data"
                             :key="translation.id"
-                            class="group border-b last:border-b-0"
+                            class="border-b last:border-b-0"
                         >
                             <!-- Row Header -->
                             <div
-                                class="hover:bg-muted/30 flex cursor-pointer items-center gap-4 overflow-hidden px-4 py-3 transition-colors"
+                                class="hover:bg-muted/30 flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors"
+                                :data-test="`translation-row-${translation.id}`"
                                 @click="openEdit(translation)"
                             >
+                                <span @click.stop>
+                                    <Checkbox
+                                        :aria-label="`Select ${translation.display_key}`"
+                                        :model-value="selectedIds.includes(translation.id)"
+                                        @update:model-value="setSelected(translation.id, $event)"
+                                    />
+                                </span>
+
                                 <!-- Status Indicator -->
-                                <div
-                                    :class="[
-                                        'size-2 shrink-0 rounded-full',
-                                        translation.virtual_status === 'approved'
-                                            ? 'bg-emerald-500'
-                                            : translation.virtual_status === 'missing'
-                                              ? 'bg-red-500'
-                                              : translation.virtual_status === 'new'
-                                                ? 'bg-blue-500'
-                                                : translation.virtual_status === 'updated'
-                                                  ? 'bg-amber-500'
-                                                  : 'bg-muted-foreground/50',
-                                    ]"
-                                />
+                                <Tooltip :text="workflowStatusLabel(translation)">
+                                    <span
+                                        :aria-label="workflowStatusLabel(translation)"
+                                        data-test="workflow-status"
+                                        :class="[
+                                            'size-2 shrink-0 rounded-full',
+                                            translation.status === 'approved' ? 'bg-emerald-500' : 'bg-amber-500',
+                                        ]"
+                                    />
+                                </Tooltip>
 
                                 <!-- Key & Group -->
                                 <div class="min-w-0 flex-1 overflow-hidden">
@@ -888,6 +1035,13 @@
                                         >
                                             {{ translation.group ?? 'default' }}
                                         </Badge>
+                                        <Badge
+                                            v-if="translation.freshness_status"
+                                            class="shrink-0 capitalize"
+                                            variant="outline"
+                                        >
+                                            {{ translation.freshness_status }}
+                                        </Badge>
                                     </div>
                                     <p class="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
                                         {{ translation.values?.[baseLocale] || '—' }}
@@ -896,37 +1050,64 @@
 
                                 <!-- Meta -->
                                 <div class="text-muted-foreground hidden shrink-0 items-center gap-3 text-xs sm:flex">
-                                    <span class="flex items-center gap-1">
-                                        <Laptop
-                                            v-if="translation.is_frontend"
-                                            class="size-3"
-                                        />
-                                        <Server
-                                            v-else
-                                            class="size-3"
-                                        />
-                                    </span>
-                                    <span
-                                        v-if="translation.occurrences.length"
-                                        class="flex items-center gap-1"
+                                    <Tooltip
+                                        :text="
+                                            translation.is_frontend ? 'Used in frontend code' : 'Used in backend code'
+                                        "
                                     >
-                                        <Code class="size-3" />
-                                        {{ translation.occurrences.length }}
-                                    </span>
+                                        <span
+                                            :aria-label="
+                                                translation.is_frontend
+                                                    ? 'Used in frontend code'
+                                                    : 'Used in backend code'
+                                            "
+                                            class="flex items-center"
+                                        >
+                                            <Laptop
+                                                v-if="translation.is_frontend"
+                                                class="size-3"
+                                            />
+                                            <Server
+                                                v-else
+                                                class="size-3"
+                                            />
+                                        </span>
+                                    </Tooltip>
+                                    <Tooltip
+                                        v-if="translation.occurrences.length"
+                                        :text="`${translation.occurrences.length} code occurrence${translation.occurrences.length === 1 ? '' : 's'}`"
+                                    >
+                                        <span class="flex items-center gap-1">
+                                            <Code class="size-3" />
+                                            {{ translation.occurrences.length }}
+                                        </span>
+                                    </Tooltip>
+                                    <Tooltip
+                                        v-if="translation.has_missing_values"
+                                        text="One or more locale values are missing"
+                                    >
+                                        <CircleAlert
+                                            aria-label="One or more locale values are missing"
+                                            class="size-3 text-red-500"
+                                        />
+                                    </Tooltip>
                                 </div>
 
                                 <!-- Actions -->
                                 <div class="flex shrink-0 items-center gap-1">
-                                    <Button
-                                        :class="translation.status === 'approved' ? 'text-emerald-500' : ''"
-                                        class="size-8"
-                                        size="icon"
-                                        title="Toggle approval"
-                                        variant="ghost"
-                                        @click.stop="toggleApproval(translation)"
-                                    >
-                                        <Check class="size-4" />
-                                    </Button>
+                                    <Tooltip :text="approvalActionLabel(translation)">
+                                        <Button
+                                            :aria-label="approvalActionLabel(translation)"
+                                            data-test="approval-action"
+                                            :class="translation.status === 'approved' ? 'text-emerald-500' : ''"
+                                            class="size-8"
+                                            size="icon"
+                                            variant="ghost"
+                                            @click.stop="toggleApproval(translation)"
+                                        >
+                                            <Check class="size-4" />
+                                        </Button>
+                                    </Tooltip>
                                 </div>
                             </div>
                         </div>
@@ -942,24 +1123,30 @@
                             <span class="hidden sm:inline">• {{ pagination.total }} items</span>
                         </p>
                         <div class="flex items-center gap-1">
-                            <Button
-                                :disabled="!hasPrev"
-                                class="size-8"
-                                size="icon"
-                                variant="ghost"
-                                @click="goToPage(pagination.current_page - 1)"
-                            >
-                                <ChevronLeft class="size-4" />
-                            </Button>
-                            <Button
-                                :disabled="!hasNext"
-                                class="size-8"
-                                size="icon"
-                                variant="ghost"
-                                @click="goToPage(pagination.current_page + 1)"
-                            >
-                                <ChevronRight class="size-4" />
-                            </Button>
+                            <Tooltip text="Previous page">
+                                <Button
+                                    aria-label="Previous page"
+                                    :disabled="!hasPrev"
+                                    class="size-8"
+                                    size="icon"
+                                    variant="ghost"
+                                    @click="goToPage(pagination.current_page - 1)"
+                                >
+                                    <ChevronLeft class="size-4" />
+                                </Button>
+                            </Tooltip>
+                            <Tooltip text="Next page">
+                                <Button
+                                    aria-label="Next page"
+                                    :disabled="!hasNext"
+                                    class="size-8"
+                                    size="icon"
+                                    variant="ghost"
+                                    @click="goToPage(pagination.current_page + 1)"
+                                >
+                                    <ChevronRight class="size-4" />
+                                </Button>
+                            </Tooltip>
                         </div>
                     </div>
                 </section>
@@ -1090,6 +1277,7 @@
                 </div>
                 <Textarea
                     v-model="editValues[locale]"
+                    :data-test="`translation-value-${locale}`"
                     :rows="2"
                     class="resize-none"
                     @update:model-value="actionSuccess = null"

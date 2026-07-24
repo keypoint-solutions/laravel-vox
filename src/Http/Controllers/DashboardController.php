@@ -6,7 +6,6 @@ use Inertia\Inertia;
 use Inertia\Response;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
-use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 
 class DashboardController
@@ -40,4 +39,3 @@ class DashboardController
         ];
     }
 }
-

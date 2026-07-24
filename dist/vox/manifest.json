@@ -1,0 +1,170 @@
+{
+  "_Badge-DkmR3hui.js": {
+    "file": "assets/Badge-DkmR3hui.js",
+    "name": "Badge",
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-BKU3gj9H.js"
+    ]
+  },
+  "_Label-VzhSYyzY.js": {
+    "file": "assets/Label-VzhSYyzY.js",
+    "name": "Label",
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-BKU3gj9H.js"
+    ]
+  },
+  "_Layout-BKU3gj9H.js": {
+    "file": "assets/Layout-BKU3gj9H.js",
+    "name": "Layout",
+    "imports": [
+      "resources/js/vox.ts"
+    ]
+  },
+  "_Textarea-WOo3erHF.js": {
+    "file": "assets/Textarea-WOo3erHF.js",
+    "name": "Textarea",
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-BKU3gj9H.js",
+      "_check-DoQIffI0.js"
+    ]
+  },
+  "_check-DoQIffI0.js": {
+    "file": "assets/check-DoQIffI0.js",
+    "name": "check",
+    "imports": [
+      "_Layout-BKU3gj9H.js"
+    ]
+  },
+  "_chevron-right-a8aLE_J1.js": {
+    "file": "assets/chevron-right-a8aLE_J1.js",
+    "name": "chevron-right",
+    "imports": [
+      "_Layout-BKU3gj9H.js"
+    ]
+  },
+  "_circle-alert-CRsU8hK8.js": {
+    "file": "assets/circle-alert-CRsU8hK8.js",
+    "name": "circle-alert",
+    "imports": [
+      "_Layout-BKU3gj9H.js"
+    ]
+  },
+  "_server-BuiBY4dz.js": {
+    "file": "assets/server-BuiBY4dz.js",
+    "name": "server",
+    "imports": [
+      "_Layout-BKU3gj9H.js"
+    ]
+  },
+  "_useDateTime-CW8EIJvH.js": {
+    "file": "assets/useDateTime-CW8EIJvH.js",
+    "name": "useDateTime",
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-BKU3gj9H.js"
+    ]
+  },
+  "resources/js/pages/Audit.vue": {
+    "file": "assets/Audit-KVU4NkEc.js",
+    "name": "Audit",
+    "src": "resources/js/pages/Audit.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-BKU3gj9H.js",
+      "_chevron-right-a8aLE_J1.js",
+      "_Badge-DkmR3hui.js",
+      "_useDateTime-CW8EIJvH.js"
+    ]
+  },
+  "resources/js/pages/Dashboard.vue": {
+    "file": "assets/Dashboard-jo0jT_Rv.js",
+    "name": "Dashboard",
+    "src": "resources/js/pages/Dashboard.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-BKU3gj9H.js"
+    ]
+  },
+  "resources/js/pages/Manage.vue": {
+    "file": "assets/Manage-CR1p3Ycd.js",
+    "name": "Manage",
+    "src": "resources/js/pages/Manage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-BKU3gj9H.js",
+      "_check-DoQIffI0.js",
+      "_Textarea-WOo3erHF.js",
+      "_chevron-right-a8aLE_J1.js",
+      "_circle-alert-CRsU8hK8.js",
+      "_server-BuiBY4dz.js",
+      "_Badge-DkmR3hui.js",
+      "_useDateTime-CW8EIJvH.js"
+    ]
+  },
+  "resources/js/pages/Publish.vue": {
+    "file": "assets/Publish-DGLOR_Ss.js",
+    "name": "Publish",
+    "src": "resources/js/pages/Publish.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-BKU3gj9H.js",
+      "_check-DoQIffI0.js",
+      "_circle-alert-CRsU8hK8.js",
+      "_useDateTime-CW8EIJvH.js"
+    ]
+  },
+  "resources/js/pages/Settings.vue": {
+    "file": "assets/Settings-DL36slyW.js",
+    "name": "Settings",
+    "src": "resources/js/pages/Settings.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-BKU3gj9H.js",
+      "_check-DoQIffI0.js",
+      "_Textarea-WOo3erHF.js",
+      "_Label-VzhSYyzY.js",
+      "_Badge-DkmR3hui.js",
+      "_useDateTime-CW8EIJvH.js"
+    ]
+  },
+  "resources/js/pages/Sync.vue": {
+    "file": "assets/Sync-CXQj6EnX.js",
+    "name": "Sync",
+    "src": "resources/js/pages/Sync.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-BKU3gj9H.js",
+      "_check-DoQIffI0.js",
+      "_Label-VzhSYyzY.js",
+      "_server-BuiBY4dz.js",
+      "_Badge-DkmR3hui.js",
+      "_useDateTime-CW8EIJvH.js"
+    ]
+  },
+  "resources/js/vox.ts": {
+    "file": "assets/vox-C8yYr2Ia.js",
+    "name": "vox",
+    "src": "resources/js/vox.ts",
+    "isEntry": true,
+    "dynamicImports": [
+      "resources/js/pages/Audit.vue",
+      "resources/js/pages/Dashboard.vue",
+      "resources/js/pages/Manage.vue",
+      "resources/js/pages/Publish.vue",
+      "resources/js/pages/Settings.vue",
+      "resources/js/pages/Sync.vue"
+    ],
+    "css": [
+      "assets/vox-Dm0UoheR.css"
+    ]
+  }
+}

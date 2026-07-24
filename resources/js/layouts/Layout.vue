@@ -1,8 +1,22 @@
 <script setup lang="ts">
     import { Link, usePage } from '@inertiajs/vue3';
-    import { FileText, Home, Laptop, Layers, Menu, Moon, RefreshCw, Settings, Sun, UploadCloud, X } from '@lucide/vue';
+    import {
+        FileText,
+        GitBranch,
+        Home,
+        Laptop,
+        Layers,
+        Menu,
+        Moon,
+        RefreshCw,
+        Settings,
+        Sun,
+        UploadCloud,
+        X,
+    } from '@lucide/vue';
     import { computed, ref } from 'vue';
 
+    import { Tooltip } from '@/components/ui';
     import { useAppearance } from '@/composables/useAppearance';
     import { cn, urlIsActive } from '@/lib/utils';
 
@@ -89,27 +103,54 @@
             <!-- Theme Switcher -->
             <div class="border-sidebar-border border-t p-4">
                 <div class="bg-sidebar-accent flex items-center justify-center gap-1 rounded-lg p-1">
-                    <button
+                    <Tooltip
                         v-for="option in themeOptions"
                         :key="option.value"
-                        type="button"
-                        :aria-pressed="appearance === option.value"
-                        :title="option.label"
-                        :class="
-                            cn(
-                                'flex flex-1 items-center justify-center rounded-md p-2 transition-colors',
-                                appearance === option.value
-                                    ? 'bg-violet-500 text-white'
-                                    : 'text-sidebar-foreground/60 hover:text-sidebar-foreground'
-                            )
-                        "
-                        @click="updateAppearance(option.value)"
+                        :text="`${option.label} theme`"
+                        class="flex-1"
                     >
-                        <component
-                            :is="option.icon"
-                            class="size-4"
-                        />
-                    </button>
+                        <button
+                            type="button"
+                            :aria-label="`${option.label} theme`"
+                            :aria-pressed="appearance === option.value"
+                            :class="
+                                cn(
+                                    'flex w-full items-center justify-center rounded-md p-2 transition-colors',
+                                    appearance === option.value
+                                        ? 'bg-violet-500 text-white'
+                                        : 'text-sidebar-foreground/60 hover:text-sidebar-foreground'
+                                )
+                            "
+                            @click="updateAppearance(option.value)"
+                        >
+                            <component
+                                :is="option.icon"
+                                class="size-4"
+                            />
+                        </button>
+                    </Tooltip>
+                </div>
+                <div class="text-sidebar-foreground/55 mt-4 space-y-2 text-xs leading-relaxed">
+                    <p>
+                        An open-source project offered by
+                        <a
+                            class="text-sidebar-foreground/80 hover:text-sidebar-foreground font-medium"
+                            href="https://keypoint.ro"
+                            rel="noreferrer"
+                            target="_blank"
+                        >
+                            Keypoint Solutions
+                        </a>
+                    </p>
+                    <a
+                        class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
+                        href="https://github.com/keypoint-solutions/laravel-vox"
+                        rel="noreferrer"
+                        target="_blank"
+                    >
+                        <GitBranch class="size-3.5" />
+                        View on GitHub
+                    </a>
                 </div>
             </div>
         </aside>
@@ -126,20 +167,23 @@
                 </div>
                 <span class="text-sm font-semibold">Laravel Vox</span>
             </div>
-            <button
-                type="button"
-                class="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg p-2"
-                @click="mobileMenuOpen = !mobileMenuOpen"
-            >
-                <Menu
-                    v-if="!mobileMenuOpen"
-                    class="size-5"
-                />
-                <X
-                    v-else
-                    class="size-5"
-                />
-            </button>
+            <Tooltip :text="mobileMenuOpen ? 'Close navigation' : 'Open navigation'">
+                <button
+                    type="button"
+                    :aria-label="mobileMenuOpen ? 'Close navigation' : 'Open navigation'"
+                    class="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg p-2"
+                    @click="mobileMenuOpen = !mobileMenuOpen"
+                >
+                    <Menu
+                        v-if="!mobileMenuOpen"
+                        class="size-5"
+                    />
+                    <X
+                        v-else
+                        class="size-5"
+                    />
+                </button>
+            </Tooltip>
         </header>
 
         <!-- Mobile Menu Overlay -->
@@ -184,13 +228,16 @@
                             <p class="text-sidebar-foreground/60 text-xs">Translation Manager</p>
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        class="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground rounded-lg p-1.5"
-                        @click="closeMobileMenu"
-                    >
-                        <X class="size-5" />
-                    </button>
+                    <Tooltip text="Close navigation">
+                        <button
+                            type="button"
+                            aria-label="Close navigation"
+                            class="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground rounded-lg p-1.5"
+                            @click="closeMobileMenu"
+                        >
+                            <X class="size-5" />
+                        </button>
+                    </Tooltip>
                 </div>
 
                 <!-- Navigation -->
@@ -220,27 +267,54 @@
                 <!-- Theme Switcher -->
                 <div class="border-sidebar-border border-t p-4">
                     <div class="bg-sidebar-accent flex items-center justify-center gap-1 rounded-lg p-1">
-                        <button
+                        <Tooltip
                             v-for="option in themeOptions"
                             :key="option.value"
-                            type="button"
-                            :aria-pressed="appearance === option.value"
-                            :title="option.label"
-                            :class="
-                                cn(
-                                    'flex flex-1 items-center justify-center rounded-md p-2 transition-colors',
-                                    appearance === option.value
-                                        ? 'bg-violet-500 text-white'
-                                        : 'text-sidebar-foreground/60 hover:text-sidebar-foreground'
-                                )
-                            "
-                            @click="updateAppearance(option.value)"
+                            :text="`${option.label} theme`"
+                            class="flex-1"
                         >
-                            <component
-                                :is="option.icon"
-                                class="size-4"
-                            />
-                        </button>
+                            <button
+                                type="button"
+                                :aria-label="`${option.label} theme`"
+                                :aria-pressed="appearance === option.value"
+                                :class="
+                                    cn(
+                                        'flex w-full items-center justify-center rounded-md p-2 transition-colors',
+                                        appearance === option.value
+                                            ? 'bg-violet-500 text-white'
+                                            : 'text-sidebar-foreground/60 hover:text-sidebar-foreground'
+                                    )
+                                "
+                                @click="updateAppearance(option.value)"
+                            >
+                                <component
+                                    :is="option.icon"
+                                    class="size-4"
+                                />
+                            </button>
+                        </Tooltip>
+                    </div>
+                    <div class="text-sidebar-foreground/55 mt-4 space-y-2 text-xs leading-relaxed">
+                        <p>
+                            An open-source project offered by
+                            <a
+                                class="text-sidebar-foreground/80 hover:text-sidebar-foreground font-medium"
+                                href="https://keypoint.ro"
+                                rel="noreferrer"
+                                target="_blank"
+                            >
+                                Keypoint Solutions
+                            </a>
+                        </p>
+                        <a
+                            class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
+                            href="https://github.com/keypoint-solutions/laravel-vox"
+                            rel="noreferrer"
+                            target="_blank"
+                        >
+                            <GitBranch class="size-3.5" />
+                            View on GitHub
+                        </a>
                     </div>
                 </div>
             </aside>

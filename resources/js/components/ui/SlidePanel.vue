@@ -5,6 +5,7 @@
     import { cn } from '@/lib/utils';
 
     import Button from './Button.vue';
+    import Tooltip from './Tooltip.vue';
 
     const props = defineProps<{
         open: boolean;
@@ -109,14 +110,17 @@
                             </h2>
                         </slot>
                     </div>
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        class="size-8 shrink-0"
-                        @click="emit('close')"
-                    >
-                        <X class="size-4" />
-                    </Button>
+                    <Tooltip text="Close panel">
+                        <Button
+                            aria-label="Close panel"
+                            size="icon"
+                            variant="ghost"
+                            class="size-8 shrink-0"
+                            @click="emit('close')"
+                        >
+                            <X class="size-4" />
+                        </Button>
+                    </Tooltip>
                 </div>
 
                 <!-- Content -->
