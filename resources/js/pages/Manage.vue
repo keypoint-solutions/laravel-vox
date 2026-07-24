@@ -87,9 +87,6 @@
             configured: boolean;
             driver: string;
         };
-        flash?: {
-            translated_values?: Record<string, string>;
-        };
     }
 
     const page = usePage<ManagePageProps>();
@@ -501,8 +498,7 @@
                 },
                 onError: handleError,
                 onSuccess: (successPage) => {
-                    const translatedValues = successPage.props.flash?.translated_values as
-                        Record<string, string> | undefined;
+                    const translatedValues = successPage.flash?.translated_values as Record<string, string> | undefined;
                     if (translatedValues) {
                         Object.entries(translatedValues).forEach(([locale, value]) => {
                             editValues.value[locale] = value;

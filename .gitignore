@@ -27,11 +27,11 @@ _ide_helper_models.php
 /.vscode
 
 # Misc
+.DS_Store
 phpunit.xml
 phpstan.neon
 /docs
 /coverage
-!/.env
 
 test-app/public/vendor/vox/
 test-app/tests/Browser/Screenshots/

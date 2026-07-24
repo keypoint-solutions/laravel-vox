@@ -35,7 +35,7 @@ class VoxSettingsRepository
             'sync_key' => config('vox.sync.key', ''),
             'openai_api_key' => $this->maskApiKey(config('vox.translate.openai.api_key', '')),
             'openai_api_key_set' => ! empty(config('vox.translate.openai.api_key')),
-            'openai_model' => config('vox.translate.openai.model', 'gpt-4o-mini'),
+            'openai_model' => config('vox.translate.openai.model', 'gpt-5.4-nano'),
             'openai_endpoint' => config('vox.translate.openai.endpoint', 'https://api.openai.com/v1/chat/completions'),
             'openai_temperature' => (float) config('vox.translate.openai.temperature', 0.2),
         ];

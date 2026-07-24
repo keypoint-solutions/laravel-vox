@@ -1,7 +1,10 @@
 <?php
 
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
@@ -98,4 +101,36 @@ it('filters translations by virtual status', function (): void {
     $translations = manageTranslations($this->get('/vox/manage?status=new'));
 
     expect($translations->pluck('display_key')->all())->toBe(['frontend.welcome']);
+});
+
+it('protects Laravel placeholders when translating from the management UI', function (): void {
+    $this->withoutMiddleware(PreventRequestForgery::class);
+
+    config()->set('vox.translate.driver', 'openai');
+    config()->set('vox.translate.openai.api_key', 'test-key');
+    config()->set('vox.translate.openai.model', 'gpt-5.4-mini');
+    config()->set('vox.translate.openai.endpoint', 'https://api.openai.test/v1/chat/completions');
+
+    Http::fake([
+        '*' => Http::response([
+            'choices' => [
+                ['message' => ['content' => 'Bonjour __LARAVEL_PLACEHOLDER_0__.']],
+            ],
+        ]),
+    ]);
+
+    $translation = VoxTranslation::factory()
+        ->withValues(['en' => 'Hello :name.', 'fr' => ''])
+        ->create(['group' => 'messages', 'key' => 'greeting']);
+
+    $this->from('/vox/manage')
+        ->post("/vox/manage/translations/{$translation->id}/translate", [
+            'locales' => ['fr'],
+            'base_value' => 'Hello :name.',
+        ])
+        ->assertRedirect('/vox/manage')
+        ->assertInertiaFlash('translated_values.fr', 'Bonjour :name.');
+
+    Http::assertSent(fn (Request $request): bool => $request['messages'][1]['content']
+        === 'Hello __LARAVEL_PLACEHOLDER_0__.');
 });

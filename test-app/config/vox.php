@@ -78,7 +78,7 @@ return [
         'base_locale' => env('VOX_TRANSLATE_BASE_LOCALE', 'auto'),
         'openai' => [
             'api_key' => env('OPENAI_API_KEY'),
-            'model' => env('VOX_OPENAI_MODEL', 'gpt-4o-mini'),
+            'model' => env('VOX_OPENAI_MODEL', 'gpt-5.4-nano'),
             'endpoint' => env('VOX_OPENAI_ENDPOINT', 'https://api.openai.com/v1/chat/completions'),
             'temperature' => env('VOX_OPENAI_TEMPERATURE', 0.2),
         ],
