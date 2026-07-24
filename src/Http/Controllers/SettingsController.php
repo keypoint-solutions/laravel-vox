@@ -4,66 +4,90 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use KeypointSolutions\LaravelVox\Support\AiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 
 class SettingsController
 {
-    public function __construct(private VoxSettingsRepository $settings) {}
+    public function __construct(
+        private VoxSettingsRepository $settings,
+        private AiModelDiscovery $models,
+    ) {}
 
     public function index(): Response
     {
         return Inertia::render('Settings', [
             'settings' => $this->settings->all(),
-            'drivers' => $this->getAvailableDrivers(),
+            'ai' => $this->models->discover(),
         ]);
-    }
-
-    /**
-     * @return array<int, array{value: string, label: string}>
-     */
-    private function getAvailableDrivers(): array
-    {
-        return [
-            ['value' => 'openai', 'label' => 'OpenAI'],
-        ];
     }
 
     public function update(Request $request): RedirectResponse
     {
+        $section = $request->validate([
+            'section' => ['required', 'string', Rule::in(['ai', 'sync'])],
+        ])['section'];
+
+        if ($section === 'ai') {
+            return $this->updateAiSettings($request);
+        }
+
+        return $this->updateSyncSettings($request);
+    }
+
+    public function refreshModels(): RedirectResponse
+    {
+        $result = $this->models->discover(refresh: true);
+
+        if ($result['status'] !== 'connected') {
+            return redirect()->back()->withErrors(['models' => $result['message']]);
+        }
+
+        return Inertia::flash('success', 'AI provider connection verified and available models refreshed.')->back();
+    }
+
+    private function updateAiSettings(Request $request): RedirectResponse
+    {
+        $availableModels = collect($this->models->discover()['models'])
+            ->pluck('value')
+            ->filter(fn (mixed $model): bool => is_string($model))
+            ->values()
+            ->all();
+
         $validated = $request->validate([
-            'translate_driver' => ['required', 'string', 'in:openai'],
-            'translate_prompt' => ['required', 'string', 'max:2000'],
-            'sync_enabled' => ['required', 'boolean'],
-            'openai_api_key' => ['nullable', 'string', 'max:255'],
-            'openai_model' => ['required', 'string', 'max:100'],
-            'openai_endpoint' => ['required', 'url', 'max:500'],
-            'openai_temperature' => ['required', 'numeric', 'min:0', 'max:2'],
+            'model' => ['required', 'string', 'max:100', Rule::in($availableModels)],
+            'translate_guidance' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $settings = [
-            'translate_driver' => $validated['translate_driver'],
-            'translate_prompt' => $validated['translate_prompt'],
-            'sync_enabled' => $validated['sync_enabled'],
-        ];
-
-        if ($validated['translate_driver'] === 'openai') {
-            // Only update API key if a new one is provided
-            if (filled($validated['openai_api_key'] ?? null)) {
-                $settings['openai_api_key'] = $validated['openai_api_key'];
-            }
-            $settings['openai_model'] = $validated['openai_model'];
-            $settings['openai_endpoint'] = $validated['openai_endpoint'];
-            $settings['openai_temperature'] = (float) $validated['openai_temperature'];
-        }
-
-        $saved = $this->settings->save($settings);
+        $saved = $this->settings->save([
+            'translate_model' => $validated['model'],
+            'translate_guidance' => $validated['translate_guidance'] ?? '',
+        ]);
 
         if (! $saved) {
-            return redirect()->back()->withErrors(['general' => 'Failed to save settings. Make sure the .env file exists and is writable.']);
+            return redirect()->back()->withErrors([
+                'general' => 'Settings storage is unavailable. Run the Laravel Vox migrations and try again.',
+            ]);
         }
 
-        return redirect()->back()->with('success', 'Settings saved successfully.');
+        return Inertia::flash('success', 'AI translation settings saved.')->back();
+    }
+
+    private function updateSyncSettings(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'sync_enabled' => ['required', 'boolean'],
+        ]);
+
+        if (! $this->settings->save(['sync_enabled' => $validated['sync_enabled']])) {
+            return redirect()->back()->withErrors([
+                'general' => 'Settings storage is unavailable. Run the Laravel Vox migrations and try again.',
+            ]);
+        }
+
+        return Inertia::flash('success', 'Remote sync settings saved.')->back();
     }
 }

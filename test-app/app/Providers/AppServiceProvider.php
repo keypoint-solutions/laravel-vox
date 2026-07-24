@@ -22,5 +22,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::define('viewVox', fn (User $user): bool => $user->email === 'admin@keypoint.ro');
+        Gate::define('manageVoxSettings', fn (User $user): bool => $user->email === 'admin@keypoint.ro');
     }
 }

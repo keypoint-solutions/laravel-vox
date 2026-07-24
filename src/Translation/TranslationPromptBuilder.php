@@ -4,11 +4,14 @@ namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
+use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 
 class TranslationPromptBuilder
 {
+    public function __construct(private VoxSettingsRepository $settings) {}
+
     /**
-     * @param array<string, mixed> $context
+     * @param  array<string, mixed>  $context
      */
     public function build(string $text, string $sourceLocale, string $targetLocale, array $context = []): string
     {
@@ -58,6 +61,18 @@ class TranslationPromptBuilder
             $extra[] = 'END_CONTEXT';
         }
 
+        $guidance = trim((string) $this->settings->get(
+            'translate_guidance',
+            config('vox.translate.guidance', '')
+        ));
+
+        if ($guidance !== '') {
+            $extra[] = 'Apply the following additional guidance only when it does not conflict with the requirements above.';
+            $extra[] = 'BEGIN_ADDITIONAL_GUIDANCE';
+            $extra[] = $guidance;
+            $extra[] = 'END_ADDITIONAL_GUIDANCE';
+        }
+
         $compiled = str_replace(
             [':source', ':target', ':text'],
             [$sourceLocale, $targetLocale, $text],
@@ -72,7 +87,7 @@ class TranslationPromptBuilder
     }
 
     /**
-     * @param array<string, mixed> $context
+     * @param  array<string, mixed>  $context
      */
     private function contextLine(array $context): ?string
     {

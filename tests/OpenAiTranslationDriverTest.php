@@ -6,11 +6,10 @@ use Illuminate\Support\Facades\Http;
 use KeypointSolutions\LaravelVox\Translation\Drivers\OpenAiTranslationDriver;
 
 beforeEach(function (): void {
-    config()->set('vox.translate.openai.api_key', 'test-key');
-    config()->set('vox.translate.openai.model', 'gpt-5.4-mini');
-    config()->set('vox.translate.openai.endpoint', 'https://api.openai.test/v1/chat/completions');
-    config()->set('vox.translate.openai.temperature', 0.2);
+    config()->set('vox.translate.providers.openai.api_key', 'test-key');
+    config()->set('vox.translate.model', 'gpt-5.4-mini');
     config()->set('vox.translate.prompt', 'Translate :text from :source to :target.');
+    config()->set('vox.translate.guidance', '');
     config()->set('vox.translate.terms', ['do_not_translate' => [], 'fixed' => []]);
     config()->set('vox.translate.use_context', false);
 });
@@ -18,8 +17,16 @@ beforeEach(function (): void {
 it('protects and restores Laravel placeholders around the model request', function () {
     Http::fake([
         '*' => Http::response([
-            'choices' => [
-                ['message' => ['content' => 'Bonjour __LARAVEL_PLACEHOLDER_0__, vous avez __LARAVEL_PLACEHOLDER_1__ messages.']],
+            'output' => [
+                [
+                    'type' => 'message',
+                    'content' => [
+                        [
+                            'type' => 'output_text',
+                            'text' => 'Bonjour __LARAVEL_PLACEHOLDER_0__, vous avez __LARAVEL_PLACEHOLDER_1__ messages.',
+                        ],
+                    ],
+                ],
             ],
         ]),
     ]);
@@ -33,23 +40,51 @@ it('protects and restores Laravel placeholders around the model request', functi
     expect($translation)->toBe('Bonjour :name, vous avez :count messages.');
 
     Http::assertSent(function (Request $request): bool {
-        $messages = $request['messages'];
-        $serializedMessages = json_encode($messages, JSON_THROW_ON_ERROR);
+        $serializedRequest = json_encode($request->data(), JSON_THROW_ON_ERROR);
 
-        return $request['model'] === 'gpt-5.4-mini'
-            && $request['temperature'] === 0.2
-            && $messages[1]['content'] === 'Hello __LARAVEL_PLACEHOLDER_0__, you have __LARAVEL_PLACEHOLDER_1__ messages.'
-            && str_contains($messages[0]['content'], 'Preserve every token exactly.')
-            && ! str_contains($serializedMessages, ':name')
-            && ! str_contains($serializedMessages, ':count');
+        return $request->url() === 'https://api.openai.com/v1/responses'
+            && $request['model'] === 'gpt-5.4-mini'
+            && ! array_key_exists('reasoning', $request->data())
+            && $request['store'] === false
+            && $request['input'] === 'Hello __LARAVEL_PLACEHOLDER_0__, you have __LARAVEL_PLACEHOLDER_1__ messages.'
+            && str_contains($request['instructions'], 'Preserve every token exactly.')
+            && ! str_contains($serializedRequest, ':name')
+            && ! str_contains($serializedRequest, ':count');
     });
+});
+
+it('keeps GPT-5.6 translation requests at the non-reasoning cost profile', function () {
+    config()->set('vox.translate.model', 'gpt-5.6-luna');
+
+    Http::fake([
+        '*' => Http::response([
+            'output' => [[
+                'type' => 'message',
+                'content' => [[
+                    'type' => 'output_text',
+                    'text' => 'Bonjour',
+                ]],
+            ]],
+        ]),
+    ]);
+
+    expect(app(OpenAiTranslationDriver::class)->translate('Hello', 'en', 'fr'))
+        ->toBe('Bonjour');
+
+    Http::assertSent(fn (Request $request): bool => $request['reasoning'] === ['effort' => 'none']);
 });
 
 it('preserves repeated and reordered placeholders', function () {
     Http::fake([
         '*' => Http::response([
-            'choices' => [
-                ['message' => ['content' => '__LARAVEL_PLACEHOLDER_2__: __LARAVEL_PLACEHOLDER_0__ et encore __LARAVEL_PLACEHOLDER_1__.']],
+            'output' => [
+                [
+                    'type' => 'message',
+                    'content' => [[
+                        'type' => 'output_text',
+                        'text' => '__LARAVEL_PLACEHOLDER_2__: __LARAVEL_PLACEHOLDER_0__ et encore __LARAVEL_PLACEHOLDER_1__.',
+                    ]],
+                ],
             ],
         ]),
     ]);
@@ -66,8 +101,14 @@ it('preserves repeated and reordered placeholders', function () {
 it('does not treat colon suffixes as Laravel placeholders', function () {
     Http::fake([
         '*' => Http::response([
-            'choices' => [
-                ['message' => ['content' => 'Téléchargez PDF:er à https://example.com/files:latest pour __LARAVEL_PLACEHOLDER_0__.']],
+            'output' => [
+                [
+                    'type' => 'message',
+                    'content' => [[
+                        'type' => 'output_text',
+                        'text' => 'Téléchargez PDF:er à https://example.com/files:latest pour __LARAVEL_PLACEHOLDER_0__.',
+                    ]],
+                ],
             ],
         ]),
     ]);
@@ -80,15 +121,21 @@ it('does not treat colon suffixes as Laravel placeholders', function () {
 
     expect($translation)->toBe('Téléchargez PDF:er à https://example.com/files:latest pour :name.');
 
-    Http::assertSent(fn (Request $request): bool => $request['messages'][1]['content']
+    Http::assertSent(fn (Request $request): bool => $request['input']
         === 'Download PDF:er at https://example.com/files:latest for __LARAVEL_PLACEHOLDER_0__.');
 });
 
 it('allows translated prefixes to be attached to restored placeholders', function () {
     Http::fake([
         '*' => Http::response([
-            'choices' => [
-                ['message' => ['content' => 'بين __LARAVEL_PLACEHOLDER_0__ و__LARAVEL_PLACEHOLDER_1__ عنصرًا.']],
+            'output' => [
+                [
+                    'type' => 'message',
+                    'content' => [[
+                        'type' => 'output_text',
+                        'text' => 'بين __LARAVEL_PLACEHOLDER_0__ و__LARAVEL_PLACEHOLDER_1__ عنصرًا.',
+                    ]],
+                ],
             ],
         ]),
     ]);
@@ -105,8 +152,14 @@ it('allows translated prefixes to be attached to restored placeholders', functio
 it('rejects a translation when the model changes a protected token', function () {
     Http::fake([
         '*' => Http::response([
-            'choices' => [
-                ['message' => ['content' => 'Bonjour __LARAVEL_PLACEHOLDER_NAME__.']],
+            'output' => [
+                [
+                    'type' => 'message',
+                    'content' => [[
+                        'type' => 'output_text',
+                        'text' => 'Bonjour __LARAVEL_PLACEHOLDER_NAME__.',
+                    ]],
+                ],
             ],
         ]),
     ]);
@@ -124,4 +177,17 @@ it('throws for unsuccessful OpenAI responses', function () {
 
     expect(fn () => app(OpenAiTranslationDriver::class)->translate('Hello', 'en', 'fr'))
         ->toThrow(RequestException::class);
+});
+
+it('rejects a response without an output text item', function () {
+    Http::fake([
+        '*' => Http::response([
+            'output' => [
+                ['type' => 'reasoning', 'summary' => []],
+            ],
+        ]),
+    ]);
+
+    expect(fn () => app(OpenAiTranslationDriver::class)->translate('Hello', 'en', 'fr'))
+        ->toThrow(RuntimeException::class, 'OpenAI response did not contain a translation.');
 });

@@ -1,293 +1,387 @@
 <script lang="ts" setup>
-    import { Head, useForm, usePage } from '@inertiajs/vue3';
-    import { Check, Loader2 } from '@lucide/vue';
+    import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+    import { Check, KeyRound, Loader2, RefreshCw, ShieldCheck } from '@lucide/vue';
     import { computed, ref, watch } from 'vue';
 
-    import type { SelectOption } from '@/components/ui';
-    import { Button, Checkbox, FormField, Input, Select, Textarea } from '@/components/ui';
+    import { Badge, Button, Checkbox, FormField, Select, Textarea } from '@/components/ui';
+    import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
 
     defineOptions({
         layout: Layout,
     });
 
-    interface SettingsProps {
-        settings: {
-            translate_driver: string;
-            translate_prompt: string;
-            sync_enabled: boolean;
-            sync_key: string;
-            openai_api_key: string;
-            openai_api_key_set: boolean;
-            openai_model: string;
-            openai_endpoint: string;
-            openai_temperature: number;
-        };
-        drivers: SelectOption[];
+    interface ModelOption {
+        value: string;
+        label: string;
+        available: boolean;
     }
 
-    const page = usePage<{
-        settings: SettingsProps['settings'];
-        drivers: SettingsProps['drivers'];
-    }>();
-    const settings = computed(() => page.props.settings);
-    const drivers = computed(() => page.props.drivers);
-    const settingsUpdateRoute = computed(() => page.props.vox?.routes?.settings_update ?? page.url.split('?')[0]);
+    interface SettingsProps {
+        settings: {
+            translate_guidance: string;
+            sync_enabled: boolean;
+            sync_key_set: boolean;
+        };
+        ai: {
+            provider: {
+                id: string;
+                label: string;
+                credentials_set: boolean;
+            };
+            model: string;
+            status: 'connected' | 'missing_key' | 'error' | 'unavailable';
+            message: string;
+            checked_at: string | null;
+            models: ModelOption[];
+        };
+    }
 
-    const form = useForm({
-        translate_driver: settings.value.translate_driver,
-        translate_prompt: settings.value.translate_prompt,
+    const page = usePage<SettingsProps>();
+    const { formatDateTime } = useDateTime();
+    const settings = computed(() => page.props.settings);
+    const ai = computed(() => page.props.ai);
+    const settingsUpdateRoute = computed(() => page.props.vox?.routes?.settings_update ?? page.url.split('?')[0]);
+    const modelsRefreshRoute = computed(
+        () => page.props.vox?.routes?.settings_ai_models_refresh ?? `${page.url.split('?')[0]}/ai/models`
+    );
+
+    const aiForm = useForm({
+        section: 'ai',
+        model: ai.value.model,
+        translate_guidance: settings.value.translate_guidance,
+    });
+    const syncForm = useForm({
+        section: 'sync',
         sync_enabled: settings.value.sync_enabled,
-        openai_api_key: '',
-        openai_model: settings.value.openai_model,
-        openai_endpoint: settings.value.openai_endpoint,
-        openai_temperature: settings.value.openai_temperature,
     });
 
-    const syncKey = ref(settings.value.sync_key);
-    const showApiKeyInput = ref(false);
-    const showSuccess = ref(false);
+    const aiSaved = ref(false);
+    const syncSaved = ref(false);
+    const refreshingModels = ref(false);
+    const modelRefreshSuccess = ref(false);
+    const modelRefreshError = ref('');
+
+    const connectionBadgeVariant = computed(() => {
+        if (ai.value.status === 'connected') {
+            return 'success';
+        }
+
+        if (ai.value.status === 'error' || ai.value.status === 'unavailable') {
+            return 'destructive';
+        }
+
+        return 'warning';
+    });
+
+    const connectionLabel = computed(() => {
+        if (ai.value.status === 'connected') {
+            return 'Connected';
+        }
+
+        if (ai.value.status === 'error') {
+            return 'Connection failed';
+        }
+
+        if (ai.value.status === 'unavailable') {
+            return 'Discovery unavailable';
+        }
+
+        return 'Credentials missing';
+    });
 
     watch(
-        () => page.props.settings,
-        (newSettings) => {
-            form.translate_driver = newSettings.translate_driver;
-            form.translate_prompt = newSettings.translate_prompt;
-            form.sync_enabled = newSettings.sync_enabled;
-            form.openai_model = newSettings.openai_model;
-            form.openai_endpoint = newSettings.openai_endpoint;
-            form.openai_temperature = newSettings.openai_temperature;
+        () => [aiForm.model, aiForm.translate_guidance],
+        () => {
+            if (aiForm.isDirty) {
+                aiSaved.value = false;
+            }
         }
     );
 
-    function submitForm(): void {
-        form.post(settingsUpdateRoute.value, {
+    watch(
+        () => syncForm.sync_enabled,
+        () => {
+            if (syncForm.isDirty) {
+                syncSaved.value = false;
+            }
+        }
+    );
+
+    function saveAiSettings(): void {
+        aiSaved.value = false;
+
+        aiForm.post(settingsUpdateRoute.value, {
             preserveScroll: true,
             onSuccess: () => {
-                showSuccess.value = true;
-                showApiKeyInput.value = false;
-                form.openai_api_key = '';
-                setTimeout(() => {
-                    showSuccess.value = false;
-                }, 3000);
+                aiForm.defaults();
+                aiSaved.value = true;
             },
         });
     }
 
-    const isOpenAiDriver = computed(() => form.translate_driver === 'openai');
+    function saveSyncSettings(): void {
+        syncSaved.value = false;
+
+        syncForm.post(settingsUpdateRoute.value, {
+            preserveScroll: true,
+            onSuccess: () => {
+                syncForm.defaults();
+                syncSaved.value = true;
+            },
+        });
+    }
+
+    function refreshModels(): void {
+        modelRefreshError.value = '';
+        modelRefreshSuccess.value = false;
+
+        router.post(
+            modelsRefreshRoute.value,
+            {},
+            {
+                preserveScroll: true,
+                onStart: () => {
+                    refreshingModels.value = true;
+                },
+                onError: (errors) => {
+                    modelRefreshError.value = errors.models ?? 'Model discovery failed.';
+                },
+                onSuccess: () => {
+                    modelRefreshSuccess.value = true;
+                },
+                onFinish: () => {
+                    refreshingModels.value = false;
+                },
+            }
+        );
+    }
 </script>
 
 <template>
     <div class="space-y-8">
         <Head title="Settings" />
 
-        <!-- Page Header -->
         <div>
             <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
-            <p class="text-muted-foreground mt-1 text-sm">Configure translation drivers, prompts, and sync options.</p>
+            <p class="text-muted-foreground mt-1 text-sm">
+                Manage runtime translation preferences. Credentials remain owned by the application environment.
+            </p>
         </div>
 
-        <form
-            class="space-y-8"
-            @submit.prevent="submitForm"
-        >
-            <!-- Translation Driver Section -->
-            <section class="bg-card rounded-xl border p-6">
-                <h2 class="text-lg font-semibold">Translation Driver</h2>
-                <p class="text-muted-foreground mt-1 text-sm">Select and configure the AI translation service.</p>
+        <section class="bg-card overflow-hidden rounded-xl border">
+            <div class="flex flex-col gap-4 border-b p-6 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="text-lg font-semibold">AI translation</h2>
+                        <Badge :variant="connectionBadgeVariant">{{ connectionLabel }}</Badge>
+                    </div>
+                    <p class="text-muted-foreground mt-1 max-w-2xl text-sm">
+                        The active provider and its credentials are deployment settings. Runtime model and translation
+                        guidance can be managed here.
+                    </p>
+                </div>
+                <Button
+                    :disabled="!ai.provider.credentials_set || refreshingModels"
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    @click="refreshModels"
+                >
+                    <Loader2
+                        v-if="refreshingModels"
+                        class="size-4 animate-spin"
+                    />
+                    <RefreshCw
+                        v-else
+                        class="size-4"
+                    />
+                    Refresh & test
+                </Button>
+            </div>
 
-                <div class="mt-6 grid gap-6 sm:grid-cols-2">
+            <div class="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+                <form
+                    class="space-y-6"
+                    @submit.prevent="saveAiSettings"
+                >
+                    <div
+                        v-if="aiForm.errors.general"
+                        role="alert"
+                        class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border p-3 text-sm"
+                    >
+                        {{ aiForm.errors.general }}
+                    </div>
+
                     <FormField
-                        id="translate_driver"
-                        :error="form.errors.translate_driver"
-                        description="The translation service to use."
-                        label="Driver"
+                        id="model"
+                        :error="aiForm.errors.model"
+                        description="Only supported text models available to the active provider account are listed."
+                        label="Translation model"
                     >
                         <Select
-                            id="translate_driver"
-                            v-model="form.translate_driver"
-                            :options="drivers"
-                            placeholder="Select a driver"
+                            id="model"
+                            v-model="aiForm.model"
+                            :disabled="ai.models.length === 0"
+                            :options="ai.models"
+                            placeholder="No supported models found"
                         />
                     </FormField>
-                </div>
 
-                <!-- OpenAI Settings -->
-                <div
-                    v-if="isOpenAiDriver"
-                    class="mt-6 space-y-6 border-t pt-6"
-                >
-                    <h3 class="text-sm font-medium">OpenAI Configuration</h3>
-
-                    <div class="grid gap-6 sm:grid-cols-2">
-                        <FormField
-                            id="openai_api_key"
-                            :description="
-                                settings.openai_api_key_set
-                                    ? 'API key is configured. Enter a new key to change it.'
-                                    : 'Your OpenAI API key.'
-                            "
-                            :error="form.errors.openai_api_key"
-                            label="API Key"
-                        >
-                            <div
-                                v-if="settings.openai_api_key_set && !showApiKeyInput"
-                                class="flex items-center gap-2"
-                            >
-                                <Input
-                                    :model-value="settings.openai_api_key"
-                                    class="font-mono"
-                                    disabled
-                                />
-                                <Button
-                                    size="sm"
-                                    type="button"
-                                    variant="outline"
-                                    @click="showApiKeyInput = true"
-                                >
-                                    Change
-                                </Button>
-                            </div>
-                            <Input
-                                v-else
-                                id="openai_api_key"
-                                v-model="form.openai_api_key"
-                                placeholder="sk-..."
-                                type="password"
-                            />
-                        </FormField>
-
-                        <FormField
-                            id="openai_model"
-                            :error="form.errors.openai_model"
-                            description="The OpenAI model to use for translations."
-                            label="Model"
-                        >
-                            <Input
-                                id="openai_model"
-                                v-model="form.openai_model"
-                                placeholder="gpt-5.4-nano"
-                            />
-                        </FormField>
-
-                        <FormField
-                            id="openai_endpoint"
-                            :error="form.errors.openai_endpoint"
-                            description="The OpenAI API endpoint URL."
-                            label="Endpoint"
-                        >
-                            <Input
-                                id="openai_endpoint"
-                                v-model="form.openai_endpoint"
-                                placeholder="https://api.openai.com/v1/chat/completions"
-                            />
-                        </FormField>
-
-                        <FormField
-                            id="openai_temperature"
-                            :error="form.errors.openai_temperature"
-                            description="Controls randomness (0-2). Lower is more deterministic."
-                            label="Temperature"
-                        >
-                            <Input
-                                id="openai_temperature"
-                                v-model="form.openai_temperature"
-                                max="2"
-                                min="0"
-                                step="0.1"
-                                type="number"
-                            />
-                        </FormField>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Translation Prompt Section -->
-            <section class="bg-card rounded-xl border p-6">
-                <h2 class="text-lg font-semibold">Translation Prompt</h2>
-                <p class="text-muted-foreground mt-1 text-sm">
-                    Customize the system prompt sent to the AI for translations.
-                </p>
-
-                <div class="mt-6">
                     <FormField
-                        id="translate_prompt"
-                        :error="form.errors.translate_prompt"
-                        description="Use :source and :target placeholders for locale names."
-                        label="System Prompt"
+                        id="translate_guidance"
+                        :error="aiForm.errors.translate_guidance"
+                        description="Optional project terminology or tone guidance. Placeholder and output-safety rules remain enforced by Laravel Vox."
+                        label="Additional translation guidance"
                     >
                         <Textarea
-                            id="translate_prompt"
-                            v-model="form.translate_prompt"
-                            :rows="4"
-                            placeholder="You are a professional translator..."
+                            id="translate_guidance"
+                            v-model="aiForm.translate_guidance"
+                            :rows="5"
+                            placeholder="For example: Use formal French and keep product names in English."
                         />
                     </FormField>
+
+                    <div class="flex flex-wrap items-center gap-3 border-t pt-5">
+                        <Button
+                            :disabled="aiForm.processing || !aiForm.isDirty"
+                            type="submit"
+                        >
+                            <Loader2
+                                v-if="aiForm.processing"
+                                class="size-4 animate-spin"
+                            />
+                            <span>{{ aiForm.processing ? 'Saving…' : 'Save AI settings' }}</span>
+                        </Button>
+                        <span
+                            v-if="aiSaved"
+                            role="status"
+                            aria-live="polite"
+                            class="flex items-center gap-1.5 text-sm text-emerald-600"
+                        >
+                            <Check class="size-4" />
+                            AI settings saved
+                        </span>
+                    </div>
+                </form>
+
+                <aside class="bg-muted/30 space-y-4 rounded-lg border p-4">
+                    <div class="flex items-start gap-3">
+                        <ShieldCheck class="mt-0.5 size-4 shrink-0 text-emerald-500" />
+                        <div>
+                            <p class="text-sm font-medium">Active provider</p>
+                            <p class="text-muted-foreground mt-0.5 text-xs">{{ ai.provider.label }}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <KeyRound class="mt-0.5 size-4 shrink-0 text-violet-500" />
+                        <div>
+                            <p class="text-sm font-medium">
+                                {{
+                                    ai.provider.credentials_set
+                                        ? 'Credentials configured'
+                                        : 'Credentials not configured'
+                                }}
+                            </p>
+                            <p class="text-muted-foreground mt-0.5 text-xs">
+                                Managed through the application environment.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="border-t pt-4">
+                        <p class="text-muted-foreground text-xs">{{ ai.message }}</p>
+                        <p class="text-muted-foreground mt-2 text-xs">
+                            Last checked: {{ formatDateTime(ai.checked_at, 'Not checked yet') }}
+                        </p>
+                    </div>
+                    <p
+                        v-if="modelRefreshError"
+                        role="alert"
+                        class="text-destructive text-xs"
+                    >
+                        {{ modelRefreshError }}
+                    </p>
+                    <p
+                        v-if="modelRefreshSuccess"
+                        role="status"
+                        aria-live="polite"
+                        class="flex items-center gap-1.5 text-xs text-emerald-600"
+                    >
+                        <Check class="size-3.5" />
+                        Connection verified
+                    </p>
+                </aside>
+            </div>
+        </section>
+
+        <section class="bg-card rounded-xl border">
+            <div class="border-b p-6">
+                <h2 class="text-lg font-semibold">Remote sync</h2>
+                <p class="text-muted-foreground mt-1 text-sm">
+                    Control whether this environment accepts authenticated translation archive requests.
+                </p>
+            </div>
+
+            <form
+                class="space-y-6 p-6"
+                @submit.prevent="saveSyncSettings"
+            >
+                <div
+                    v-if="syncForm.errors.general"
+                    role="alert"
+                    class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border p-3 text-sm"
+                >
+                    {{ syncForm.errors.general }}
                 </div>
-            </section>
 
-            <!-- Sync Section -->
-            <section class="bg-card rounded-xl border p-6">
-                <h2 class="text-lg font-semibold">Sync Configuration</h2>
-                <p class="text-muted-foreground mt-1 text-sm">Configure remote sync authentication.</p>
-
-                <div class="mt-6 space-y-6">
+                <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                     <FormField
                         id="sync_enabled"
-                        description="Whether this environment can receive remote sync requests."
+                        description="Disable this when the environment should not serve translation archives."
                         label="Remote sync enabled"
                     >
                         <Checkbox
                             id="sync_enabled"
-                            v-model="form.sync_enabled"
+                            v-model="syncForm.sync_enabled"
                         />
                     </FormField>
 
-                    <FormField
-                        v-if="form.sync_enabled"
-                        id="sync_key"
-                        description="Secret key for authenticating remote sync requests."
-                        label="Sync Key"
-                    >
-                        <Input
-                            id="sync_key"
-                            v-model="syncKey"
-                            copyable
-                            placeholder="Enter sync key..."
-                            readonly
-                            type="text"
-                        />
-                    </FormField>
+                    <div class="bg-muted/30 min-w-56 rounded-lg border p-4">
+                        <div class="flex items-center justify-between gap-4">
+                            <span class="text-sm font-medium">Sync key</span>
+                            <Badge :variant="settings.sync_key_set ? 'success' : 'warning'">
+                                {{ settings.sync_key_set ? 'Configured' : 'Missing' }}
+                            </Badge>
+                        </div>
+                        <p class="text-muted-foreground mt-2 text-xs">
+                            The secret is never rendered in the browser. Generate it with
+                            <code>php artisan vox:generate-sync-key</code>.
+                        </p>
+                    </div>
                 </div>
-            </section>
 
-            <!-- Submit Button -->
-            <div class="flex items-center gap-4">
-                <Button
-                    :disabled="form.processing"
-                    type="submit"
-                >
-                    <Loader2
-                        v-if="form.processing"
-                        class="size-4 animate-spin"
-                    />
-                    <span v-else>Save Settings</span>
-                </Button>
-                <Transition
-                    enter-active-class="transition-opacity duration-200"
-                    enter-from-class="opacity-0"
-                    leave-active-class="transition-opacity duration-200"
-                    leave-to-class="opacity-0"
-                >
+                <div class="flex flex-wrap items-center gap-3 border-t pt-5">
+                    <Button
+                        :disabled="syncForm.processing || !syncForm.isDirty"
+                        type="submit"
+                    >
+                        <Loader2
+                            v-if="syncForm.processing"
+                            class="size-4 animate-spin"
+                        />
+                        <span>{{ syncForm.processing ? 'Saving…' : 'Save sync setting' }}</span>
+                    </Button>
                     <span
-                        v-if="showSuccess"
+                        v-if="syncSaved"
+                        role="status"
+                        aria-live="polite"
                         class="flex items-center gap-1.5 text-sm text-emerald-600"
                     >
                         <Check class="size-4" />
-                        Settings saved
+                        Sync setting saved
                     </span>
-                </Transition>
-            </div>
-        </form>
+                </div>
+            </form>
+        </section>
     </div>
 </template>

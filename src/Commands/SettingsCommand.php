@@ -3,6 +3,8 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
+use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
+
 use function Laravel\Prompts\table;
 
 class SettingsCommand extends Command
@@ -13,6 +15,8 @@ class SettingsCommand extends Command
 
     public function handle(): int
     {
+        $settings = app(VoxSettingsRepository::class);
+
         table(['Key', 'Value', 'Description'], [
             ['database.connection', (string) config('vox.database.connection'), 'Database connection for Vox storage.'],
             ['database.path', (string) config('vox.database.path'), 'SQLite path for the Vox database.'],
@@ -26,7 +30,7 @@ class SettingsCommand extends Command
             ['translate.locales', is_array(config('vox.translate.locales')) ? json_encode(config('vox.translate.locales')) : (string) config('vox.translate.locales'), 'Locales to translate (auto or list).'],
             ['translate.base_locale', (string) config('vox.translate.base_locale'), 'Base locale used for translations.'],
             ['translate.use_context', config('vox.translate.use_context', true) ? 'true' : 'false', 'Include parse context comments in translation prompts.'],
-            ['translate.openai.temperature', (string) config('vox.translate.openai.temperature', 0.2), 'OpenAI translation temperature.'],
+            ['translate.model', (string) $settings->get('translate_model', config('vox.translate.model')), 'Model used for machine translation.'],
         ]);
 
         return self::SUCCESS;

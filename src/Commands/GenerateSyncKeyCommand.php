@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxSyncKey;
+
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\warning;
 
@@ -29,14 +30,14 @@ class GenerateSyncKeyCommand extends Command
         $key = Str::random(64);
 
         if (! $syncKey->store($key)) {
-            warning('Failed to save sync key. Make sure the config file is published and writable.');
+            warning('Failed to save sync key. Make sure the .env file exists and is writable.');
 
             return self::FAILURE;
         }
 
         app(VoxAuditLogger::class)->record('generate-sync-key');
 
-        info('Sync key generated and saved to config:');
+        info('Sync key generated and saved to .env:');
         info($key);
 
         return self::SUCCESS;

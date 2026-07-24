@@ -10,12 +10,26 @@ use KeypointSolutions\LaravelVox\Commands\SettingsCommand;
 use KeypointSolutions\LaravelVox\Commands\SyncRemoteTranslationsCommand;
 use KeypointSolutions\LaravelVox\Commands\SyncTranslationsCommand;
 use KeypointSolutions\LaravelVox\Commands\TranslateMissingTranslationsCommand;
+use KeypointSolutions\LaravelVox\Support\AiModelDiscovery;
+use KeypointSolutions\LaravelVox\Support\OpenAiModelDiscovery;
+use KeypointSolutions\LaravelVox\Support\UnavailableAiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\VoxDatabaseManager;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
 class LaravelVoxServiceProvider extends PackageServiceProvider
 {
+    public function packageRegistered(): void
+    {
+        $this->app->bind(AiModelDiscovery::class, function ($app): AiModelDiscovery {
+            if (config('vox.translate.driver', 'openai') === 'openai') {
+                return $app->make(OpenAiModelDiscovery::class);
+            }
+
+            return $app->make(UnavailableAiModelDiscovery::class);
+        });
+    }
+
     public function configurePackage(Package $package): void
     {
         $package

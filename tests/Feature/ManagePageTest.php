@@ -67,6 +67,7 @@ it('returns manage data with groups, statuses, and occurrences', function (): vo
         );
 
     $translations = manageTranslations($response)->keyBy('display_key');
+    $lastSyncAt = $response->inertiaPage()['props']['lastSyncAt'];
 
     expect($translations->keys()->sort()->values()->all())->toBe([
         'Welcome JSON',
@@ -75,6 +76,8 @@ it('returns manage data with groups, statuses, and occurrences', function (): vo
     ])->and($translations['frontend.welcome']['virtual_status'])->toBe('new')
         ->and($translations['backend.dashboard']['virtual_status'])->toBe('updated')
         ->and($translations['frontend.welcome']['is_frontend'])->toBeTrue()
+        ->and($lastSyncAt)->toMatch('/T.*(?:Z|[+-]\d{2}:\d{2})$/')
+        ->and($translations['frontend.welcome']['updated_at'])->toMatch('/T.*(?:Z|[+-]\d{2}:\d{2})$/')
         ->and($translations['frontend.welcome']['occurrences'][0]['file_path'])
         ->toBe('resources/views/welcome.blade.php');
 });
@@ -107,14 +110,19 @@ it('protects Laravel placeholders when translating from the management UI', func
     $this->withoutMiddleware(PreventRequestForgery::class);
 
     config()->set('vox.translate.driver', 'openai');
-    config()->set('vox.translate.openai.api_key', 'test-key');
-    config()->set('vox.translate.openai.model', 'gpt-5.4-mini');
-    config()->set('vox.translate.openai.endpoint', 'https://api.openai.test/v1/chat/completions');
+    config()->set('vox.translate.providers.openai.api_key', 'test-key');
+    config()->set('vox.translate.model', 'gpt-5.4-mini');
 
     Http::fake([
         '*' => Http::response([
-            'choices' => [
-                ['message' => ['content' => 'Bonjour __LARAVEL_PLACEHOLDER_0__.']],
+            'output' => [
+                [
+                    'type' => 'message',
+                    'content' => [[
+                        'type' => 'output_text',
+                        'text' => 'Bonjour __LARAVEL_PLACEHOLDER_0__.',
+                    ]],
+                ],
             ],
         ]),
     ]);
@@ -131,6 +139,26 @@ it('protects Laravel placeholders when translating from the management UI', func
         ->assertRedirect('/vox/manage')
         ->assertInertiaFlash('translated_values.fr', 'Bonjour :name.');
 
-    Http::assertSent(fn (Request $request): bool => $request['messages'][1]['content']
+    Http::assertSent(fn (Request $request): bool => $request['input']
         === 'Hello __LARAVEL_PLACEHOLDER_0__.');
+});
+
+it('returns a success flash after saving translation values', function (): void {
+    $this->withoutMiddleware(PreventRequestForgery::class);
+
+    $translation = VoxTranslation::factory()
+        ->withValues(['en' => 'Hello', 'fr' => 'Bonjour'])
+        ->create(['group' => 'messages', 'key' => 'greeting']);
+
+    $this->from('/vox/manage')
+        ->patch("/vox/manage/translations/{$translation->id}", [
+            'values' => [
+                'en' => 'Hello',
+                'fr' => 'Salut',
+            ],
+        ])
+        ->assertRedirect('/vox/manage')
+        ->assertInertiaFlash('success', 'Translations saved.');
+
+    expect($translation->values()->where('locale', 'fr')->value('value'))->toBe('Salut');
 });
