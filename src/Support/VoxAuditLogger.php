@@ -7,7 +7,7 @@ use KeypointSolutions\LaravelVox\Models\VoxAudit;
 class VoxAuditLogger
 {
     /**
-     * @param array<string, mixed> $context
+     * @param  array<string, mixed>  $context
      */
     public function record(string $action, array $context = []): void
     {

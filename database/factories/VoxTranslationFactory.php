@@ -94,4 +94,3 @@ class VoxTranslationFactory extends Factory
         });
     }
 }
-

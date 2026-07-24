@@ -68,7 +68,7 @@ class VoxLocaleResolver
     }
 
     /**
-     * @param array<int, string> $locales
+     * @param  array<int, string>  $locales
      * @return array<int, string>
      */
     private function normalizeLocales(array $locales): array

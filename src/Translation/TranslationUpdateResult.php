@@ -5,6 +5,7 @@ namespace KeypointSolutions\LaravelVox\Translation;
 class TranslationUpdateResult
 {
     private int $added = 0;
+
     private int $removed = 0;
 
     public function incrementAdded(): void

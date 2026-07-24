@@ -20,7 +20,11 @@
 /public/storage
 /storage/*.key
 /storage/pail
+/storage/vox/frontend.json
 /vendor
+/lang/*/vox_remote_demo.php
+/lang/*/vox_browser_*.php
+/lang/php_*.json
 _ide_helper.php
 Homestead.json
 Homestead.yaml

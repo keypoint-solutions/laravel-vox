@@ -10,12 +10,11 @@ class TranslationFileUpdater
     public function __construct(
         private TranslationFileRepository $files,
         private VoxKeyProtector $protector
-    ) {
-    }
+    ) {}
 
     /**
-     * @param array<string, array<string, mixed>> $scanResults
-     * @param array<int, string> $locales
+     * @param  array<string, array<string, mixed>>  $scanResults
+     * @param  array<int, string>  $locales
      */
     public function updateFromScan(array $scanResults, array $locales, string $baseLocale): TranslationUpdateResult
     {
@@ -34,11 +33,13 @@ class TranslationFileUpdater
 
                     if ($namespace !== '' && $jsonKey !== '') {
                         $namespacedJsonKeys[$namespace][] = $jsonKey;
+
                         continue;
                     }
                 }
 
                 $jsonKeys[] = $key;
+
                 continue;
             }
 
@@ -46,7 +47,7 @@ class TranslationFileUpdater
         }
 
         $jsonKeys = array_values(array_unique($jsonKeys));
-        $result = new TranslationUpdateResult();
+        $result = new TranslationUpdateResult;
 
         foreach ($groupedKeys as $group => $keys) {
             $keys = array_values(array_unique($keys));
@@ -97,6 +98,7 @@ class TranslationFileUpdater
                     if ($this->obsoleteAction() === 'discard') {
                         $this->forgetValue($updated, $obsoleteKey, $existing, $flatExisting);
                         $result->incrementRemoved();
+
                         continue;
                     }
 
@@ -213,8 +215,8 @@ class TranslationFileUpdater
     }
 
     /**
-     * @param array<string, mixed> $existing
-     * @param array<string, mixed> $flatExisting
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $flatExisting
      */
     private function buildNewValue(string $key, string $locale, string $baseLocale, ?string $group, mixed $baseValue = null): string
     {
@@ -265,13 +267,14 @@ class TranslationFileUpdater
     }
 
     /**
-     * @param array<string, mixed> $existing
-     * @param array<string, mixed> $flatExisting
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $flatExisting
      */
     private function setValue(array &$target, string $key, string $value, array $existing): void
     {
         if ($this->shouldUseNested($existing, $key)) {
             Arr::set($target, $key, $value);
+
             return;
         }
 
@@ -279,8 +282,8 @@ class TranslationFileUpdater
     }
 
     /**
-     * @param array<string, mixed> $existing
-     * @param array<string, mixed> $flatExisting
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $flatExisting
      */
     private function hasKey(array $existing, string $key): bool
     {
@@ -288,8 +291,8 @@ class TranslationFileUpdater
     }
 
     /**
-     * @param array<string, mixed> $existing
-     * @param array<string, mixed> $flatExisting
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $flatExisting
      */
     private function getValue(array $existing, string $key, array $flatExisting): mixed
     {
@@ -301,13 +304,14 @@ class TranslationFileUpdater
     }
 
     /**
-     * @param array<string, mixed> $existing
-     * @param array<string, mixed> $flatExisting
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $flatExisting
      */
     private function forgetValue(array &$target, string $key, array $existing, array $flatExisting): void
     {
         if (array_key_exists($key, $flatExisting)) {
             unset($target[$key]);
+
             return;
         }
 
@@ -315,8 +319,8 @@ class TranslationFileUpdater
     }
 
     /**
-     * @param array<string, mixed> $existing
-     * @param array<string, mixed> $flatExisting
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $flatExisting
      */
     private function shouldUseNested(array $existing, string $key): bool
     {
@@ -360,7 +364,7 @@ class TranslationFileUpdater
     }
 
     /**
-     * @param array<string, mixed> $baseFlat
+     * @param  array<string, mixed>  $baseFlat
      * @return array<int, string>
      */
     private function protectedKeysFromBase(array $baseFlat, string $group): array
@@ -377,7 +381,7 @@ class TranslationFileUpdater
     }
 
     /**
-     * @param array<string, array<string, mixed>> $scanResults
+     * @param  array<string, array<string, mixed>>  $scanResults
      * @return array<string, array<int, string>>
      */
     private function buildLineComments(array $scanResults, string $group): array
@@ -433,7 +437,7 @@ class TranslationFileUpdater
     }
 
     /**
-     * @param array<string, mixed> $occurrence
+     * @param  array<string, mixed>  $occurrence
      */
     private function buildContextComment(?string $source, array $occurrence): string
     {
@@ -453,7 +457,7 @@ class TranslationFileUpdater
     }
 
     /**
-     * @param array<int, array<string, mixed>> $occurrences
+     * @param  array<int, array<string, mixed>>  $occurrences
      */
     private function buildOccurrenceComment(array $occurrences): ?string
     {

@@ -4,9 +4,11 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
+use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
 use Throwable;
@@ -15,8 +17,11 @@ class ManageTranslationController
 {
     public function __construct(private VoxLocaleResolver $localeResolver) {}
 
-    public function update(Request $request, VoxTranslation $translation): RedirectResponse
-    {
+    public function update(
+        Request $request,
+        VoxTranslation $translation,
+        VoxAuditLogger $auditLogger,
+    ): RedirectResponse {
         $validated = $request->validate([
             'values' => ['required', 'array'],
             'values.*' => ['nullable', 'string'],
@@ -42,6 +47,10 @@ class ManageTranslationController
         }
 
         $translation->touch();
+        $auditLogger->record('translation-updated', [
+            'translation_id' => $translation->id,
+            'locales' => array_values(array_intersect($locales, array_keys($validated['values']))),
+        ]);
 
         return Inertia::flash('success', 'Translations saved.')->back();
     }
@@ -64,12 +73,53 @@ class ManageTranslationController
         return [$locales, $baseLocale];
     }
 
-    public function toggleApproval(VoxTranslation $translation): RedirectResponse
+    public function toggleApproval(VoxTranslation $translation, VoxAuditLogger $auditLogger): RedirectResponse
     {
-        $translation->status = $translation->status === 'approved' ? 'pending' : 'approved';
-        $translation->save();
+        $status = $translation->status === 'approved' ? 'pending' : 'approved';
 
-        return redirect()->back();
+        $translation->timestamps = false;
+        $translation->status = $status;
+        $translation->save();
+        $translation->timestamps = true;
+
+        $auditLogger->record(
+            $status === 'approved' ? 'translation-approved' : 'translation-reopened',
+            ['translation_id' => $translation->id]
+        );
+
+        $message = $status === 'approved' ? 'Translation approved.' : 'Translation returned to review.';
+
+        return Inertia::flash('success', $message)->back();
+    }
+
+    public function bulkApproval(Request $request, VoxAuditLogger $auditLogger): RedirectResponse
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['required', 'integer', 'distinct'],
+            'status' => ['required', Rule::in(['pending', 'approved'])],
+        ]);
+        $status = $validated['status'];
+        $ids = VoxTranslation::query()
+            ->whereIn('id', $validated['ids'])
+            ->pluck('id')
+            ->all();
+
+        VoxTranslation::query()
+            ->whereIn('id', $ids)
+            ->toBase()
+            ->update(['status' => $status]);
+
+        $action = $status === 'approved' ? 'translations-bulk-approved' : 'translations-bulk-reopened';
+        $auditLogger->record($action, [
+            'translation_ids' => $ids,
+            'count' => count($ids),
+        ]);
+
+        $verb = $status === 'approved' ? 'Approved' : 'Returned to review';
+        $noun = count($ids) === 1 ? 'translation' : 'translations';
+
+        return Inertia::flash('success', "{$verb} ".count($ids)." {$noun}.")->back();
     }
 
     public function translate(

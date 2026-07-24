@@ -8,8 +8,7 @@ class TranslationKey
         public string $key,
         public ?string $group,
         public string $raw
-    ) {
-    }
+    ) {}
 
     public static function fromRaw(string $raw): self
     {

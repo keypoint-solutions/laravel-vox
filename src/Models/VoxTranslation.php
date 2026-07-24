@@ -10,6 +10,7 @@ class VoxTranslation extends VoxModel
 {
     /** @use HasFactory<VoxTranslationFactory> */
     use HasFactory;
+
     protected $table = 'vox_translations';
 
     protected $fillable = [

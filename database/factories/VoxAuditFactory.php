@@ -35,4 +35,3 @@ class VoxAuditFactory extends Factory
         return $this->state(['action' => 'sync-remote']);
     }
 }
-

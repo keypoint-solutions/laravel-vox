@@ -1,11 +1,11 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source(none);
 
 @import 'tw-animate-css';
 
 @source '../../resources/views/**/*.blade.php';
-@source '../../resources/views/**/*.js';
-@source '../../resources/views/**/*.vue';
-@source '../../resources/views/**/*.ts';
+@source '../../resources/js/**/*.js';
+@source '../../resources/js/**/*.vue';
+@source '../../resources/js/**/*.ts';
 
 @custom-variant dark (&:is(.dark *));
 

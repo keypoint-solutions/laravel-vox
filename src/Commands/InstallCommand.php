@@ -4,6 +4,7 @@ namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
 use KeypointSolutions\LaravelVox\Support\VoxDatabaseManager;
+
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\table;
@@ -22,6 +23,7 @@ class InstallCommand extends Command
 
         if (! is_string($databasePath) || $databasePath === '') {
             warning('Vox database path is not configured. Did you publish the config file?');
+
             return self::FAILURE;
         }
 
@@ -31,6 +33,7 @@ class InstallCommand extends Command
 
         if ($migrationPath === false) {
             warning('Unable to locate Vox migrations.');
+
             return self::FAILURE;
         }
 
@@ -46,7 +49,22 @@ class InstallCommand extends Command
 
         if ($exitCode !== self::SUCCESS) {
             warning('Vox installation failed.');
+
             return $exitCode;
+        }
+
+        $assetExitCode = spin(
+            fn () => $this->call('vendor:publish', [
+                '--tag' => 'vox-assets',
+                '--force' => true,
+            ]),
+            'Publishing Vox dashboard assets'
+        );
+
+        if ($assetExitCode !== self::SUCCESS) {
+            warning('Vox asset publishing failed.');
+
+            return $assetExitCode;
         }
 
         info('Vox installation complete.');

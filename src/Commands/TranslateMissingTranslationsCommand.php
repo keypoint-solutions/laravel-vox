@@ -11,9 +11,10 @@ use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\OpenAiTranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
-use KeypointSolutions\LaravelVox\Translation\TranslationPromptBuilder;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
+use KeypointSolutions\LaravelVox\Translation\TranslationPromptBuilder;
+
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\table;
@@ -26,7 +27,7 @@ class TranslateMissingTranslationsCommand extends Command
 
     public function handle(): int
     {
-        $localeResolver = new VoxLocaleResolver();
+        $localeResolver = new VoxLocaleResolver;
         $locales = $localeResolver->resolveLocales();
         $baseLocale = $localeResolver->resolveBaseLocale($locales);
 
@@ -34,7 +35,7 @@ class TranslateMissingTranslationsCommand extends Command
             $locales[] = $baseLocale;
         }
 
-        $fileRepository = new TranslationFileRepository(new TranslationFileWriter());
+        $fileRepository = new TranslationFileRepository(new TranslationFileWriter);
         $driver = app(TranslationDriverFactory::class)->make();
         $promptBuilder = app(TranslationPromptBuilder::class);
         $prefix = config('vox.parse.missing_translation_prefix', '🚩');
@@ -70,6 +71,7 @@ class TranslateMissingTranslationsCommand extends Command
 
             if (! File::exists($path)) {
                 $this->error("Base locale file not found: {$path}");
+
                 return self::FAILURE;
             }
 
@@ -84,6 +86,7 @@ class TranslateMissingTranslationsCommand extends Command
 
             if (! File::exists($path)) {
                 $this->error("Base locale file not found: {$path}");
+
                 return self::FAILURE;
             }
 
@@ -99,6 +102,7 @@ class TranslateMissingTranslationsCommand extends Command
 
         if (! $this->hasRequestedKey($baseGroups, $baseJson, $baseVendorJson, $target, $keyFilter, $groupFilter, $jsonNamespaceFilter)) {
             $this->error('Translation key not found in base locale.');
+
             return self::FAILURE;
         }
 
@@ -394,13 +398,14 @@ class TranslateMissingTranslationsCommand extends Command
     }
 
     /**
-     * @param array<string, mixed> $existing
-     * @param array<string, mixed> $flatExisting
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $flatExisting
      */
     private function setValue(array &$target, string $key, string $value, array $existing, array $flatExisting): void
     {
         if ($this->shouldUseNested($existing, $key)) {
             Arr::set($target, $key, $value);
+
             return;
         }
 
@@ -447,7 +452,7 @@ class TranslateMissingTranslationsCommand extends Command
     }
 
     /**
-     * @param array<string, mixed> $context
+     * @param  array<string, mixed>  $context
      */
     private function translateValue(
         TranslationDriver $driver,
@@ -503,7 +508,7 @@ class TranslateMissingTranslationsCommand extends Command
     }
 
     /**
-     * @param array<int, array{0: string, 1: string}> $rows
+     * @param  array<int, array{0: string, 1: string}>  $rows
      * @return array<int, array<int, string>>
      */
     private function formatPromptRows(array $rows): array
@@ -537,6 +542,7 @@ class TranslateMissingTranslationsCommand extends Command
         foreach ($parts as $part) {
             if ($part === '') {
                 $lines[] = '';
+
                 continue;
             }
 
@@ -574,8 +580,8 @@ class TranslateMissingTranslationsCommand extends Command
     }
 
     /**
-     * @param array<string, string> $before
-     * @param array<string, string> $after
+     * @param  array<string, string>  $before
+     * @param  array<string, string>  $after
      */
     private function outputModifiedFiles(string $langPath, array $before, array $after): void
     {
@@ -589,6 +595,7 @@ class TranslateMissingTranslationsCommand extends Command
 
         if ($modified === []) {
             info('No translation files modified.');
+
             return;
         }
 
@@ -659,7 +666,7 @@ class TranslateMissingTranslationsCommand extends Command
     }
 
     /**
-     * @param array<string, array<string, string>> $baseGroups
+     * @param  array<string, array<string, string>>  $baseGroups
      * @return array{0: string|null, 1: string|null, 2: string|null}
      */
     private function resolveKeyFilters(?string $requestedKey, ?array $target, array $baseGroups): array
@@ -783,9 +790,9 @@ class TranslateMissingTranslationsCommand extends Command
     }
 
     /**
-     * @param array<string, array<string, string>> $baseGroups
-     * @param array<string, string> $baseJson
-     * @param array<string, array<string, string>> $baseVendorJson
+     * @param  array<string, array<string, string>>  $baseGroups
+     * @param  array<string, string>  $baseJson
+     * @param  array<string, array<string, string>>  $baseVendorJson
      */
     private function hasRequestedKey(
         array $baseGroups,
@@ -854,7 +861,7 @@ class TranslateMissingTranslationsCommand extends Command
     }
 
     /**
-     * @param array<string, array<int, string>> $lineComments
+     * @param  array<string, array<int, string>>  $lineComments
      * @return array<string, string>
      */
     private function buildTranslationContext(array $lineComments, string $key): array

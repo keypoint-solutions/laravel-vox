@@ -1,8 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\File;
-use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
+use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
 
 it('removes orphan protected keys in non-base locales when keep_orphan_other_locales_keys is false', function () {
     $targetRoot = prepareVoxFixtures();
@@ -28,7 +28,7 @@ it('keeps obsolete comment lines between parse runs', function () {
 
     config()->set('vox.parse.obsolete', 'comment');
 
-    $writer = new TranslationFileWriter();
+    $writer = new TranslationFileWriter;
     $authPath = $targetRoot.'/lang/en/auth.php';
 
     $this->artisan('vox:parse', ['--no-interaction' => true])->assertExitCode(0);

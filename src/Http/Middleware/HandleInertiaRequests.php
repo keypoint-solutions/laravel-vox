@@ -76,6 +76,23 @@ class HandleInertiaRequests extends Middleware
             'dashboard' => route($routeNamePrefix.'dashboard', absolute: false),
             'sync' => route($routeNamePrefix.'sync', absolute: false),
             'sync_remote' => route($routeNamePrefix.'sync.remote', absolute: false),
+            'sync_local' => route($routeNamePrefix.'sync.local', absolute: false),
+            'sync_environment_store' => route($routeNamePrefix.'sync.environments.store', absolute: false),
+            'sync_environment_update' => route(
+                $routeNamePrefix.'sync.environments.update',
+                ['environment' => '__environment__'],
+                false
+            ),
+            'sync_environment_destroy' => route(
+                $routeNamePrefix.'sync.environments.destroy',
+                ['environment' => '__environment__'],
+                false
+            ),
+            'sync_environment_pull' => route(
+                $routeNamePrefix.'sync.environments.pull',
+                ['environment' => '__environment__'],
+                false
+            ),
             'manage' => route($routeNamePrefix.'manage', absolute: false),
             'manage_translation_update' => route(
                 $routeNamePrefix.'manage.translations.update',
@@ -87,12 +104,17 @@ class HandleInertiaRequests extends Middleware
                 ['translation' => '__translation__'],
                 false
             ),
+            'manage_translation_bulk_approval' => route(
+                $routeNamePrefix.'manage.translations.bulk-approval',
+                absolute: false
+            ),
             'manage_translation_translate' => route(
                 $routeNamePrefix.'manage.translations.translate',
                 ['translation' => '__translation__'],
                 false
             ),
             'publish' => route($routeNamePrefix.'publish', absolute: false),
+            'publish_store' => route($routeNamePrefix.'publish.store', absolute: false),
             'audit' => route($routeNamePrefix.'audit', absolute: false),
             'settings' => route($routeNamePrefix.'settings', absolute: false),
             'settings_update' => route($routeNamePrefix.'settings.update', absolute: false),

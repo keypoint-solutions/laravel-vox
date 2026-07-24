@@ -39,9 +39,11 @@
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
             "@php artisan key:generate",
             "@php artisan migrate --force",
+            "@php artisan db:seed --force",
             "npm install --ignore-scripts",
-            "npm run build",
-            "npm --prefix .. run build"
+            "npm --prefix .. run build",
+            "@php artisan vendor:publish --tag=vox-assets --force",
+            "npm run build"
         ],
         "dev": "npm run dev",
         "test": "@php vendor/bin/pest",
@@ -51,7 +53,7 @@
             "@php artisan package:discover --ansi"
         ],
         "post-update-cmd": [
-            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
+            "@php artisan vendor:publish --tag=vox-assets --ansi --force"
         ],
         "post-root-package-install": [
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""

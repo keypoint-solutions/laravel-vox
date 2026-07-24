@@ -24,4 +24,3 @@ class CleanupCommand extends Command
         return self::SUCCESS;
     }
 }
-

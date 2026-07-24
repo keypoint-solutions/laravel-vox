@@ -19,6 +19,10 @@ return [
         'audit' => true,
         'settings' => true,
     ],
+    'frontend' => [
+        'groups' => env('VOX_FRONTEND_GROUPS', 'auto'),
+        'manifest' => storage_path('vox/frontend.json'),
+    ],
     'system' => [
         'middleware' => [
             'web',

@@ -28,36 +28,67 @@ class TranslationSyncer
         $translations = $this->applyScanMetadata($translations, $scanResults);
 
         foreach ($translations as $fullKey => $payload) {
-            $translation = VoxTranslation::query()->firstOrCreate(
-                ['key' => $payload['key'], 'group' => $payload['group']],
-                [
+            $translation = VoxTranslation::query()->firstOrNew([
+                'key' => $payload['key'],
+                'group' => $payload['group'],
+            ]);
+            $isNew = ! $translation->exists;
+
+            if ($isNew) {
+                $translation->fill([
                     'is_frontend' => $payload['is_frontend'],
                     'source' => $payload['source'],
                     'status' => 'pending',
-                ]
-            );
-
-            if ($payload['is_frontend'] && ! $translation->is_frontend) {
-                $translation->is_frontend = true;
-                $translation->save();
+                ])->save();
             }
 
-            if ($payload['source'] !== null && $translation->source === null) {
+            if ($translation->is_frontend !== $payload['is_frontend']) {
+                $translation->timestamps = false;
+                $translation->is_frontend = $payload['is_frontend'];
+                $translation->save();
+                $translation->timestamps = true;
+            }
+
+            if ($translation->source !== $payload['source']) {
+                $translation->timestamps = false;
                 $translation->source = $payload['source'];
                 $translation->save();
+                $translation->timestamps = true;
             }
 
+            $contentChanged = false;
+
             foreach ($payload['values'] as $locale => $value) {
-                VoxTranslationValue::query()->updateOrCreate(
+                $translationValue = VoxTranslationValue::query()->firstOrNew(
                     [
                         'translation_id' => $translation->id,
                         'locale' => $locale,
-                    ],
-                    [
-                        'value' => $value,
-                        'is_obsolete' => false,
                     ]
                 );
+
+                if (
+                    ! $translationValue->exists
+                    || $translationValue->value !== $value
+                    || $translationValue->is_obsolete
+                ) {
+                    $contentChanged = true;
+                }
+
+                $translationValue->fill([
+                    'value' => $value,
+                    'is_obsolete' => false,
+                ])->save();
+            }
+
+            if (! $isNew && $contentChanged) {
+                $result->incrementChangedTranslations();
+
+                if ($translation->status === 'approved') {
+                    $translation->status = 'pending';
+                    $result->incrementReopenedTranslations();
+                }
+
+                $translation->touch();
             }
 
             VoxTranslationOccurrence::query()

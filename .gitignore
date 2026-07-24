@@ -1,7 +1,7 @@
 .env
 
 # Composer Related
-composer.lock
+/composer.lock
 /vendor
 
 # Frontend Assets
