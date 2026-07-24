@@ -51,8 +51,60 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'vox' => [
                 'features' => config('vox.features', []),
+                'routes' => $this->routeUrls($request),
                 'sync_enabled' => config('vox.sync.enabled', true),
             ],
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function routeUrls(Request $request): array
+    {
+        $routeNamePrefix = $this->routeNamePrefix($request);
+
+        return [
+            'dashboard' => route($routeNamePrefix.'dashboard', absolute: false),
+            'sync' => route($routeNamePrefix.'sync', absolute: false),
+            'sync_remote' => route($routeNamePrefix.'sync.remote', absolute: false),
+            'manage' => route($routeNamePrefix.'manage', absolute: false),
+            'manage_translation_update' => route(
+                $routeNamePrefix.'manage.translations.update',
+                ['translation' => '__translation__'],
+                false
+            ),
+            'manage_translation_toggle_approval' => route(
+                $routeNamePrefix.'manage.translations.toggle-approval',
+                ['translation' => '__translation__'],
+                false
+            ),
+            'manage_translation_translate' => route(
+                $routeNamePrefix.'manage.translations.translate',
+                ['translation' => '__translation__'],
+                false
+            ),
+            'publish' => route($routeNamePrefix.'publish', absolute: false),
+            'audit' => route($routeNamePrefix.'audit', absolute: false),
+            'settings' => route($routeNamePrefix.'settings', absolute: false),
+            'settings_update' => route($routeNamePrefix.'settings.update', absolute: false),
+        ];
+    }
+
+    private function routeNamePrefix(Request $request): string
+    {
+        $currentRouteName = $request->route()?->getName();
+
+        if (! is_string($currentRouteName)) {
+            return 'vox.';
+        }
+
+        $voxPosition = strrpos($currentRouteName, 'vox.');
+
+        if ($voxPosition === false) {
+            return 'vox.';
+        }
+
+        return substr($currentRouteName, 0, $voxPosition + strlen('vox.'));
     }
 }

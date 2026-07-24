@@ -9,12 +9,12 @@ This package provides a friendly GUI for managing translations in your Laravel a
 
 ## Features
 
-* Command that parses code to identify translatable phrases
-* Define remote environments and pull translations from them
-* Translate phrases manually or using AI
-* Moderate translations
-* Run builds to deploy JS frontend translations from the UI
-* Provide context to AI and human reviewers to improve accuracy
+- Command that parses code to identify translatable phrases
+- Define remote environments and pull translations from them
+- Translate phrases manually or using AI
+- Moderate translations
+- Run builds to deploy JS frontend translations from the UI
+- Provide context to AI and human reviewers to improve accuracy
 
 ## Support us
 
@@ -60,12 +60,39 @@ Gate::define('viewVox', function (User $user): bool {
     ], true);
 });
 ```
+
 By default, the gate checking is skipped in the local environment.
 You can disable this behavior by setting `system.bypass_auth_in_local` to `false` in your `config/vox.php` file.
+
+## Routes
+
+Vox registers its routes automatically at `/vox` by default. Change the prefix with `VOX_ROUTES_PREFIX`.
+
+To place the routes in your application's own route groups, disable automatic registration:
+
+```dotenv
+VOX_ROUTES_AUTO_REGISTER=false
+```
+
+Then call the package helper from any route file:
+
+```php
+use Illuminate\Support\Facades\Route;
+use KeypointSolutions\LaravelVox\Facades\LaravelVox;
+
+Route::middleware('auth')
+    ->prefix('admin/translations')
+    ->group(function (): void {
+        LaravelVox::routes();
+    });
+```
+
+The helper inherits surrounding route prefixes, middleware, domains, and name prefixes. You can also pass a prefix directly, such as `LaravelVox::routes('admin/translations')`. Vox keeps applying the middleware configured in `vox.system.middleware`.
 
 ## Usage
 
 ```php
+
 ```
 
 ## Testing

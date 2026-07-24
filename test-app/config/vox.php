@@ -7,6 +7,10 @@ return [
     'gui' => [
         'enabled' => env('VOX_GUI_ENABLED', true),
     ],
+    'routes' => [
+        'auto_register' => env('VOX_ROUTES_AUTO_REGISTER', true),
+        'prefix' => env('VOX_ROUTES_PREFIX', 'vox'),
+    ],
     'features' => [
         'dashboard' => true,
         'sync' => false,

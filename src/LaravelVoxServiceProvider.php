@@ -21,11 +21,8 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-vox')
             ->hasConfigFile()
-            ->hasViews();
-
-        if (config('vox.gui.enabled')) {
-            $package->hasRoute('web');
-        }
+            ->hasViews()
+            ->hasRoute('web');
     }
 
     public function packageBooted(): void
