@@ -1,5 +1,8 @@
 <?php
 
+use KeypointSolutions\LaravelVox\Http\Middleware\Authorize;
+use KeypointSolutions\LaravelVox\Http\Middleware\HandleInertiaRequests;
+
 return [
     'gui' => [
         'enabled' => env('VOX_GUI_ENABLED', true),
@@ -15,8 +18,8 @@ return [
     'system' => [
         'middleware' => [
             'web',
-            \KeypointSolutions\LaravelVox\Http\Middleware\Authorize::class,
-            \KeypointSolutions\LaravelVox\Http\Middleware\HandleInertiaRequests::class,
+            Authorize::class,
+            HandleInertiaRequests::class,
         ],
         'bypass_auth_in_local' => env('VOX_BYPASS_AUTH_IN_LOCAL', true),
     ],
@@ -76,7 +79,7 @@ return [
         'base_locale' => env('VOX_TRANSLATE_BASE_LOCALE', 'auto'),
         'openai' => [
             'api_key' => env('OPENAI_API_KEY'),
-            'model' => env('VOX_OPENAI_MODEL', 'gpt-4o-mini'),
+            'model' => env('VOX_OPENAI_MODEL', 'gpt-5.4-nano'),
             'endpoint' => env('VOX_OPENAI_ENDPOINT', 'https://api.openai.com/v1/chat/completions'),
             'temperature' => env('VOX_OPENAI_TEMPERATURE', 0.2),
         ],

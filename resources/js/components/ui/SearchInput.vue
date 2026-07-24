@@ -1,5 +1,5 @@
 <script setup lang="ts">
-    import { Search, X } from 'lucide-vue-next';
+    import { Search, X } from '@lucide/vue';
     import { computed } from 'vue';
 
     import { cn } from '@/lib/utils';

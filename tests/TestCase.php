@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Inertia\ServiceProvider;
 use KeypointSolutions\LaravelVox\LaravelVoxServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -59,23 +60,18 @@ class TestCase extends Orchestra
     protected function getPackageProviders($app)
     {
         return [
-            \Inertia\ServiceProvider::class,
+            ServiceProvider::class,
             LaravelVoxServiceProvider::class,
         ];
     }
 
     protected function defineWebRoutes($router): void
     {
-        $routesPath = __DIR__.'/../routes/web.php';
-
-        if (file_exists($routesPath)) {
-            require $routesPath;
-        }
+        require __DIR__.'/../routes/web.php';
     }
 
     public function getEnvironmentSetUp($app): void
     {
-        $app->usePublicPath(dirname(__DIR__).'/public');
         config()->set('app.key', 'base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10=');
         config()->set('database.default', 'testing');
         config()->set('database.connections.testing', [
