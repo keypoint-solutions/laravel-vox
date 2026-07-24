@@ -17,6 +17,7 @@
 
     import type { SelectOption, ToggleOption } from '@/components/ui';
     import { Badge, Button, SearchInput, Select, SlidePanel, Textarea, ToggleGroup } from '@/components/ui';
+    import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
     import { cn } from '@/lib/utils';
 
@@ -90,6 +91,7 @@
     }
 
     const page = usePage<ManagePageProps>();
+    const { formatDateTime } = useDateTime();
 
     const groups = computed(() => page.props.groups ?? []);
     const translations = computed(
@@ -124,6 +126,7 @@
     const isSaving = ref(false);
     const isTranslating = ref(false);
     const actionError = ref<string | null>(null);
+    const actionSuccess = ref<string | null>(null);
     const showOccurrences = ref(false);
     const searchDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 
@@ -420,15 +423,18 @@
         editTranslation.value = translation;
         editValues.value = buildEditValues(translation);
         actionError.value = null;
+        actionSuccess.value = null;
     }
 
     function closeEdit(): void {
         editTranslation.value = null;
         editValues.value = {};
         actionError.value = null;
+        actionSuccess.value = null;
     }
 
     function handleError(errors: Record<string, string>): void {
+        actionSuccess.value = null;
         actionError.value = Object.values(errors)[0] ?? 'Request failed.';
     }
 
@@ -460,6 +466,7 @@
         }
 
         actionError.value = null;
+        actionSuccess.value = null;
         isSaving.value = true;
 
         router.patch(
@@ -471,7 +478,9 @@
                     isSaving.value = false;
                 },
                 onError: handleError,
-                onSuccess: refreshTranslations,
+                onSuccess: (successPage) => {
+                    actionSuccess.value = (successPage.flash?.success as string | undefined) ?? 'Translations saved.';
+                },
             }
         );
     }
@@ -482,6 +491,7 @@
         }
 
         actionError.value = null;
+        actionSuccess.value = null;
         isTranslating.value = true;
         isTranslatingValues.value = true;
 
@@ -521,19 +531,6 @@
     function translateAll(): void {
         translateLocales(targetLocales.value);
     }
-
-    function formatTimestamp(value: string | null): string {
-        if (!value) {
-            return '—';
-        }
-
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
-            return value;
-        }
-
-        return date.toLocaleString();
-    }
 </script>
 
 <template>
@@ -559,7 +556,7 @@
             <div class="bg-card rounded-xl border p-4">
                 <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Last Sync</p>
                 <p class="mt-1 text-sm font-medium">
-                    {{ lastSyncAt ? formatTimestamp(lastSyncAt) : 'Not synced yet' }}
+                    {{ formatDateTime(lastSyncAt, 'Not synced yet') }}
                 </p>
             </div>
         </div>
@@ -983,9 +980,7 @@
                 <h2 class="mt-1 truncate text-lg font-semibold">{{ editTranslation?.display_key }}</h2>
                 <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
                     <Badge variant="secondary">{{ editTranslation?.group ?? 'default' }}</Badge>
-                    <span class="text-muted-foreground"
-                        >Updated {{ formatTimestamp(editTranslation?.updated_at) }}</span
-                    >
+                    <span class="text-muted-foreground">Updated {{ formatDateTime(editTranslation?.updated_at) }}</span>
                 </div>
             </div>
         </template>
@@ -993,9 +988,20 @@
         <!-- Error Alert -->
         <div
             v-if="actionError"
+            role="alert"
             class="text-destructive border-destructive/40 bg-destructive/10 mb-4 rounded-lg border p-3 text-sm"
         >
             {{ actionError }}
+        </div>
+
+        <div
+            v-if="actionSuccess"
+            role="status"
+            aria-live="polite"
+            class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-600"
+        >
+            <Check class="size-4 shrink-0" />
+            {{ actionSuccess }}
         </div>
 
         <!-- Locale Order Control -->
@@ -1086,6 +1092,7 @@
                     v-model="editValues[locale]"
                     :rows="2"
                     class="resize-none"
+                    @update:model-value="actionSuccess = null"
                 />
             </div>
         </div>
@@ -1146,7 +1153,7 @@
                     :disabled="isSaving"
                     @click="saveEdit"
                 >
-                    Save changes
+                    {{ isSaving ? 'Saving…' : 'Save changes' }}
                 </Button>
             </div>
         </template>

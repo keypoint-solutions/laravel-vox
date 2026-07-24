@@ -48,7 +48,7 @@ Full documentation lives in [docs/README.md](docs/README.md).
 
 ## Authorization
 
-Vox's GUI routes are protected by the `viewVox` gate, similar to Horizon. Define it in your application's `App\Providers\AuthServiceProvider`, in the `boot` method:
+Vox's GUI routes are protected by the `viewVox` gate, similar to Horizon. The settings page additionally requires `manageVoxSettings`. Define both in your application's `App\Providers\AuthServiceProvider`, in the `boot` method:
 
 ```php
 use App\Models\User;
@@ -58,6 +58,10 @@ Gate::define('viewVox', function (User $user): bool {
     return in_array($user->email, [
         'admin@example.com',
     ], true);
+});
+
+Gate::define('manageVoxSettings', function (User $user): bool {
+    return $user->is_admin;
 });
 ```
 

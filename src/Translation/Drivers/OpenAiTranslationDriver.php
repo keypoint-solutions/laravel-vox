@@ -2,15 +2,19 @@
 
 namespace KeypointSolutions\LaravelVox\Translation\Drivers;
 
-use Illuminate\Support\Facades\Http;
+use KeypointSolutions\LaravelVox\Support\OpenAiClient;
+use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Translation\LaravelPlaceholderProtector;
 use KeypointSolutions\LaravelVox\Translation\TranslationPromptBuilder;
+use RuntimeException;
 
 class OpenAiTranslationDriver implements TranslationDriver
 {
     public function __construct(
         private TranslationPromptBuilder $promptBuilder,
         private LaravelPlaceholderProtector $placeholderProtector,
+        private OpenAiClient $client,
+        private VoxSettingsRepository $settings,
     ) {}
 
     /**
@@ -18,12 +22,6 @@ class OpenAiTranslationDriver implements TranslationDriver
      */
     public function translate(string $text, string $sourceLocale, string $targetLocale, array $context = []): string
     {
-        $apiKey = config('vox.translate.openai.api_key');
-
-        if (! is_string($apiKey) || $apiKey === '') {
-            throw new \RuntimeException('OpenAI API key is not configured.');
-        }
-
         [$protectedText, $placeholders] = $this->placeholderProtector->protect($text);
         $systemPrompt = $this->promptBuilder->build(
             $protectedText,
@@ -36,29 +34,18 @@ class OpenAiTranslationDriver implements TranslationDriver
             $systemPrompt .= "\nLaravel placeholders are represented by __LARAVEL_PLACEHOLDER_n__ tokens. Preserve every token exactly.";
         }
 
-        $response = Http::withToken($apiKey)
-            ->post(config('vox.translate.openai.endpoint'), [
-                'model' => config('vox.translate.openai.model'),
-                'messages' => [
-                    [
-                        'role' => 'system',
-                        'content' => $systemPrompt,
-                    ],
-                    [
-                        'role' => 'user',
-                        'content' => $protectedText,
-                    ],
-                ],
-                'temperature' => (float) config('vox.translate.openai.temperature', 0.2),
-            ]);
-
-        $response->throw();
-
-        $payload = $response->json();
-        $content = $payload['choices'][0]['message']['content'] ?? null;
+        $payload = $this->client->createResponse(
+            (string) $this->settings->get(
+                'translate_model',
+                config('vox.translate.model', 'gpt-5.4-mini')
+            ),
+            $systemPrompt,
+            $protectedText,
+        );
+        $content = $this->extractOutputText($payload);
 
         if (! is_string($content) || trim($content) === '') {
-            throw new \RuntimeException('OpenAI response did not contain a translation.');
+            throw new RuntimeException('OpenAI response did not contain a translation.');
         }
 
         return $this->placeholderProtector->restoreAndValidate(
@@ -66,5 +53,41 @@ class OpenAiTranslationDriver implements TranslationDriver
             trim($content),
             $placeholders,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function extractOutputText(array $payload): ?string
+    {
+        $output = $payload['output'] ?? null;
+
+        if (! is_array($output)) {
+            return null;
+        }
+
+        foreach ($output as $item) {
+            if (! is_array($item) || ($item['type'] ?? null) !== 'message') {
+                continue;
+            }
+
+            $content = $item['content'] ?? null;
+
+            if (! is_array($content)) {
+                continue;
+            }
+
+            foreach ($content as $part) {
+                if (
+                    is_array($part)
+                    && ($part['type'] ?? null) === 'output_text'
+                    && is_string($part['text'] ?? null)
+                ) {
+                    return $part['text'];
+                }
+            }
+        }
+
+        return null;
     }
 }

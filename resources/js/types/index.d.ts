@@ -13,6 +13,7 @@ export interface AppPageProps {
             audit: string;
             settings: string;
             settings_update: string;
+            settings_ai_models_refresh: string;
         };
         sync_enabled?: boolean;
     };
@@ -24,14 +25,7 @@ export interface SelectOption {
 }
 
 export interface SettingsData {
-    translate_driver: string;
-    translate_prompt: string;
-    terms_do_not_translate: string;
-    terms_fixed: string;
-    sync_key: string;
-    openai_api_key: string;
-    openai_api_key_set: boolean;
-    openai_model: string;
-    openai_endpoint: string;
-    openai_temperature: number;
+    translate_guidance: string;
+    sync_enabled: boolean;
+    sync_key_set: boolean;
 }

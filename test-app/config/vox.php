@@ -39,6 +39,8 @@ return [
             '/app',
             '/resources/js',
             '/resources/views',
+            '/vendor/laravel/framework/src',
+            '/vendor/laravel/cashier/src',
             '/routes',
         ],
         'exclude' => [
@@ -70,8 +72,10 @@ return [
     ],
     'translate' => [
         'driver' => env('VOX_TRANSLATE_DRIVER', 'openai'),
+        'model' => env('VOX_TRANSLATE_MODEL', env('VOX_OPENAI_MODEL', 'gpt-5.4-mini')),
         'prompt' => env('VOX_TRANSLATE_PROMPT',
             'You are a professional translator for a Laravel application. Translate the following string from :source to :target. Keep placeholders, HTML or markdown tags and new lines intact. Output only the translated string.'),
+        'guidance' => env('VOX_TRANSLATE_GUIDANCE', ''),
         'use_context' => env('VOX_TRANSLATE_USE_CONTEXT', true),
         'terms' => [
             'do_not_translate' => [],
@@ -80,11 +84,10 @@ return [
         'placeholder_prefixes' => [],
         'locales' => env('VOX_TRANSLATE_LOCALES', 'auto'),
         'base_locale' => env('VOX_TRANSLATE_BASE_LOCALE', 'auto'),
-        'openai' => [
-            'api_key' => env('OPENAI_API_KEY'),
-            'model' => env('VOX_OPENAI_MODEL', 'gpt-5.4-nano'),
-            'endpoint' => env('VOX_OPENAI_ENDPOINT', 'https://api.openai.com/v1/chat/completions'),
-            'temperature' => env('VOX_OPENAI_TEMPERATURE', 0.2),
+        'providers' => [
+            'openai' => [
+                'api_key' => env('OPENAI_API_KEY'),
+            ],
         ],
     ],
     'sync' => [

@@ -4,8 +4,10 @@ namespace KeypointSolutions\LaravelVox\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
 use Inertia\Middleware;
+use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use Symfony\Component\HttpFoundation\Response;
 
 class HandleInertiaRequests extends Middleware
@@ -47,12 +49,18 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $features = config('vox.features', []);
+        $features['settings'] = ($features['settings'] ?? true) && $this->canManageSettings($request);
+
         return [
             ...parent::share($request),
             'vox' => [
-                'features' => config('vox.features', []),
+                'features' => $features,
                 'routes' => $this->routeUrls($request),
-                'sync_enabled' => config('vox.sync.enabled', true),
+                'sync_enabled' => (bool) app(VoxSettingsRepository::class)->get(
+                    'sync_enabled',
+                    config('vox.sync.enabled', true)
+                ),
             ],
         ];
     }
@@ -88,7 +96,22 @@ class HandleInertiaRequests extends Middleware
             'audit' => route($routeNamePrefix.'audit', absolute: false),
             'settings' => route($routeNamePrefix.'settings', absolute: false),
             'settings_update' => route($routeNamePrefix.'settings.update', absolute: false),
+            'settings_ai_models_refresh' => route(
+                $routeNamePrefix.'settings.ai.models.refresh',
+                absolute: false
+            ),
         ];
+    }
+
+    private function canManageSettings(Request $request): bool
+    {
+        if (config('vox.system.bypass_auth_in_local') && app()->environment('local')) {
+            return true;
+        }
+
+        $user = $request->user();
+
+        return $user !== null && Gate::forUser($user)->check('manageVoxSettings');
     }
 
     private function routeNamePrefix(Request $request): string

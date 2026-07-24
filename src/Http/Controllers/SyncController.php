@@ -4,13 +4,22 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Illuminate\Http\Request;
 use KeypointSolutions\LaravelVox\Support\VoxArchive;
+use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Support\VoxSyncKey;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class SyncController
 {
-    public function __invoke(Request $request, VoxArchive $archive, VoxSyncKey $syncKey): BinaryFileResponse
-    {
+    public function __invoke(
+        Request $request,
+        VoxArchive $archive,
+        VoxSyncKey $syncKey,
+        VoxSettingsRepository $settings,
+    ): BinaryFileResponse {
+        if (! $settings->get('sync_enabled', config('vox.sync.enabled', true))) {
+            abort(404);
+        }
+
         $configuredKey = $syncKey->get();
         $providedKey = $request->header('X-Vox-Key') ?? $request->input('key');
 

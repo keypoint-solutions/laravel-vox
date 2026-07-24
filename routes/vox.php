@@ -7,6 +7,7 @@ use KeypointSolutions\LaravelVox\Http\Controllers\ManageController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ManageTranslationController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SettingsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncController;
+use KeypointSolutions\LaravelVox\Http\Middleware\Authorize;
 
 $configMiddleware = config('vox.system.middleware', []);
 
@@ -40,6 +41,10 @@ Route::middleware($configMiddleware)
             return Inertia::render('Audit');
         })->name('audit');
 
-        Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
-        Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
+        Route::middleware(Authorize::class.':manageVoxSettings')->group(function (): void {
+            Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+            Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
+            Route::post('/settings/ai/models', [SettingsController::class, 'refreshModels'])
+                ->name('settings.ai.models.refresh');
+        });
     });

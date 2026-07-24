@@ -2,6 +2,7 @@
 
 namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -36,7 +37,7 @@ class ManageController
             'filters' => $filters,
             'statusOptions' => $this->statusOptions(),
             'sortOptions' => $this->sortOptions(),
-            'lastSyncAt' => $lastSyncAt?->toDateTimeString(),
+            'lastSyncAt' => $lastSyncAt?->toIso8601String(),
             'ai' => $this->aiStatus(),
             'totalTranslations' => $totalTranslations,
         ]);
@@ -139,7 +140,7 @@ class ManageController
         Request $request,
         array $filters,
         array $locales,
-        ?\Carbon\CarbonInterface $lastSyncAt
+        ?CarbonInterface $lastSyncAt
     ): LengthAwarePaginator {
         $perPage = (int) $request->input('per_page', 25);
         if ($perPage < 1) {
@@ -210,7 +211,7 @@ class ManageController
                     'virtual_status' => $this->virtualStatus($translation, $lastSyncAt),
                     'is_frontend' => $translation->is_frontend,
                     'source' => $translation->source,
-                    'updated_at' => $translation->updated_at?->toDateTimeString(),
+                    'updated_at' => $translation->updated_at?->toIso8601String(),
                     'values' => $values,
                     'occurrences' => $translation->occurrences->map(function ($occurrence): array {
                         return [
@@ -228,7 +229,7 @@ class ManageController
     /**
      * @param  array<int, string>  $locales
      */
-    private function applyStatusFilter(Builder $query, ?string $status, ?\Carbon\CarbonInterface $lastSyncAt, array $locales): void
+    private function applyStatusFilter(Builder $query, ?string $status, ?CarbonInterface $lastSyncAt, array $locales): void
     {
         if ($status === null) {
             return;
@@ -298,7 +299,7 @@ class ManageController
         });
     }
 
-    private function applySort(Builder $query, string $sort, ?\Carbon\CarbonInterface $lastSyncAt): void
+    private function applySort(Builder $query, string $sort, ?CarbonInterface $lastSyncAt): void
     {
         if ($sort === 'status') {
             if ($lastSyncAt === null) {
@@ -335,7 +336,7 @@ class ManageController
         return $translation->group.'.'.$translation->key;
     }
 
-    private function virtualStatus(VoxTranslation $translation, ?\Carbon\CarbonInterface $lastSyncAt): string
+    private function virtualStatus(VoxTranslation $translation, ?CarbonInterface $lastSyncAt): string
     {
         if ($lastSyncAt !== null) {
             if ($translation->created_at?->greaterThanOrEqualTo($lastSyncAt)) {
@@ -385,7 +386,7 @@ class ManageController
         $configured = true;
 
         if ($driver === 'openai') {
-            $apiKey = config('vox.translate.openai.api_key');
+            $apiKey = config('vox.translate.providers.openai.api_key');
             $configured = is_string($apiKey) && $apiKey !== '';
         }
 

@@ -4,9 +4,7 @@ namespace KeypointSolutions\LaravelVox\Support;
 
 class VoxSyncKey
 {
-    public function __construct(private VoxSettingsRepository $settings)
-    {
-    }
+    public function __construct(private VoxEnvironmentWriter $environment) {}
 
     public function get(): ?string
     {
@@ -21,6 +19,6 @@ class VoxSyncKey
 
     public function store(string $value): bool
     {
-        return $this->settings->save(['sync_key' => $value]);
+        return $this->environment->set('VOX_SYNC_KEY', $value);
     }
 }

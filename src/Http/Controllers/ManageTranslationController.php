@@ -43,7 +43,7 @@ class ManageTranslationController
 
         $translation->touch();
 
-        return redirect()->back();
+        return Inertia::flash('success', 'Translations saved.')->back();
     }
 
     /**
