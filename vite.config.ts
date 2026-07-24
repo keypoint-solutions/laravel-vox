@@ -7,8 +7,9 @@ export default defineConfig({
     plugins: [
         laravel({
             input: ['resources/js/vox.ts'],
+            publicDirectory: 'test-app/public',
             buildDirectory: 'vendor/vox',
-            hotFile: 'public/vendor/vox/hot',
+            hotFile: 'test-app/public/vendor/vox/hot',
             refresh: ['resources/css/**', 'resources/js/**', 'resources/views/**', 'routes/**', 'src/**', 'config/**'],
         }),
         tailwindcss(),

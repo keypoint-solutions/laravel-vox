@@ -1,6 +1,6 @@
 <script lang="ts" setup>
     import { Head, useForm, usePage } from '@inertiajs/vue3';
-    import { Check, Loader2 } from 'lucide-vue-next';
+    import { Check, Loader2 } from '@lucide/vue';
     import { computed, ref, watch } from 'vue';
 
     import type { SelectOption } from '@/components/ui';

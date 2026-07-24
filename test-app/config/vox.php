@@ -1,5 +1,8 @@
 <?php
 
+use KeypointSolutions\LaravelVox\Http\Middleware\Authorize;
+use KeypointSolutions\LaravelVox\Http\Middleware\HandleInertiaRequests;
+
 return [
     'gui' => [
         'enabled' => env('VOX_GUI_ENABLED', true),
@@ -15,8 +18,8 @@ return [
     'system' => [
         'middleware' => [
             'web',
-            \KeypointSolutions\LaravelVox\Http\Middleware\Authorize::class,
-            \KeypointSolutions\LaravelVox\Http\Middleware\HandleInertiaRequests::class,
+            Authorize::class,
+            HandleInertiaRequests::class,
         ],
         'bypass_auth_in_local' => env('VOX_BYPASS_AUTH_IN_LOCAL', true),
     ],
@@ -32,10 +35,7 @@ return [
             '/app',
             '/resources/js',
             '/resources/views',
-            '/vendor/laravel/framework/src',
-            '/vendor/laravel/cashier/src',
             '/routes',
-            '/src',
         ],
         'exclude' => [
             'dist/*',

@@ -1,18 +1,6 @@
 <script setup lang="ts">
     import { Link, usePage } from '@inertiajs/vue3';
-    import {
-        FileText,
-        Home,
-        Laptop,
-        Layers,
-        Menu,
-        Moon,
-        RefreshCw,
-        Settings,
-        Sun,
-        UploadCloud,
-        X,
-    } from 'lucide-vue-next';
+    import { FileText, Home, Laptop, Layers, Menu, Moon, RefreshCw, Settings, Sun, UploadCloud, X } from '@lucide/vue';
     import { computed, ref } from 'vue';
 
     import { useAppearance } from '@/composables/useAppearance';

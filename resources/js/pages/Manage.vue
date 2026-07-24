@@ -12,7 +12,7 @@
         RotateCcw,
         Server,
         Sparkles,
-    } from 'lucide-vue-next';
+    } from '@lucide/vue';
     import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
     import type { SelectOption, ToggleOption } from '@/components/ui';
@@ -502,8 +502,7 @@
                 onError: handleError,
                 onSuccess: (successPage) => {
                     const translatedValues = successPage.props.flash?.translated_values as
-                        | Record<string, string>
-                        | undefined;
+                        Record<string, string> | undefined;
                     if (translatedValues) {
                         Object.entries(translatedValues).forEach(([locale, value]) => {
                             editValues.value[locale] = value;

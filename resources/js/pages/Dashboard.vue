@@ -1,6 +1,6 @@
 <script lang="ts" setup>
     import { Head, Link, usePage } from '@inertiajs/vue3';
-    import { FileText, Globe, Languages, Layers, RefreshCw, Settings, UploadCloud } from 'lucide-vue-next';
+    import { FileText, Globe, Languages, Layers, RefreshCw, Settings, UploadCloud } from '@lucide/vue';
     import { computed } from 'vue';
 
     import Layout from '@/layouts/Layout.vue';
