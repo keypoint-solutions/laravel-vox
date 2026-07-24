@@ -53,9 +53,9 @@ class SettingsController
             if (filled($validated['openai_api_key'] ?? null)) {
                 $settings['openai_api_key'] = $validated['openai_api_key'];
             }
-            $settings['openai_model'] = $validated['openai_model'] ?? 'gpt-4o-mini';
-            $settings['openai_endpoint'] = $validated['openai_endpoint'] ?? 'https://api.openai.com/v1/chat/completions';
-            $settings['openai_temperature'] = (float) ($validated['openai_temperature'] ?? 0.2);
+            $settings['openai_model'] = $validated['openai_model'];
+            $settings['openai_endpoint'] = $validated['openai_endpoint'];
+            $settings['openai_temperature'] = (float) $validated['openai_temperature'];
         }
 
         $saved = $this->settings->save($settings);

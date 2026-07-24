@@ -165,7 +165,7 @@
                             <Input
                                 id="openai_model"
                                 v-model="form.openai_model"
-                                placeholder="gpt-4o-mini"
+                                placeholder="gpt-5.4-nano"
                             />
                         </FormField>
 

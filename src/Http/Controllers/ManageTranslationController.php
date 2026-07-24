@@ -4,6 +4,7 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
@@ -122,7 +123,7 @@ class ManageTranslationController
             return redirect()->back()->withErrors(['translate' => $exception->getMessage()]);
         }
 
-        return redirect()->back()->with('translated_values', $translatedValues);
+        return Inertia::flash('translated_values', $translatedValues)->back();
     }
 
     /**
