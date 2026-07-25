@@ -86,7 +86,7 @@ class ParseTranslationsCommand extends Command
             $this->outputAnalyzedFiles($scanner);
         }
 
-        $localeResolver = new VoxLocaleResolver;
+        $localeResolver = app(VoxLocaleResolver::class);
         $locales = $localeResolver->resolveLocales();
         $baseLocale = $localeResolver->resolveBaseLocale($locales);
 

@@ -17,7 +17,8 @@ class FrontendTranslationsController
         FrontendTranslationArtifacts $artifacts,
     ): Response {
         abort_unless(config('vox.frontend.runtime.enabled', false), 404);
-        abort_unless(in_array($locale, $localeResolver->resolveLocales(), true), 404);
+        $locale = $localeResolver->resolveLocale($locale);
+        abort_unless($locale !== null, 404);
 
         $path = $artifacts->pathForLocale($locale);
         abort_unless(File::isFile($path), 404);

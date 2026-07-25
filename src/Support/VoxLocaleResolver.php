@@ -8,6 +8,8 @@ use Illuminate\Support\Str;
 
 class VoxLocaleResolver
 {
+    public function __construct(private VoxSettingsRepository $settings) {}
+
     /**
      * @return array<int, string>
      */
@@ -16,13 +18,21 @@ class VoxLocaleResolver
         $configured = config('vox.translate.locales', 'auto');
 
         if (is_array($configured)) {
-            return $this->normalizeLocales($configured);
+            $locales = $this->normalizeLocales($configured);
+        } elseif (is_string($configured) && $configured !== 'auto') {
+            $locales = $this->normalizeLocales(array_filter(array_map('trim', explode(',', $configured))));
+        } else {
+            $locales = $this->discoverLocales();
         }
 
-        if (is_string($configured) && $configured !== 'auto') {
-            return $this->normalizeLocales(array_filter(array_map('trim', explode(',', $configured))));
-        }
+        return $this->normalizeLocales(array_merge($locales, $this->settings->provisionedLocales()));
+    }
 
+    /**
+     * @return array<int, string>
+     */
+    private function discoverLocales(): array
+    {
         $supportedLocales = config('laravellocalization.supportedLocales');
 
         if (is_array($supportedLocales)) {
@@ -56,6 +66,53 @@ class VoxLocaleResolver
         return $this->normalizeLocales([config('app.locale', 'en')]);
     }
 
+    public function normalizeLocaleCode(string $locale): string
+    {
+        $locale = trim($locale);
+
+        if (preg_match('/^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$/D', $locale) !== 1) {
+            return '';
+        }
+
+        $locale = str_replace('-', '_', $locale);
+
+        if (class_exists(\Locale::class)) {
+            $canonical = \Locale::canonicalize($locale);
+
+            if (is_string($canonical) && $canonical !== '') {
+                return $canonical;
+            }
+        }
+
+        $segments = explode('_', $locale);
+        $segments[0] = strtolower($segments[0]);
+
+        foreach (array_slice($segments, 1, null, true) as $index => $segment) {
+            $segments[$index] = strlen($segment) === 4
+                ? ucfirst(strtolower($segment))
+                : strtoupper($segment);
+        }
+
+        return implode('_', $segments);
+    }
+
+    public function resolveLocale(string $requestedLocale): ?string
+    {
+        $normalized = $this->normalizeLocaleCode($requestedLocale);
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        foreach ($this->resolveLocales() as $locale) {
+            if ($this->normalizeLocaleCode($locale) === $normalized) {
+                return $locale;
+            }
+        }
+
+        return null;
+    }
+
     public function resolveBaseLocale(array $locales): string
     {
         $configured = config('vox.translate.base_locale', 'auto');
@@ -73,6 +130,12 @@ class VoxLocaleResolver
      */
     private function normalizeLocales(array $locales): array
     {
-        return array_values(array_unique(array_filter($locales)));
+        return array_values(array_unique(array_filter(
+            array_map(
+                static fn (mixed $locale): string => is_string($locale) ? trim($locale) : '',
+                $locales
+            ),
+            static fn (string $locale): bool => $locale !== ''
+        )));
     }
 }

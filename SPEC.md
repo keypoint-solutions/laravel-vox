@@ -81,6 +81,8 @@ enhancements; neither is required for deterministic cleanup safety.
 | Frontend consumers may opt into a same-origin runtime strategy that loads the current locale from a backend endpoint.                                  | Complete |
 | Publish prepares one validated frontend JSON artifact per locale from JSON translations and frontend-approved PHP groups.                              | Complete |
 | The runtime endpoint serves only configured locales, uses cache validators, and never queries or compiles translations on each request.                | Complete |
+| The runtime route set exposes a cache-validated catalogue of defined locales and whether each runtime artifact exists.                                 | Complete |
+| Runtime JavaScript consumers can discover locales from the backend instead of duplicating the configured locale list.                                  | Complete |
 | The existing build-time `laravel-vue-i18n` bundling strategy remains supported for isolated SPAs and offline/static deployments.                       | Complete |
 | An isolated SPA may use the runtime strategy only through an explicitly configured absolute endpoint and application-owned CORS policy.                | Complete |
 
@@ -135,6 +137,19 @@ consuming application explicitly owns the endpoint URL and CORS boundary.
 | Orphans and dynamic keys are visibly identified and can be filtered or inspected in Manage.                 | Complete |
 | Users can create concrete values covered by an open dynamic pattern, with the source-locale value required. | Complete |
 
+### Locale provisioning
+
+| Contract                                                                                                                           | Status   |
+| ---------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Users can add a locale from the Sync UI using a validated locale identifier.                                                       | Complete |
+| Provisioning clones every source-locale PHP and JSON family, including namespaced vendor groups and JSON files.                    | Complete |
+| Without AI, cloned string values receive the configured missing marker so they remain visible as untranslated.                     | Complete |
+| Optional AI provisioning translates each source string through the active provider-neutral driver before files are installed.      | Complete |
+| Provisioning synchronizes the new files into Vox, returns affected translations to pending review, and records an audit event.     | Complete |
+| UI-provisioned locales supplement explicit configured locale lists through Vox settings instead of requiring config-file mutation. | Complete |
+| Runtime artifacts are refreshed after successful provisioning when runtime frontend delivery is enabled.                           | Complete |
+| Unsafe, malformed, duplicate, and partially existing locale targets are rejected without overwriting current language files.       | Complete |
+
 ### AI translation
 
 | Contract                                                                                                                                        | Status   |
@@ -157,7 +172,7 @@ consuming application explicitly owns the endpoint URL and CORS boundary.
 | Package routes can register automatically using the configured prefix.                                           | Complete |
 | Automatic route registration can be disabled.                                                                    | Complete |
 | Applications can inject the complete package route set where desired.                                            | Complete |
-| Applications can inject only the runtime frontend translation route where desired.                               | Complete |
+| Applications can inject only the runtime frontend translation and locale-catalogue routes where desired.         | Complete |
 | Settings validate constrained choices and do not expose environment-owned credentials.                           | Complete |
 | The settings UI describes provider-neutral concepts even when OpenAI is the active driver.                       | Complete |
 | Additional open dynamic patterns can be maintained in Settings while config and detected sources remain visible. | Complete |
@@ -205,6 +220,16 @@ consuming application explicitly owns the endpoint URL and CORS boundary.
 | Archive import accepts only locale PHP/JSON translation files and rejects traversal, links, extra files, and invalid shapes. | Complete |
 | Archive import changes language files only; it never starts a local database sync automatically.                             | Complete |
 
+The accepted next remote-sync architecture is a DB-to-DB reconciliation workflow:
+
+| Contract                                                                                                                       | Status  |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| Remote pull imports values as reviewable database candidates and never writes local language files.                            | Planned |
+| Local, remote, and last-seen values are retained so incoming, outgoing, reconciled, and conflicting changes can be classified. | Planned |
+| Users can accept, reject, keep, or edit remote candidates individually and in bulk before Publish.                             | Planned |
+| Only Publish writes accepted reconciled values to local language files.                                                        | Planned |
+| An optional CI/pre-deploy guard reuses reconciliation state to block unresolved production overwrites.                         | Planned |
+
 ### Audit
 
 | Contract                                                                          | Status   |
@@ -217,7 +242,8 @@ consuming application explicitly owns the endpoint URL and CORS boundary.
 The settings page is a safe editor for supported package behavior, not a free-form mirror of every environment value.
 
 - Secrets remain environment-owned and are represented only by configured/not-configured status.
-- Provider credentials, locale discovery, and the base locale remain environment/configuration owned.
+- Provider credentials and the base locale remain environment/configuration owned.
+- Locale configuration may be discovered from language files, declared in config, or supplemented by deliberate UI provisioning.
 - The settings UI edits only the active provider's supported model, translation guidance, additional dynamic-key patterns, and remote-sync enablement.
 - OpenAI model discovery may refresh the supported model list, with a maintained fallback catalog when discovery is unavailable.
 - Low-level provider endpoints are package implementation details unless a future driver has a concrete, validated need to expose one.
@@ -261,7 +287,7 @@ The required browser flows are:
 | Manage   | Search/filter, edit/save, approve/reopen, inspect tooltips, and verify the Approved tab.            |
 | Settings | Save constrained AI and dynamic-key settings, refresh provider models, and observe feedback.        |
 | Publish  | Publish an approved value, observe success, and verify the resulting language file.                 |
-| Sync     | Choose a local-sync mode, then pull the headless fixture and verify the imported translation.       |
+| Sync     | Choose a local-sync mode, provision a locale, then pull the headless fixture and verify outcomes.   |
 | Audit    | Verify the preceding actions appear with locally formatted timestamps and useful context.           |
 
 ## Current milestone
@@ -287,16 +313,18 @@ The current milestone is complete when:
 - The npm package is optional; a Composer-vendor import path is supported and exercised by the test application.
 - JSON translations are frontend-addressable; PHP group export is allow-listed by the frontend manifest.
 - Frontend delivery has two supported modes: Vite bundling and opt-in prebuilt runtime JSON served by a same-origin endpoint.
+- Runtime delivery exposes both translation artifacts and a defined-locale catalogue; consumers may still pass an explicit locale list.
 - Publish refreshes runtime JSON artifacts; runtime requests never query or compile translations.
 - Isolated SPAs keep build-time bundling unless their application explicitly owns the endpoint and CORS boundary.
 - The package keeps a small provider-neutral translation-driver abstraction instead of adding `laravel/ai` as a mandatory Composer dependency.
 - Remote-sync visual testing uses a deterministic headless fixture in the current Laravel 13 test app.
-- Remote sync treats the selected production/staging app as authoritative for matching keys while retaining newly developed local-only keys.
+- The current archive remote pull remains available, but its accepted replacement is DB-to-DB candidate reconciliation with no automatic language-file writes.
 - Publishing updates language artifacts only; application deployment remains the consuming application's responsibility.
 - Dynamic keys use one shared Parse, Sync, Manage, Settings, frontend-manifest, and Publish resolver.
 - Open patterns retain matching values; finite bindings enumerate only their array, enum, provider, or callback values.
 - Complete approved dynamic translations publish normally. Dynamic metadata is not a file-ownership or publish lock.
-- The legacy `parse.protected_keys` list is interpreted as open dynamic patterns for backward compatibility.
+- Discarded pre-release aliases are removed rather than retained; `dynamic_keys` is the sole dynamic-retention contract.
+- UI locale provisioning canonicalizes locale codes, clones all source file families, and persists the added locale without editing application config.
 - Orphan is independent metadata for DB-only rows, and orphan values never re-enter source files through Publish.
 - Translation archives are validated as a whole before import, and archive import never starts a database sync implicitly.
 - PHP translation files are data-only literal arrays; executable expressions are rejected before Publish or archive operations.
@@ -307,8 +335,8 @@ The current milestone is complete when:
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Baseline package and browser suite before this milestone | 41 tests, 246 assertions; passed                                                                          |
 | Manage and synchronization regression tests              | 16 tests, 148 assertions; passed                                                                          |
-| Package feature and unit suite                           | 98 tests, 644 assertions; passed                                                                          |
+| Package feature and unit suite                           | 101 tests, 690 assertions; passed                                                                         |
 | Consumer Vite build                                      | Passed; frontend PHP/JSON plus backend-only negative boundary verified                                    |
-| Herd-hosted Pest Browser suite                           | 11 tests, 84 assertions; passed                                                                           |
+| Herd-hosted Pest Browser suite                           | 12 tests, 91 assertions; passed                                                                           |
 | Final `composer test`                                    | Passed: package tests, package build, asset publish, consumer build, and browser suite                    |
 | Live Herd browser audit                                  | Passed: bulk AI control, save dismissal/toast, tooltips/footer, Sync, and Vue boundary; no console errors |

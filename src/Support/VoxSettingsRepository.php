@@ -15,7 +15,7 @@ class VoxSettingsRepository
         'translate_guidance',
         'translate_model',
         'dynamic_key_patterns',
-        'protected_keys',
+        'provisioned_locales',
         'sync_enabled',
     ];
 
@@ -54,12 +54,10 @@ class VoxSettingsRepository
     {
         $configured = config('vox.dynamic_keys.patterns', []);
         $bindings = config('vox.dynamic_keys.bindings', []);
-        $legacy = config('vox.parse.protected_keys', []);
 
         return $this->normalizePatterns(array_merge(
             is_array($configured) ? $configured : [$configured],
-            is_array($bindings) ? array_keys($bindings) : [],
-            is_array($legacy) ? $legacy : [$legacy]
+            is_array($bindings) ? array_keys($bindings) : []
         ));
     }
 
@@ -70,21 +68,27 @@ class VoxSettingsRepository
     {
         $patterns = $this->get('dynamic_key_patterns');
 
-        if (! is_array($patterns)) {
-            $patterns = $this->get('protected_keys', []);
-        }
-
         return $this->normalizePatterns(is_array($patterns) ? $patterns : []);
     }
 
     /**
-     * @deprecated Use dynamicKeyPatterns().
-     *
      * @return array<int, string>
      */
-    public function protectedKeys(): array
+    public function provisionedLocales(): array
     {
-        return $this->dynamicKeyPatterns();
+        $locales = $this->get('provisioned_locales', []);
+
+        if (! is_array($locales)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(
+            array_map(
+                static fn (mixed $locale): string => is_string($locale) ? trim($locale) : '',
+                $locales
+            ),
+            static fn (string $locale): bool => $locale !== ''
+        )));
     }
 
     /**

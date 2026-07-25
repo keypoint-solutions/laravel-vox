@@ -26,7 +26,6 @@ beforeEach(function (): void {
     config()->set('vox.dynamic_keys.manifest', $this->dynamicManifestPath);
     config()->set('vox.dynamic_keys.patterns', []);
     config()->set('vox.dynamic_keys.bindings', []);
-    config()->set('vox.parse.protected_keys', []);
 });
 
 afterEach(function (): void {
