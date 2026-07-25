@@ -124,7 +124,10 @@
                 </div>
 
                 <!-- Content -->
-                <div class="flex-1 overflow-y-auto p-6">
+                <div
+                    data-slot="slide-panel-content"
+                    class="flex-1 overflow-y-auto p-6"
+                >
                     <slot />
                 </div>
 

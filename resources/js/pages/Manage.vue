@@ -1379,7 +1379,10 @@
                             placeholder="Choose a pattern"
                         />
                     </div>
-                    <Tooltip text="Copy the pattern prefix">
+                    <Tooltip
+                        text="Copy the pattern prefix"
+                        align="end"
+                    >
                         <Button
                             aria-label="Copy the pattern prefix"
                             data-test="copy-dynamic-prefix"
@@ -1414,7 +1417,8 @@
             <div class="border-t pt-5">
                 <p class="text-sm font-semibold">Translation values</p>
                 <p class="text-muted-foreground mt-1 text-xs">
-                    The base locale is required. Missing target locales can be completed later or with bulk AI.
+                    The base locale is required. Create the translation first, then complete missing target locales from
+                    its editor or with bulk AI.
                 </p>
 
                 <div class="mt-4 space-y-4">
