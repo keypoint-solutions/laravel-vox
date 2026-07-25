@@ -7,6 +7,8 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 
 class VoxFrontendManifest
 {
+    public function __construct(private VoxListConfiguration $listConfiguration) {}
+
     /**
      * @param  array<string, array<string, mixed>>  $scanResults
      * @param  array<int, array{pattern?: string, prefix: string, suffix: string, is_frontend: bool}>  $dynamicKeys
@@ -135,17 +137,7 @@ class VoxFrontendManifest
      */
     private function configuredGroups(): ?array
     {
-        $configured = config('vox.frontend.groups', 'auto');
-
-        if (is_array($configured)) {
-            return $configured;
-        }
-
-        if (! is_string($configured) || $configured === '' || $configured === 'auto') {
-            return null;
-        }
-
-        return array_values(array_filter(array_map('trim', explode(',', $configured))));
+        return $this->listConfiguration->configuredValues('vox.frontend.groups');
     }
 
     /**

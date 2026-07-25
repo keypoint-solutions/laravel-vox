@@ -14,7 +14,8 @@ beforeEach(function (): void {
     $this->withoutVite();
     app()->detectEnvironment(fn () => 'local');
     config()->set('vox.system.bypass_auth_in_local', true);
-    config()->set('vox.translate.locales', ['en', 'fr']);
+    config()->set('vox.translate.locales.mode', 'configured');
+    config()->set('vox.translate.locales.values', ['en', 'fr']);
     config()->set('vox.translate.base_locale', 'en');
 });
 
@@ -55,7 +56,8 @@ function manageTranslations(TestResponse $response): Collection
 }
 
 it('returns manage data with groups, statuses, and occurrences', function (): void {
-    config()->set('vox.frontend.groups', ['frontend']);
+    config()->set('vox.frontend.groups.mode', 'configured');
+    config()->set('vox.frontend.groups.values', ['frontend']);
     seedManageTranslations();
 
     $response = $this->get('/vox/manage');

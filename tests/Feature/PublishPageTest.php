@@ -15,7 +15,8 @@ beforeEach(function (): void {
     $this->withoutMiddleware(PreventRequestForgery::class);
     app()->detectEnvironment(fn () => 'local');
     config()->set('vox.system.bypass_auth_in_local', true);
-    config()->set('vox.translate.locales', ['en', 'fr']);
+    config()->set('vox.translate.locales.mode', 'configured');
+    config()->set('vox.translate.locales.values', ['en', 'fr']);
     config()->set('vox.translate.base_locale', 'en');
     config()->set('vox.parse.missing_translation_prefix', '🚩');
 
@@ -190,7 +191,8 @@ it('refreshes runtime frontend artifacts after publishing language files', funct
     File::makeDirectory($runtimePath, 0755, true);
     config()->set('vox.frontend.runtime.enabled', true);
     config()->set('vox.frontend.runtime.path', $runtimePath);
-    config()->set('vox.frontend.groups', ['messages']);
+    config()->set('vox.frontend.groups.mode', 'configured');
+    config()->set('vox.frontend.groups.values', ['messages']);
 
     try {
         $files = app(TranslationFileRepository::class);

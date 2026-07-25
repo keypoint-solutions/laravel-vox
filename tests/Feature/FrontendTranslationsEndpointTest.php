@@ -9,7 +9,8 @@ beforeEach(function (): void {
 
     config()->set('vox.frontend.runtime.enabled', true);
     config()->set('vox.frontend.runtime.path', $this->runtimeTranslationPath);
-    config()->set('vox.translate.locales', ['en', 'fr']);
+    config()->set('vox.translate.locales.mode', 'configured');
+    config()->set('vox.translate.locales.values', ['en', 'fr']);
     File::put($this->runtimeTranslationPath.'/en.json', '{"frontend.greeting":"Hello"}');
 });
 

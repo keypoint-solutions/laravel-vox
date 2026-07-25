@@ -1,6 +1,6 @@
 <?php
 
-use Illuminate\Support\Env;
+use KeypointSolutions\LaravelVox\Support\VoxListConfiguration;
 
 it('scans Laravel and optional Cashier sources by default', function () {
     $defaultConfig = require __DIR__.'/../config/vox.php';
@@ -22,27 +22,41 @@ it('retains Laravel runtime-generated translation families by default', function
         ->and($defaultConfig['parse'])->not->toHaveKey('protected_keys');
 });
 
-it('normalizes comma separated and single env list values', function (): void {
-    $environment = Env::getRepository();
-    $frontendGroups = $environment->get('VOX_FRONTEND_GROUPS');
-    $translateLocales = $environment->get('VOX_TRANSLATE_LOCALES');
+it('keeps configurable lists declarative', function (): void {
+    $config = require __DIR__.'/../config/vox.php';
 
-    try {
-        $environment->set('VOX_FRONTEND_GROUPS', 'frontend, checkout');
-        $environment->set('VOX_TRANSLATE_LOCALES', 'fr');
+    expect($config['frontend']['groups'])->toBe([
+        'mode' => 'auto',
+        'values' => '',
+    ])->and($config['translate']['locales'])->toBe([
+        'mode' => 'auto',
+        'values' => '',
+    ]);
+});
 
-        $config = require __DIR__.'/../config/vox.php';
-    } finally {
-        $frontendGroups === null
-            ? $environment->clear('VOX_FRONTEND_GROUPS')
-            : $environment->set('VOX_FRONTEND_GROUPS', $frontendGroups);
-        $translateLocales === null
-            ? $environment->clear('VOX_TRANSLATE_LOCALES')
-            : $environment->set('VOX_TRANSLATE_LOCALES', $translateLocales);
-    }
+it('normalizes configured list arrays, single values, and comma separated strings', function (): void {
+    $configuration = app(VoxListConfiguration::class);
 
-    expect($config['frontend']['groups'])->toBe(['frontend', 'checkout'])
-        ->and($config['translate']['locales'])->toBe(['fr']);
+    config()->set('vox.frontend.groups.mode', 'configured');
+    config()->set('vox.frontend.groups.values', 'frontend, checkout, frontend');
+    config()->set('vox.translate.locales.mode', 'configured');
+    config()->set('vox.translate.locales.values', 'fr');
+
+    expect($configuration->configuredValues('vox.frontend.groups'))
+        ->toBe(['frontend', 'checkout'])
+        ->and($configuration->configuredValues('vox.translate.locales'))
+        ->toBe(['fr']);
+
+    config()->set('vox.translate.locales.values', ['en', ' fr ', '', 'en']);
+
+    expect($configuration->configuredValues('vox.translate.locales'))->toBe(['en', 'fr']);
+});
+
+it('ignores list values while automatic mode is active', function (): void {
+    config()->set('vox.frontend.groups.mode', 'auto');
+    config()->set('vox.frontend.groups.values', 'frontend,checkout');
+
+    expect(app(VoxListConfiguration::class)->configuredValues('vox.frontend.groups'))->toBeNull();
 });
 
 it('uses a brief prompt with immutable Laravel value safeguards', function (): void {

@@ -8,7 +8,8 @@ use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 beforeEach(function (): void {
     $this->frontendManifestPath = base_path('tests/.tmp/frontend-'.Str::uuid().'.json');
     config()->set('vox.frontend.manifest', $this->frontendManifestPath);
-    config()->set('vox.frontend.groups', 'auto');
+    config()->set('vox.frontend.groups.mode', 'auto');
+    config()->set('vox.frontend.groups.values', '');
 });
 
 afterEach(function (): void {
@@ -55,7 +56,8 @@ it('includes groups discovered only through dynamic frontend patterns', function
 });
 
 it('allows an explicit frontend group override', function (): void {
-    config()->set('vox.frontend.groups', ['shared', 'checkout']);
+    config()->set('vox.frontend.groups.mode', 'configured');
+    config()->set('vox.frontend.groups.values', ['shared', 'checkout']);
 
     app(VoxFrontendManifest::class)->write(['frontend']);
 

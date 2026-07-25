@@ -288,7 +288,16 @@ Composer installation contains the same importable files as regular vendor files
 
 The current locale is read from `<html lang>`. Laravel JSON translations remain available, while PHP groups are allow-listed by `storage/vox/frontend.json`. The manifest is generated from frontend occurrences found by `vox:parse` and refreshed by `vox:sync`.
 
-Applications that prefer a fixed list can use `vox({ frontendGroups: ['frontend', 'checkout'] })` or set `vox.frontend.groups` explicitly.
+Applications that prefer a fixed list can use `vox({ frontendGroups: ['frontend', 'checkout'] })` or configure:
+
+```php
+'frontend' => [
+    'groups' => [
+        'mode' => 'configured',
+        'values' => ['frontend', 'checkout'],
+    ],
+],
+```
 
 ### Runtime loading without a frontend rebuild
 
@@ -370,8 +379,8 @@ missing. With **Translate with AI now**, the active translation driver translate
 files are installed. Both paths return affected translations to pending review and record an audit event. When
 runtime frontend delivery is enabled, its per-locale artifacts are refreshed as part of the same successful action.
 
-Provisioned locales supplement `vox.translate.locales` in Vox settings, so adding a language works even when the
-application uses an explicit configured list. Applications may still add the locale to source-controlled config
+Provisioned locales supplement `vox.translate.locales.values` in Vox settings, so adding a language works even when
+the application uses an explicit configured list. Applications may still add the locale to source-controlled config
 when that is their preferred declaration.
 
 Remote sync addresses production-edited translations. On the source application, generate a shared key:
@@ -407,8 +416,19 @@ The published `config/vox.php` controls:
 - optional prebuilt runtime frontend artifacts, endpoint path, and middleware;
 - remote sync enablement, key, and endpoint middleware.
 
-`VOX_FRONTEND_GROUPS` and `VOX_TRANSLATE_LOCALES` accept `auto`, one value, or a comma-separated list such as
-`frontend,checkout` and `en,fr,ro`.
+Frontend groups and translation locales use the same explicit `mode` / `values` contract. Automatic discovery is the
+default. To replace discovery with a fixed list, select `configured` mode and provide either one value or a
+comma-separated list:
+
+```dotenv
+VOX_FRONTEND_GROUPS_MODE=configured
+VOX_FRONTEND_GROUPS=frontend,checkout
+
+VOX_TRANSLATE_LOCALES_MODE=configured
+VOX_TRANSLATE_LOCALES=en,fr,ro
+```
+
+In `config/vox.php`, each `values` entry may instead be a normal PHP array.
 
 ## Development and testing
 

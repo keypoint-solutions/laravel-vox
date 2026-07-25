@@ -8,22 +8,20 @@ use Illuminate\Support\Str;
 
 class VoxLocaleResolver
 {
-    public function __construct(private VoxSettingsRepository $settings) {}
+    public function __construct(
+        private VoxSettingsRepository $settings,
+        private VoxListConfiguration $listConfiguration,
+    ) {}
 
     /**
      * @return array<int, string>
      */
     public function resolveLocales(): array
     {
-        $configured = config('vox.translate.locales', 'auto');
-
-        if (is_array($configured)) {
-            $locales = $this->normalizeLocales($configured);
-        } elseif (is_string($configured) && $configured !== 'auto') {
-            $locales = $this->normalizeLocales(array_filter(array_map('trim', explode(',', $configured))));
-        } else {
-            $locales = $this->discoverLocales();
-        }
+        $configured = $this->listConfiguration->configuredValues('vox.translate.locales');
+        $locales = $configured === null
+            ? $this->discoverLocales()
+            : $this->normalizeLocales($configured);
 
         return $this->normalizeLocales(array_merge($locales, $this->settings->provisionedLocales()));
     }
