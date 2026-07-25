@@ -154,6 +154,7 @@ it('parses Laravel and frontend regular translation helper variants', function (
             "\$t('frontend.Template regular translation');",
             "i18n.trans('frontend.Instance regular translation');",
             "__('frontend.Nova regular translation');",
+            "trans('frontend.It\\'s an escaped frontend translation');",
             '',
         ])
     );
@@ -184,6 +185,8 @@ BLADE
     $manifest = json_decode(File::get($targetRoot.'/dynamic.json'), true, flags: JSON_THROW_ON_ERROR);
     $mailFallback = "If you're having trouble clicking the \":actionText\" button, copy and paste the URL below\n"
         .'into your web browser:';
+    $truncatedMailFallback = "If you're having trouble clicking the ".'\\';
+    $truncatedFrontendTranslation = 'It'.'\\';
 
     expect($frontend)
         ->toHaveKey('Function regular translation', 'Function regular translation')
@@ -191,6 +194,8 @@ BLADE
         ->toHaveKey('Template regular translation', 'Template regular translation')
         ->toHaveKey('Instance regular translation', 'Instance regular translation')
         ->toHaveKey('Nova regular translation', 'Nova regular translation')
+        ->toHaveKey("It's an escaped frontend translation", "It's an escaped frontend translation")
+        ->not->toHaveKey($truncatedFrontendTranslation)
         ->and($messages)
         ->toHaveKey('Helper regular translation', 'Helper regular translation')
         ->toHaveKey('Directive regular translation', 'Directive regular translation')
@@ -202,6 +207,7 @@ BLADE
         ->toHaveKey('Typed instance regular translation', 'Typed instance regular translation')
         ->and($json)
         ->toHaveKey($mailFallback, $mailFallback)
+        ->not->toHaveKey($truncatedMailFallback)
         ->and(array_column($manifest['patterns'], 'pattern'))
         ->not->toContain("If you're having trouble clicking");
 
