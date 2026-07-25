@@ -30,7 +30,8 @@ function prepareVoxFixtures(): string
         'frontend.dynamicLabels2.values.*',
     ]);
     config()->set('vox.dynamic_keys.manifest', $targetRoot.'/dynamic.json');
-    config()->set('vox.translate.locales', ['en', 'fr']);
+    config()->set('vox.translate.locales.mode', 'configured');
+    config()->set('vox.translate.locales.values', ['en', 'fr']);
     config()->set('vox.translate.base_locale', 'en');
 
     test()->fixtureRoot = $targetRoot;

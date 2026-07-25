@@ -19,7 +19,8 @@ class RuntimeOnlyRouteRegistrationTest extends TestCase
         $app['config']->set('vox.gui.enabled', false);
         $app['config']->set('vox.frontend.runtime.enabled', true);
         $app['config']->set('vox.routes.prefix', 'localized');
-        $app['config']->set('vox.translate.locales', ['en']);
+        $app['config']->set('vox.translate.locales.mode', 'configured');
+        $app['config']->set('vox.translate.locales.values', ['en']);
     }
 
     protected function setUp(): void

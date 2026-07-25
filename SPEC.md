@@ -307,7 +307,9 @@ The current milestone is complete when:
 - Workflow approval and source freshness are separate dimensions.
 - `pending` is the review state for new translations and for previously approved values changed by local or remote synchronization.
 - Frontend detection is automatic from scanned source calls; explicit frontend group configuration is an override.
-- The public Vite override is named `frontendGroups`; `VOX_FRONTEND_GROUPS` and locale env lists normalize single or comma-separated values.
+- The public Vite override is named `frontendGroups`.
+- Frontend groups and translation locales use explicit `mode: auto|configured` plus `values` settings; configured
+  values accept PHP arrays or single/comma-separated environment strings.
 - `laravel-vue-i18n` remains a dependency of the JavaScript integration.
 - Vox exposes package-owned Vite and Vue entry points so consuming apps do not copy bootstrap logic.
 - The npm package is optional; a Composer-vendor import path is supported and exercised by the test application.
@@ -335,7 +337,7 @@ The current milestone is complete when:
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Baseline package and browser suite before this milestone | 41 tests, 246 assertions; passed                                                                          |
 | Manage and synchronization regression tests              | 16 tests, 148 assertions; passed                                                                          |
-| Package feature and unit suite                           | 101 tests, 690 assertions; passed                                                                         |
+| Package feature and unit suite                           | 103 tests, 694 assertions; passed                                                                         |
 | Consumer Vite build                                      | Passed; frontend PHP/JSON plus backend-only negative boundary verified                                    |
 | Herd-hosted Pest Browser suite                           | 12 tests, 91 assertions; passed                                                                           |
 | Final `composer test`                                    | Passed: package tests, package build, asset publish, consumer build, and browser suite                    |

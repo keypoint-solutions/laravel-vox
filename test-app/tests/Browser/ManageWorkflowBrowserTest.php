@@ -6,7 +6,8 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use Tests\Support\BrowserTranslationDriver;
 
 beforeEach(function (): void {
-    config()->set('vox.translate.locales', ['en', 'fr']);
+    config()->set('vox.translate.locales.mode', 'configured');
+    config()->set('vox.translate.locales.values', ['en', 'fr']);
     config()->set('vox.translate.base_locale', 'en');
     config()->set('vox.dynamic_keys.patterns', ['browser.dynamic.*']);
 

@@ -12,9 +12,11 @@ beforeEach(function (): void {
     File::makeDirectory($this->frontendRuntimePath, 0755, true);
 
     config()->set('vox.paths.lang', $this->frontendLangPath);
-    config()->set('vox.frontend.groups', ['frontend']);
+    config()->set('vox.frontend.groups.mode', 'configured');
+    config()->set('vox.frontend.groups.values', ['frontend']);
     config()->set('vox.frontend.runtime.path', $this->frontendRuntimePath);
-    config()->set('vox.translate.locales', ['en', 'fr']);
+    config()->set('vox.translate.locales.mode', 'configured');
+    config()->set('vox.translate.locales.values', ['en', 'fr']);
 });
 
 afterEach(function (): void {

@@ -7,7 +7,8 @@ use KeypointSolutions\LaravelVox\Database\Factories\VoxTranslationFactory;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 
 beforeEach(function (): void {
-    config()->set('vox.translate.locales', ['en', 'fr']);
+    config()->set('vox.translate.locales.mode', 'configured');
+    config()->set('vox.translate.locales.values', ['en', 'fr']);
     config()->set('vox.translate.base_locale', 'en');
 
     $this->actingAs(User::factory()->create(['email' => 'admin@keypoint.ro']));

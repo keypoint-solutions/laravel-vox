@@ -3,27 +3,6 @@
 use KeypointSolutions\LaravelVox\Http\Middleware\Authorize;
 use KeypointSolutions\LaravelVox\Http\Middleware\HandleInertiaRequests;
 
-$listOrAuto = static function (mixed $value): array|string {
-    if (is_array($value)) {
-        return array_values(array_filter(
-            array_map(
-                static fn (mixed $item): string => is_string($item) ? trim($item) : '',
-                $value
-            ),
-            static fn (string $item): bool => $item !== ''
-        ));
-    }
-
-    if (! is_string($value) || trim($value) === '' || strtolower(trim($value)) === 'auto') {
-        return 'auto';
-    }
-
-    return array_values(array_filter(
-        array_map('trim', explode(',', $value)),
-        static fn (string $item): bool => $item !== ''
-    ));
-};
-
 return [
     'gui' => [
         'enabled' => env('VOX_GUI_ENABLED', true),
@@ -41,7 +20,10 @@ return [
         'settings' => true,
     ],
     'frontend' => [
-        'groups' => $listOrAuto(env('VOX_FRONTEND_GROUPS', 'auto')),
+        'groups' => [
+            'mode' => env('VOX_FRONTEND_GROUPS_MODE', 'auto'),
+            'values' => env('VOX_FRONTEND_GROUPS', ''),
+        ],
         'manifest' => storage_path('vox/frontend.json'),
         'runtime' => [
             'enabled' => env('VOX_FRONTEND_RUNTIME_ENABLED', true),
@@ -119,7 +101,10 @@ return [
             'fixed' => [],
         ],
         'placeholder_prefixes' => [],
-        'locales' => $listOrAuto(env('VOX_TRANSLATE_LOCALES', 'auto')),
+        'locales' => [
+            'mode' => env('VOX_TRANSLATE_LOCALES_MODE', 'auto'),
+            'values' => env('VOX_TRANSLATE_LOCALES', ''),
+        ],
         'base_locale' => env('VOX_TRANSLATE_BASE_LOCALE', 'auto'),
         'providers' => [
             'openai' => [
