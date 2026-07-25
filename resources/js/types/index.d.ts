@@ -15,6 +15,7 @@ export interface AppPageProps {
             sync_environment_pull: string;
             manage: string;
             manage_translation_store: string;
+            manage_translation_translate_draft: string;
             manage_translation_update: string;
             manage_translation_toggle_approval: string;
             manage_translation_bulk_approval: string;

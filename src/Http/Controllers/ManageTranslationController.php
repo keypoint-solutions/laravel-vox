@@ -126,6 +126,61 @@ class ManageTranslationController
         return Inertia::flash('success', "Dynamic translation {$fullKey} created.")->back();
     }
 
+    public function translateDraft(
+        Request $request,
+        TranslationDriverFactory $driverFactory,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'locales' => ['nullable', 'array'],
+            'locales.*' => ['string'],
+            'base_value' => ['required', 'string'],
+            'key' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if (config('vox.translate.driver', 'openai') === 'null') {
+            return redirect()->back()->withErrors(['translate' => 'AI translation is not configured.']);
+        }
+
+        [$availableLocales, $baseLocale] = $this->resolveLocales();
+        $targetLocales = $this->resolveTargetLocales(
+            $validated['locales'] ?? [],
+            $availableLocales,
+            $baseLocale
+        );
+
+        if ($targetLocales === []) {
+            return redirect()->back()->withErrors(['translate' => 'No target locales selected.']);
+        }
+
+        $baseValue = $validated['base_value'];
+
+        if (trim($baseValue) === '') {
+            return redirect()->back()->withErrors([
+                'translate' => 'Base locale value is required before translating.',
+            ]);
+        }
+
+        $key = trim((string) ($validated['key'] ?? ''));
+        $context = $key === '' ? [] : ['context' => "Laravel translation key: {$key}"];
+        $driver = $driverFactory->make();
+        $translatedValues = [];
+
+        try {
+            foreach ($targetLocales as $locale) {
+                $translatedValues[$locale] = $driver->translate(
+                    $baseValue,
+                    $baseLocale,
+                    $locale,
+                    $context
+                );
+            }
+        } catch (Throwable $exception) {
+            return redirect()->back()->withErrors(['translate' => $exception->getMessage()]);
+        }
+
+        return Inertia::flash('translated_values', $translatedValues)->back();
+    }
+
     public function update(
         Request $request,
         VoxTranslation $translation,

@@ -101,6 +101,10 @@ class HandleInertiaRequests extends Middleware
                 $routeNamePrefix.'manage.translations.store',
                 absolute: false
             ),
+            'manage_translation_translate_draft' => route(
+                $routeNamePrefix.'manage.translations.translate-draft',
+                absolute: false
+            ),
             'manage_translation_update' => route(
                 $routeNamePrefix.'manage.translations.update',
                 ['translation' => '__translation__'],

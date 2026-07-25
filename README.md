@@ -85,7 +85,23 @@ php artisan vox:parse
 php artisan vox:sync
 ```
 
-`vox:parse` discovers static Laravel, Blade, JavaScript, TypeScript, and Vue translation calls and updates language files. The default scan includes application code, Laravel framework sources, and Cashier when installed. `vox:sync` imports current language values and source metadata into the review database.
+`vox:parse` discovers static Laravel, Blade, JavaScript, TypeScript, and Vue translation calls and updates language
+files. Conventional forms include Laravel's `__()` and `trans()` helpers, `@lang`, `Lang::get()` / `Lang::string()`,
+translator instance calls, and their plural counterparts, plus Vue `trans()`, `wTrans()`, `$t()`, frontend `__()`,
+and the plural helpers. A static `Lang::array('messages.options')` or translator `array()` call is registered as the
+subtree pattern `messages.options.*`, preserving its concrete leaves without creating a string at the parent key. The
+scanner also resolves PHP or Blade keys assembled entirely from concatenated string literals as one static key. The
+default scan includes application code, Laravel framework sources, and Cashier when installed. `vox:sync` imports current
+language values and source metadata into the review database.
+
+### Scanner limitations
+
+- Dynamically constructed `Lang::array()` or translator `array()` paths cannot identify one precise subtree. Cover
+  them with an explicit dynamic pattern; static array calls are detected automatically.
+- Existence checks such as `Lang::has()` and `Lang::hasForLocale()` do not retrieve a value and are not counted as
+  translation occurrences.
+- Custom wrapper functions and translator instances stored under arbitrary variable names cannot be inferred safely.
+  Their keys should also appear in a supported call or be covered by a configured dynamic pattern or finite binding.
 
 The management UI separates workflow state from source freshness:
 
@@ -95,7 +111,11 @@ The management UI separates workflow state from source freshness:
 - database rows absent from both source code and language files are shown as `Orphan`;
 - only complete approved translations are eligible for publishing.
 
-From `/vox/manage`, translations can be edited, AI-translated individually, or selected in bulk to fill only missing target values. Bulk AI results return to pending review; selected translations can then be approved or returned to review together. Successful saves close the editor and appear in an accessible toast. `/vox/publish` writes complete approved values to PHP and JSON language files without publishing pending changes.
+From `/vox/manage`, translations can be edited, AI-translated individually, or selected in bulk to fill only missing
+target values. New dynamic values can also AI-fill their missing target locales from the required source value before
+they are created. Bulk AI results return to pending review; selected translations can then be approved or returned to
+review together. Successful saves close the editor and appear in an accessible toast. `/vox/publish` writes complete
+approved values to PHP and JSON language files without publishing pending changes.
 
 ## Dynamic translation keys
 

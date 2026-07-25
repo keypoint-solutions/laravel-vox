@@ -15,6 +15,8 @@ beforeEach(function (): void {
 });
 
 it('creates a concrete dynamic translation from an open pattern', function (): void {
+    config()->set('vox.translate.driver', BrowserTranslationDriver::class);
+
     VoxTranslationFactory::new()
         ->withValues(['en' => 'Ordinary browser value', 'fr' => 'Valeur ordinaire'])
         ->create(['group' => 'browser', 'key' => 'ordinary']);
@@ -43,7 +45,8 @@ it('creates a concrete dynamic translation from an open pattern', function (): v
 
     $page->fill('[data-test="new-dynamic-key"]', 'browser.dynamic.admin')
         ->fill('[data-test="new-dynamic-value-en"]', 'Administrator')
-        ->fill('[data-test="new-dynamic-value-fr"]', 'Administrateur')
+        ->pressAndWaitFor('AI fill missing')
+        ->assertValue('[data-test="new-dynamic-value-fr"]', 'AI fr: Administrator')
         ->click('[data-test="store-dynamic-translation"]')
         ->waitForText('Dynamic translation browser.dynamic.admin created.')
         ->assertMissing('[data-test="dynamic-create-panel"]')
@@ -60,7 +63,7 @@ it('creates a concrete dynamic translation from an open pattern', function (): v
 
     expect($translation->is_orphan)->toBeFalse()
         ->and($translation->values->pluck('value', 'locale')->all())
-        ->toBe(['en' => 'Administrator', 'fr' => 'Administrateur']);
+        ->toBe(['en' => 'Administrator', 'fr' => 'AI fr: Administrator']);
 });
 
 it('filters and individually approves a translation with visible feedback', function (): void {

@@ -7,9 +7,13 @@ use Illuminate\Support\Str;
 
 class TranslationScanner
 {
-    private const BACKEND_TRANSLATION_CALL_PATTERN = '__|trans_choice|@choice|(?:Lang|Translator)::choice|app\(\s*[\'"]translator[\'"]\s*\)->choice';
+    private const BACKEND_TRANSLATION_CALL_PATTERN = 'trans_choice|trans\(\s*\)->(?:choice|get|string)|trans|__|@choice|@lang|(?:Lang|Translator)::(?:choice|get|string)|app\(\s*[\'"]translator[\'"]\s*\)->(?:choice|get|string)';
 
-    private const FRONTEND_TRANSLATION_CALL_PATTERN = '\$tChoice|\$wtChoice|transChoice|trans_choice|wTransChoice|\$t|\$wt|trans|wTrans';
+    private const BACKEND_ARRAY_TRANSLATION_CALL_PATTERN = 'trans\(\s*\)->array|(?:Lang|Translator)::array|app\(\s*[\'"]translator[\'"]\s*\)->array';
+
+    private const FRONTEND_TRANSLATION_CALL_PATTERN = '\$tChoice|\$wtChoice|transChoice|trans_choice|wTransChoice|\$t|\$wt|trans|wTrans|__';
+
+    private const PHP_STRING_LITERAL_PATTERN = '(?:\'(?:\\\\.|[^\'\\\\])*\'|"(?:\\\\.|[^"\\\\])*")';
 
     /**
      * @var array<string, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>
@@ -216,11 +220,14 @@ class TranslationScanner
     private function matchKeys(string $content, string $extension): array
     {
         $patterns = [];
+        $matches = [];
 
         if (in_array($extension, ['php', 'blade.php'], true)) {
+            $matches = $this->matchConcatenatedBackendKeys($content);
             $patterns[] = [
                 'pattern' => '/(?<!\w)('.self::BACKEND_TRANSLATION_CALL_PATTERN.')\(\s*([\"\'])\s*(.*?)\s*\2/s',
                 'is_frontend' => false,
+                'php_literal' => true,
             ];
         }
 
@@ -235,8 +242,6 @@ class TranslationScanner
             ];
         }
 
-        $matches = [];
-
         foreach ($patterns as $pattern) {
             if (preg_match_all($pattern['pattern'], $content, $results, PREG_OFFSET_CAPTURE) === false) {
                 continue;
@@ -245,6 +250,12 @@ class TranslationScanner
             foreach ($results[3] as $index => $capture) {
                 $rawKey = $capture[0];
                 $key = trim($rawKey);
+                $quote = $results[2][$index][0] ?? null;
+
+                if (($pattern['php_literal'] ?? false) && is_string($quote)) {
+                    $key = $this->decodePhpStringLiteral($key, $quote);
+                }
+
                 $source = $results[1][$index][0] ?? null;
                 $source = is_string($source) ? $source : null;
                 $fullMatch = $results[0][$index][0] ?? null;
@@ -275,6 +286,98 @@ class TranslationScanner
         return $matches;
     }
 
+    /**
+     * @return array<int, array{key: string, offset: int, length: int, source: string, is_frontend: bool}>
+     */
+    private function matchConcatenatedBackendKeys(string $content): array
+    {
+        $literal = self::PHP_STRING_LITERAL_PATTERN;
+        $pattern = '/(?<!\w)('.self::BACKEND_TRANSLATION_CALL_PATTERN.')\(\s*'
+            .'(?<argument>'.$literal.'(?:\s*\.\s*'.$literal.')+)'
+            .'(?=\s*[,)]\s*)/s';
+
+        if (preg_match_all($pattern, $content, $results, PREG_SET_ORDER | PREG_OFFSET_CAPTURE) === false) {
+            return [];
+        }
+
+        $matches = [];
+
+        foreach ($results as $result) {
+            $argument = $result['argument'][0] ?? null;
+            $offset = $result['argument'][1] ?? null;
+            $source = $result[1][0] ?? null;
+
+            if (! is_string($argument) || ! is_int($offset) || ! is_string($source)) {
+                continue;
+            }
+
+            $key = $this->concatenatePhpStringLiterals($argument);
+
+            if ($key === '') {
+                continue;
+            }
+
+            $matches[] = [
+                'key' => $key,
+                'offset' => $offset,
+                'length' => strlen($argument),
+                'source' => $source,
+                'is_frontend' => false,
+            ];
+        }
+
+        return $matches;
+    }
+
+    private function concatenatePhpStringLiterals(string $argument): string
+    {
+        if (preg_match_all(
+            '/([\'"])(?<value>(?:\\\\.|(?!\1).)*)\1/s',
+            $argument,
+            $literals,
+            PREG_SET_ORDER
+        ) === false) {
+            return '';
+        }
+
+        $key = '';
+
+        foreach ($literals as $literal) {
+            $quote = $literal[1] ?? null;
+            $value = $literal['value'] ?? null;
+
+            if (! is_string($quote) || ! is_string($value)) {
+                continue;
+            }
+
+            $key .= $this->decodePhpStringLiteral($value, $quote);
+        }
+
+        return $key;
+    }
+
+    private function decodePhpStringLiteral(string $value, string $quote): string
+    {
+        if ($quote === "'") {
+            return strtr($value, [
+                "\\'" => "'",
+                '\\\\' => '\\',
+            ]);
+        }
+
+        return strtr($value, [
+            '\\\\' => '\\',
+            '\\"' => '"',
+            '\\$' => '$',
+            '\n' => "\n",
+            '\r' => "\r",
+            '\t' => "\t",
+            '\v' => "\v",
+            '\e' => "\e",
+            '\f' => "\f",
+        ]);
+    }
+
     private function hasDynamicContinuation(string $content, int $offset, int $length): bool
     {
         $tail = substr($content, $offset + $length);
@@ -294,6 +397,11 @@ class TranslationScanner
         $patterns = [];
 
         if (in_array($extension, ['php', 'blade.php'], true)) {
+            $patterns[] = [
+                'pattern' => '/(?<!\w)('.self::BACKEND_ARRAY_TRANSLATION_CALL_PATTERN.')\(\s*([\'"])(?<prefix>(?:\\\\.|(?!\2).)*)\2(?=\s*[,)]\s*)/s',
+                'is_frontend' => false,
+                'subtree' => true,
+            ];
             $patterns[] = [
                 'pattern' => '/(?<!\w)('.self::BACKEND_TRANSLATION_CALL_PATTERN.')\(\s*([\'"])(?<prefix>(?:\\\\.|(?!\2).)*)\2\s*\.\s*[^)]*?(?:\.\s*([\'"])(?<suffix>(?:\\\\.|(?!\4).)*)\4)?\s*\)/s',
                 'is_frontend' => false,
@@ -331,6 +439,18 @@ class TranslationScanner
                     continue;
                 }
 
+                if (
+                    ! $pattern['is_frontend']
+                    && is_string($matchText)
+                    && $this->hasOnlyStaticPhpLiteralFirstArgument($matchText)
+                ) {
+                    continue;
+                }
+
+                if ($pattern['subtree'] ?? false) {
+                    $prefix = rtrim($prefix, '.').'.';
+                }
+
                 $matches[] = [
                     'prefix' => $prefix,
                     'suffix' => $suffix,
@@ -343,6 +463,28 @@ class TranslationScanner
         }
 
         return $matches;
+    }
+
+    private function hasOnlyStaticPhpLiteralFirstArgument(string $call): bool
+    {
+        $openingParenthesis = strpos($call, '(');
+
+        if ($openingParenthesis === false) {
+            return false;
+        }
+
+        $argument = substr($call, $openingParenthesis + 1);
+
+        if ($argument === false) {
+            return false;
+        }
+
+        $literal = self::PHP_STRING_LITERAL_PATTERN;
+
+        return preg_match(
+            '/^\s*'.$literal.'(?:\s*\.\s*'.$literal.')+\s*(?:,|\))/s',
+            $argument
+        ) === 1;
     }
 
     /**

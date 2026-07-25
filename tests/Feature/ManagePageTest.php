@@ -9,6 +9,7 @@ use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Tests\Support\LocaleProvisionTranslationDriver;
 
 beforeEach(function (): void {
     $this->withoutVite();
@@ -434,6 +435,23 @@ it('protects Laravel placeholders when translating from the management UI', func
 
     Http::assertSent(fn (Request $request): bool => $request['input']
         === 'Hello __LARAVEL_PLACEHOLDER_0__.');
+});
+
+it('AI translates draft dynamic values before creating the translation', function (): void {
+    $this->withoutMiddleware(PreventRequestForgery::class);
+
+    config()->set('vox.translate.driver', LocaleProvisionTranslationDriver::class);
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/translate-draft', [
+            'locales' => ['fr'],
+            'base_value' => 'Administrator',
+            'key' => 'enums.user_roles.admin',
+        ])
+        ->assertRedirect('/vox/manage')
+        ->assertInertiaFlash('translated_values.fr', 'fr: Administrator');
+
+    expect(VoxTranslation::query()->count())->toBe(0);
 });
 
 it('returns a success flash after saving translation values', function (): void {
