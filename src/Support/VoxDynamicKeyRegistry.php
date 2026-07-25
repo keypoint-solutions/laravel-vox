@@ -313,10 +313,6 @@ class VoxDynamicKeyRegistry
             return '';
         }
 
-        if (str_ends_with($pattern, '.')) {
-            return $pattern.'*';
-        }
-
         return $pattern;
     }
 

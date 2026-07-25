@@ -46,9 +46,15 @@ class RuntimeOnlyRouteRegistrationTest extends TestCase
             ->assertOk()
             ->assertExactJson(['message' => 'Hello']);
 
+        $this->get('/localized/locales')
+            ->assertOk()
+            ->assertJsonPath('default_locale', 'en')
+            ->assertJsonPath('locales.0.code', 'en');
+
         $this->get('/localized')->assertNotFound();
 
         $this->assertTrue(Route::has('vox.translations.show'));
+        $this->assertTrue(Route::has('vox.locales.index'));
         $this->assertFalse(Route::has('vox.dashboard'));
     }
 }

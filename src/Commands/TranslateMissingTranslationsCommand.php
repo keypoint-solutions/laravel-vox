@@ -27,7 +27,7 @@ class TranslateMissingTranslationsCommand extends Command
 
     public function handle(): int
     {
-        $localeResolver = new VoxLocaleResolver;
+        $localeResolver = app(VoxLocaleResolver::class);
         $locales = $localeResolver->resolveLocales();
         $baseLocale = $localeResolver->resolveBaseLocale($locales);
 

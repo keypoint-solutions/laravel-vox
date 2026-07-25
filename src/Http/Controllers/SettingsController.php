@@ -31,15 +31,15 @@ class SettingsController
     public function update(Request $request): RedirectResponse
     {
         $section = $request->validate([
-            'section' => ['required', 'string', Rule::in(['ai', 'dynamic_keys', 'protection', 'sync'])],
+            'section' => ['required', 'string', Rule::in(['ai', 'dynamic_keys', 'sync'])],
         ])['section'];
 
         if ($section === 'ai') {
             return $this->updateAiSettings($request);
         }
 
-        if (in_array($section, ['dynamic_keys', 'protection'], true)) {
-            return $this->updateDynamicKeySettings($request, $section === 'protection');
+        if ($section === 'dynamic_keys') {
+            return $this->updateDynamicKeySettings($request);
         }
 
         return $this->updateSyncSettings($request);
@@ -98,14 +98,13 @@ class SettingsController
         return Inertia::flash('success', 'Remote sync settings saved.')->back();
     }
 
-    private function updateDynamicKeySettings(Request $request, bool $legacyRequest): RedirectResponse
+    private function updateDynamicKeySettings(Request $request): RedirectResponse
     {
-        $field = $legacyRequest ? 'protected_keys' : 'dynamic_key_patterns';
         $validated = $request->validate([
-            $field => ['nullable', 'string', 'max:10000'],
+            'dynamic_key_patterns' => ['nullable', 'string', 'max:10000'],
         ]);
 
-        $patterns = collect(preg_split('/\R/', $validated[$field] ?? '') ?: [])
+        $patterns = collect(preg_split('/\R/', $validated['dynamic_key_patterns'] ?? '') ?: [])
             ->map(fn (string $pattern): string => VoxDynamicKeyRegistry::normalizePattern($pattern))
             ->filter()
             ->unique()
@@ -115,7 +114,7 @@ class SettingsController
             fn (string $pattern): bool => mb_strlen($pattern) > 255
         )) {
             return redirect()->back()->withErrors([
-                $field => 'Use at most 100 dynamic key patterns, with no entry longer than 255 characters.',
+                'dynamic_key_patterns' => 'Use at most 100 dynamic key patterns, with no entry longer than 255 characters.',
             ]);
         }
 

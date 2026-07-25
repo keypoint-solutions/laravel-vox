@@ -5,6 +5,7 @@
         Download,
         FileArchive,
         KeyRound,
+        Languages,
         Pencil,
         Plus,
         RefreshCw,
@@ -34,6 +35,17 @@
     interface SyncPageProps {
         environments: EnvironmentItem[];
         lastSyncAt: string | null;
+        locales: {
+            code: string;
+            name: string;
+            is_default: boolean;
+            has_runtime_translations: boolean;
+        }[];
+        baseLocale: string;
+        ai: {
+            available: boolean;
+            driver: string;
+        };
     }
 
     const page = usePage<SyncPageProps>();
@@ -56,6 +68,10 @@
     });
     const archiveForm = useForm<{ archive: File | null }>({
         archive: null,
+    });
+    const localeForm = useForm({
+        locale: '',
+        auto_translate: false,
     });
 
     function environmentRoute(template: string | undefined, id: number): string {
@@ -148,6 +164,22 @@
                 },
             }
         );
+    }
+
+    function provisionLocale(): void {
+        success.value = null;
+        actionError.value = null;
+
+        localeForm.post(routes.value?.sync_locale_store ?? '', {
+            preserveScroll: true,
+            onError: (errors) => {
+                actionError.value = Object.values(errors)[0] ?? 'Language provisioning failed.';
+            },
+            onSuccess: (responsePage) => {
+                success.value = (responsePage.flash?.success as string | undefined) ?? 'Language added.';
+                localeForm.reset();
+            },
+        });
     }
 
     function selectArchive(event: Event): void {
@@ -270,6 +302,91 @@
             >
                 {{ isSyncingLocal ? 'Synchronizing…' : 'Sync local files' }}
             </Button>
+        </section>
+
+        <section class="bg-card rounded-xl border">
+            <div class="flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex items-start gap-3">
+                    <div class="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+                        <Languages class="size-4" />
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-semibold">Application languages</h2>
+                        <p class="text-muted-foreground mt-1 max-w-2xl text-xs">
+                            Create a new locale from {{ page.props.baseLocale }} source files, then import it into Vox
+                            for review.
+                        </p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                    <Badge
+                        v-for="locale in page.props.locales"
+                        :key="locale.code"
+                        :variant="locale.is_default ? 'default' : 'secondary'"
+                    >
+                        {{ locale.name }} · {{ locale.code }}
+                    </Badge>
+                </div>
+            </div>
+
+            <form
+                class="grid gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] sm:items-end"
+                @submit.prevent="provisionLocale"
+            >
+                <div class="space-y-1.5">
+                    <Label for="new-locale">New locale code</Label>
+                    <Input
+                        id="new-locale"
+                        v-model="localeForm.locale"
+                        autocomplete="off"
+                        data-test="sync-locale-code"
+                        placeholder="de or pt_BR"
+                    />
+                    <p
+                        v-if="localeForm.errors.locale"
+                        class="text-destructive text-xs"
+                    >
+                        {{ localeForm.errors.locale }}
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="flex items-start gap-2 text-sm">
+                        <input
+                            v-model="localeForm.auto_translate"
+                            class="border-input text-primary focus:ring-ring mt-0.5 size-4 rounded"
+                            data-test="sync-locale-auto-translate"
+                            :disabled="!page.props.ai.available"
+                            type="checkbox"
+                        />
+                        <span>
+                            <span class="font-medium">Translate with AI now</span>
+                            <span class="text-muted-foreground mt-0.5 block text-xs">
+                                {{
+                                    page.props.ai.available
+                                        ? 'This may take several minutes. Generated values remain pending review.'
+                                        : 'Configure an AI translation driver and credentials to enable this option.'
+                                }}
+                            </span>
+                        </span>
+                    </label>
+                    <p
+                        v-if="localeForm.errors.auto_translate"
+                        class="text-destructive text-xs"
+                    >
+                        {{ localeForm.errors.auto_translate }}
+                    </p>
+                </div>
+
+                <Button
+                    data-test="sync-locale-submit"
+                    :disabled="localeForm.processing || localeForm.locale.trim() === ''"
+                    type="submit"
+                >
+                    <Plus class="size-4" />
+                    {{ localeForm.processing ? 'Adding…' : 'Add language' }}
+                </Button>
+            </form>
         </section>
 
         <section class="bg-card overflow-hidden rounded-xl border">

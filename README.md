@@ -68,8 +68,8 @@ Route::middleware('auth')
 
 Surrounding middleware, domains, prefixes, and route-name prefixes are inherited. `LaravelVox::routes('admin/translations')` may also receive a prefix directly.
 
-`LaravelVox::routes()` includes the optional frontend translation endpoint. Applications that disable the GUI and
-only need runtime frontend translations can mount that route alone:
+`LaravelVox::routes()` includes the optional frontend translation and locale-catalogue endpoints. Applications that
+disable the GUI and only need runtime frontend translations can mount that route set alone:
 
 ```php
 LaravelVox::translationRoutes('translations');
@@ -170,8 +170,8 @@ Callbacks should be deterministic and side-effect free. They are registered at r
 
 Dynamic values stay active during cleanup and synchronization. Once complete and approved, they publish normally;
 being dynamic is not a reason to preserve an older file value. Patterns discovered in frontend code also include
-their PHP group in the frontend manifest. The legacy `vox.parse.protected_keys` option is still read as an open
-pattern list for compatibility, but new applications should use `vox.dynamic_keys`.
+their PHP group in the frontend manifest. `vox.dynamic_keys` is the only configuration contract for open patterns
+and finite bindings.
 
 Automatic discovery deliberately covers statically understandable templates and concatenation. Arbitrary runtime
 expressions cannot be enumerated reliably; use an explicit pattern or binding for those. General AST/data-flow
@@ -299,27 +299,46 @@ them with Vite. Enable the endpoint:
 VOX_FRONTEND_RUNTIME_ENABLED=true
 ```
 
-Use the runtime Vue entry point and provide the application locales:
+Use the runtime Vue entry point. The package exposes `/vox/locales`, so the application does not need to duplicate
+its configured locale list:
 
 ```ts
-import { createVoxI18n } from '@keypoint-solutions/laravel-vox/vue/runtime';
+import { createVoxI18n, fetchVoxLocales } from '@keypoint-solutions/laravel-vox/vue/runtime';
 
-createApp(App)
-    .use(createVoxI18n({ locales: ['en', 'fr', 'ro'] }))
-    .mount('#app');
+async function bootstrap() {
+    const catalog = await fetchVoxLocales();
+
+    createApp(App)
+        .use(
+            createVoxI18n({
+                fallbackLocale: catalog.default_locale,
+                locales: catalog.locales.map((locale) => locale.code),
+            })
+        )
+        .mount('#app');
+}
+
+void bootstrap();
 ```
 
 Composer-vendor consumers import `@laravel-vox/runtime.js` from the same alias shown above. No Vox Vite plugin is
 needed for this mode. Publish prepares validated JSON at `storage/vox/frontend-translations`; requests to
 `/vox/translations/{locale}` only read those artifacts and support ETag revalidation. JSON translations and the PHP
-groups in the frontend manifest are included, while backend-only PHP groups remain private.
+groups in the frontend manifest are included, while backend-only PHP groups remain private. The locale catalogue
+also reports `has_runtime_translations`, allowing a picker to distinguish defined locales whose artifacts have not
+yet been prepared.
 
-If package routes use a custom prefix, pass the matching endpoint template:
+If package routes use a custom prefix, pass both matching endpoints:
 
 ```ts
+const catalog = await fetchVoxLocales({
+    endpoint: '/admin/translations/locales',
+});
+
 createVoxI18n({
-    locales: ['en', 'fr'],
+    locales: catalog.locales.map((locale) => locale.code),
     endpoint: '/admin/translations/translations/{locale}',
+    localesEndpoint: '/admin/translations/locales',
 });
 ```
 
@@ -340,7 +359,29 @@ with the same scan. In `/vox/sync`, choosing local sync asks whether to perform 
 files as they are. Both paths refresh source occurrences and frontend metadata. Rows found in neither source nor
 language files are retained as Orphans for deliberate review instead of silently disappearing.
 
+### Adding a language
+
+The **Application languages** section in `/vox/sync` provisions a locale from the configured base locale. It copies
+all PHP and JSON translation families, including vendor namespaces, and then synchronizes the new files into Vox.
+Locale identifiers such as `de-DE` are canonicalized to Laravel-friendly forms such as `de_DE`.
+
+Without AI, source strings are copied with `VOX_MISSING_TRANSLATION_PREFIX`, keeping them visible in Manage as
+missing. With **Translate with AI now**, the active translation driver translates the source strings before the
+files are installed. Both paths return affected translations to pending review and record an audit event. When
+runtime frontend delivery is enabled, its per-locale artifacts are refreshed as part of the same successful action.
+
+Provisioned locales supplement `vox.translate.locales` in Vox settings, so adding a language works even when the
+application uses an explicit configured list. Applications may still add the locale to source-controlled config
+when that is their preferred declaration.
+
 Remote sync addresses production-edited translations. On the source application, generate a shared key:
+
+```bash
+php artisan vox:generate-sync-key
+```
+
+Configure that application URL and key under **Configured environments** in `/vox/sync`, then pull the language
+archive into the local files and review database.
 
 Remote archives reject absolute paths, traversal entries, and symbolic links. Secrets are never returned to the settings or environment UI.
 

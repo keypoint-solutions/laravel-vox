@@ -8,7 +8,9 @@ use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
+use KeypointSolutions\LaravelVox\Models\VoxSetting;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Tests\Support\LocaleProvisionTranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
 
@@ -87,6 +89,99 @@ it('can update language files from the source scan before local sync', function 
             ->where('group', 'source_demo')
             ->where('key', 'message')
             ->exists())->toBeTrue();
+});
+
+it('provisions a new locale from every source-locale translation family', function (): void {
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('en', 'messages', [
+        'greeting' => 'Hello :name',
+        'nested' => ['action' => 'Continue'],
+    ]);
+    $files->saveJson('en', ['Welcome' => 'Welcome']);
+    $files->saveGroup('en', 'cashier::messages', ['receipt' => 'Receipt']);
+    $files->saveJson('en', ['Checkout' => 'Checkout'], 'cashier');
+
+    $this->from('/vox/sync')
+        ->post('/vox/sync/locales', [
+            'locale' => 'de-DE',
+            'auto_translate' => false,
+        ])
+        ->assertRedirect('/vox/sync')
+        ->assertInertiaFlash(
+            'success',
+            'Added German (Germany) (de_DE) with 5 values marked for translation.'
+        );
+
+    expect($files->loadGroup('de_DE', 'messages'))
+        ->toBe([
+            'greeting' => '🚩Hello :name',
+            'nested' => ['action' => '🚩Continue'],
+        ])
+        ->and($files->loadJson('de_DE'))->toBe(['Welcome' => '🚩Welcome'])
+        ->and($files->loadGroup('de_DE', 'cashier::messages'))->toBe(['receipt' => '🚩Receipt'])
+        ->and($files->loadJson('de_DE', 'cashier'))->toBe(['Checkout' => '🚩Checkout'])
+        ->and(json_decode(VoxSetting::query()->findOrFail('provisioned_locales')->value, true))
+        ->toBe(['de_DE'])
+        ->and(VoxTranslation::query()
+            ->where('group', 'messages')
+            ->where('key', 'greeting')
+            ->firstOrFail()
+            ->values
+            ->firstWhere('locale', 'de_DE')?->value)
+        ->toBe('🚩Hello :name')
+        ->and(VoxAudit::query()->where('action', 'locale-provisioned')->exists())
+        ->toBeTrue();
+});
+
+it('can AI translate a newly provisioned locale before synchronizing it', function (): void {
+    config()->set('vox.translate.driver', LocaleProvisionTranslationDriver::class);
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('en', 'messages', ['greeting' => 'Hello :name']);
+    $files->saveJson('en', ['Welcome' => 'Welcome']);
+
+    $this->from('/vox/sync')
+        ->post('/vox/sync/locales', [
+            'locale' => 'ro',
+            'auto_translate' => true,
+        ])
+        ->assertRedirect('/vox/sync')
+        ->assertInertiaFlash(
+            'success',
+            'Added Romanian (ro) and AI translated 2 values. Review them in Manage before approval.'
+        );
+
+    expect($files->loadGroup('ro', 'messages'))
+        ->toBe(['greeting' => 'ro: Hello :name'])
+        ->and($files->loadJson('ro'))->toBe(['Welcome' => 'ro: Welcome'])
+        ->and(VoxTranslation::query()
+            ->where('group', 'messages')
+            ->where('key', 'greeting')
+            ->firstOrFail()
+            ->status)
+        ->toBe('pending');
+});
+
+it('rejects unsafe and already defined locale codes without changing files', function (): void {
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('en', 'messages', ['greeting' => 'Hello']);
+
+    $this->from('/vox/sync')
+        ->post('/vox/sync/locales', [
+            'locale' => '../de',
+            'auto_translate' => false,
+        ])
+        ->assertRedirect('/vox/sync')
+        ->assertSessionHasErrors('locale');
+
+    $this->from('/vox/sync')
+        ->post('/vox/sync/locales', [
+            'locale' => 'fr',
+            'auto_translate' => false,
+        ])
+        ->assertRedirect('/vox/sync')
+        ->assertSessionHasErrors('locale');
+
+    expect(File::exists($this->syncLangPath.'/de'))->toBeFalse();
 });
 
 it('manages remote environments without exposing saved secrets', function (): void {

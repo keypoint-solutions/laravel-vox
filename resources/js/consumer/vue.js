@@ -4,7 +4,7 @@ import { availableVoxLocales, loadVoxLocale } from 'virtual:laravel-vox/translat
 export { trans, trans_choice, transChoice, wTrans, wTransChoice } from 'laravel-vue-i18n';
 
 function normalizeLocale(locale) {
-    return locale.trim().replace('-', '_');
+    return locale.trim().replaceAll('-', '_');
 }
 
 function resolveLocale(requestedLocale, fallbackLocale) {

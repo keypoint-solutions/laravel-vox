@@ -380,7 +380,7 @@
                 <FormField
                     id="dynamic_key_patterns"
                     :error="dynamicKeysForm.errors.dynamic_key_patterns"
-                    description="Enter one wildcard pattern per line. * matches any remaining characters, including dots. A legacy trailing dot is converted to *, so messages.legal. becomes messages.legal.*."
+                    description="Enter one wildcard pattern per line. * matches any remaining characters, including dots."
                     label="Additional application patterns"
                 >
                     <Textarea

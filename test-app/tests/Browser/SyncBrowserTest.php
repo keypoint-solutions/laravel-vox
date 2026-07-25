@@ -14,11 +14,15 @@ beforeEach(function (): void {
 });
 
 afterEach(function (): void {
+    File::deleteDirectory(lang_path('de'));
+    File::deleteDirectory(lang_path('vendor/otp/de'));
     File::delete(
+        lang_path('de.json'),
         lang_path('en/vox_browser_sync.php'),
         lang_path('fr/vox_browser_sync.php'),
         lang_path('en/vox_browser_import.php'),
         lang_path('fr/vox_browser_import.php'),
+        storage_path('vox/frontend-translations/de.json'),
         storage_path('framework/testing/vox-browser-remote.zip'),
         storage_path('framework/testing/vox-browser-import.zip'),
     );
@@ -35,6 +39,21 @@ it('asks whether to update language files before local sync', function (): void 
         ->assertSee('Download publishable files')
         ->assertSee('Import language files')
         ->assertNoJavaScriptErrors();
+});
+
+it('provisions a new application language from the source locale', function (): void {
+    visit('/vox/sync')
+        ->assertSee('Application languages')
+        ->assertSee('English · en')
+        ->fill('[data-test="sync-locale-code"]', 'de')
+        ->pressAndWaitFor('Add language')
+        ->assertSee('Added German (de)')
+        ->assertSee('German · de')
+        ->assertNoJavaScriptErrors();
+
+    expect(File::isFile(lang_path('de/frontend.php')))->toBeTrue()
+        ->and((require lang_path('de/frontend.php'))['Regular translation'])
+        ->toStartWith('🚩');
 });
 
 it('selects a translation archive and enables the import action', function (): void {

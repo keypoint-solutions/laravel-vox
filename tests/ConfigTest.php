@@ -18,7 +18,8 @@ it('retains Laravel runtime-generated translation families by default', function
         'pagination.*',
         'passwords.*',
         'validation.*',
-    ])->and($defaultConfig['dynamic_keys']['bindings'])->toBe([]);
+    ])->and($defaultConfig['dynamic_keys']['bindings'])->toBe([])
+        ->and($defaultConfig['parse'])->not->toHaveKey('protected_keys');
 });
 
 it('normalizes comma separated and single env list values', function (): void {

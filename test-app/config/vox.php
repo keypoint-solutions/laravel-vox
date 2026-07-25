@@ -106,7 +106,6 @@ return [
         'sort_obsolete_last' => true,
         'escape_unicode' => false,
         'missing_translation_prefix' => env('VOX_MISSING_TRANSLATION_PREFIX', '🚩'),
-        'protected_keys' => [],
     ],
     'translate' => [
         'driver' => env('VOX_TRANSLATE_DRIVER', 'openai'),

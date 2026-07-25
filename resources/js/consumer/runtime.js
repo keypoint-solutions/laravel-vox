@@ -5,16 +5,63 @@ export { trans, trans_choice, transChoice, wTrans, wTransChoice } from 'laravel-
 export const availableVoxLocales = [];
 
 let runtimeEndpoint = '/vox/translations/{locale}';
+let runtimeLocalesEndpoint = '/vox/locales';
 let runtimeFetcher = globalThis.fetch.bind(globalThis);
 
 function normalizeLocale(locale) {
-    return locale.trim().replace('-', '_');
+    return locale.trim().replaceAll('-', '_');
 }
 
 function configureLocales(locales) {
     const normalizedLocales = [...new Set(locales.map(normalizeLocale).filter(Boolean))];
 
     availableVoxLocales.splice(0, availableVoxLocales.length, ...normalizedLocales);
+}
+
+/**
+ * Fetch the application's locale catalogue from Laravel Vox.
+ *
+ * @param {{ endpoint?: string, fetcher?: typeof fetch }} options
+ * @returns {Promise<{
+ *   default_locale: string,
+ *   locales: Array<{
+ *     code: string,
+ *     name: string,
+ *     is_default: boolean,
+ *     has_runtime_translations: boolean
+ *   }>
+ * }>}
+ */
+export async function fetchVoxLocales(options = {}) {
+    const fetcher = options.fetcher ?? runtimeFetcher;
+    const response = await fetcher(options.endpoint ?? runtimeLocalesEndpoint, {
+        credentials: 'same-origin',
+        headers: {
+            Accept: 'application/json',
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error(`Unable to load the Laravel Vox locale catalogue (${response.status}).`);
+    }
+
+    const catalog = await response.json();
+    const locales = Array.isArray(catalog.locales)
+        ? catalog.locales
+              .filter((locale) => locale && typeof locale.code === 'string')
+              .map((locale) => ({ ...locale, code: normalizeLocale(locale.code) }))
+        : [];
+    const defaultLocale = normalizeLocale(
+        typeof catalog.default_locale === 'string' ? catalog.default_locale : (locales[0]?.code ?? 'en')
+    );
+
+    configureLocales(locales.map((locale) => locale.code));
+
+    return {
+        ...catalog,
+        default_locale: defaultLocale,
+        locales,
+    };
 }
 
 function resolveLocale(requestedLocale, fallbackLocale) {
@@ -70,8 +117,11 @@ async function loadVoxLocale(locale) {
  *   fallbackLocale?: string,
  *   locales?: string[],
  *   endpoint?: string | ((locale: string) => string),
+ *   localesEndpoint?: string,
  *   fetcher?: typeof fetch,
- *   onLoad?: (locale: string) => void
+ *   onLoad?: (locale: string) => void,
+ *   onLocalesLoad?: (catalog: object) => void,
+ *   onLocalesError?: (error: Error) => void
  * }} options
  * @returns {import('vue').Plugin}
  */
@@ -82,7 +132,14 @@ export function createVoxI18n(options = {}) {
 
     configureLocales(configuredLocales);
     runtimeEndpoint = options.endpoint ?? '/vox/translations/{locale}';
+    runtimeLocalesEndpoint = options.localesEndpoint ?? '/vox/locales';
     runtimeFetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
+
+    if (options.locales === undefined) {
+        void fetchVoxLocales()
+            .then((catalog) => options.onLocalesLoad?.(catalog))
+            .catch((error) => options.onLocalesError?.(error));
+    }
 
     const locale = resolveLocale(options.locale, fallbackLocale);
 

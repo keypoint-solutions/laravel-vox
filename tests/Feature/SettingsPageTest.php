@@ -91,7 +91,7 @@ it('stores UI dynamic patterns separately from configured patterns', function ()
     $this->from('/vox/settings')
         ->post('/vox/settings', [
             'section' => 'dynamic_keys',
-            'dynamic_key_patterns' => "enums.user_roles.*\nmessages.legal.\nenums.user_roles.*\n",
+            'dynamic_key_patterns' => "enums.user_roles.*\nmessages.legal.*\nenums.user_roles.*\n",
         ])
         ->assertRedirect('/vox/settings')
         ->assertInertiaFlash('success', 'Dynamic key patterns saved.');
@@ -105,19 +105,6 @@ it('stores UI dynamic patterns separately from configured patterns', function ()
             ->where('settings.configured_dynamic_key_patterns', ['validation.*'])
             ->has('dynamicPatterns', 3)
         );
-});
-
-it('normalizes legacy protected-key requests into dynamic patterns', function (): void {
-    $this->from('/vox/settings')
-        ->post('/vox/settings', [
-            'section' => 'protection',
-            'protected_keys' => "auth.\nmessages.legal.\n",
-        ])
-        ->assertRedirect('/vox/settings')
-        ->assertInertiaFlash('success', 'Dynamic key patterns saved.');
-
-    expect(json_decode(VoxSetting::query()->findOrFail('dynamic_key_patterns')->value, true))
-        ->toBe(['auth.*', 'messages.legal.*']);
 });
 
 it('requires the dedicated settings ability outside local development', function (): void {

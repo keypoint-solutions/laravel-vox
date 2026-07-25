@@ -29,7 +29,6 @@ function prepareVoxFixtures(): string
         'frontend.dynamicLabels.values.*',
         'frontend.dynamicLabels2.values.*',
     ]);
-    config()->set('vox.parse.protected_keys', []);
     config()->set('vox.dynamic_keys.manifest', $targetRoot.'/dynamic.json');
     config()->set('vox.translate.locales', ['en', 'fr']);
     config()->set('vox.translate.base_locale', 'en');
