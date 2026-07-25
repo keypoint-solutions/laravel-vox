@@ -225,7 +225,7 @@ class TranslationScanner
         if (in_array($extension, ['php', 'blade.php'], true)) {
             $matches = $this->matchConcatenatedBackendKeys($content);
             $patterns[] = [
-                'pattern' => '/(?<!\w)('.self::BACKEND_TRANSLATION_CALL_PATTERN.')\(\s*([\"\'])\s*(.*?)\s*\2/s',
+                'pattern' => '/(?<!\w)('.self::BACKEND_TRANSLATION_CALL_PATTERN.')\(\s*([\'"])(?<key>(?:\\\\.|(?!\2).)*)\2/s',
                 'is_frontend' => false,
                 'php_literal' => true,
             ];
@@ -237,8 +237,9 @@ class TranslationScanner
                 'is_frontend' => true,
             ];
             $patterns[] = [
-                'pattern' => '/(?<!\w)('.self::FRONTEND_TRANSLATION_CALL_PATTERN.')\(\s*([\"\'])\s*(.*?)\s*\2/s',
+                'pattern' => '/(?<!\w)('.self::FRONTEND_TRANSLATION_CALL_PATTERN.')\(\s*([\'"])(?<key>(?:\\\\.|(?!\2).)*)\2/s',
                 'is_frontend' => true,
+                'javascript_literal' => true,
             ];
         }
 
@@ -254,6 +255,10 @@ class TranslationScanner
 
                 if (($pattern['php_literal'] ?? false) && is_string($quote)) {
                     $key = $this->decodePhpStringLiteral($key, $quote);
+                }
+
+                if (($pattern['javascript_literal'] ?? false) && is_string($quote)) {
+                    $key = $this->decodeJavaScriptStringLiteral($key);
                 }
 
                 $source = $results[1][$index][0] ?? null;
@@ -375,6 +380,22 @@ class TranslationScanner
             '\v' => "\v",
             '\e' => "\e",
             '\f' => "\f",
+        ]);
+    }
+
+    private function decodeJavaScriptStringLiteral(string $value): string
+    {
+        return strtr($value, [
+            '\\\\' => '\\',
+            "\\'" => "'",
+            '\\"' => '"',
+            '\n' => "\n",
+            '\r' => "\r",
+            '\t' => "\t",
+            '\v' => "\v",
+            '\b' => "\x08",
+            '\f' => "\f",
+            '\0' => "\0",
         ]);
     }
 
