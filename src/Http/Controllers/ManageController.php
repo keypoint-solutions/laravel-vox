@@ -15,6 +15,7 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\TranslationKey;
 
 class ManageController
 {
@@ -76,7 +77,7 @@ class ManageController
         $scope = $request->input('scope');
         $scope = is_string($scope) ? $scope : null;
 
-        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing', 'orphan'];
+        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing', 'orphan', 'dynamic'];
         if (! in_array($status, $allowedStatus, true)) {
             $status = null;
         }
@@ -268,6 +269,12 @@ class ManageController
             return;
         }
 
+        if ($status === 'dynamic') {
+            $this->applyDynamicFilter($query);
+
+            return;
+        }
+
         $query->where('is_orphan', false);
 
         if ($status === 'missing') {
@@ -303,6 +310,60 @@ class ManageController
         }
 
         $query->where('status', $status);
+    }
+
+    private function applyDynamicFilter(Builder $query): void
+    {
+        $patterns = $this->dynamicKeys->patterns();
+
+        if ($patterns === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where(function (Builder $dynamicQuery) use ($patterns): void {
+            foreach ($patterns as $pattern) {
+                $translationKey = TranslationKey::fromRaw($pattern);
+                $fullKeyPattern = str_replace('*', '%', $pattern);
+                $keyPattern = str_replace('*', '%', $translationKey->key);
+                $groupPattern = $translationKey->group !== null
+                    ? str_replace('*', '%', $translationKey->group)
+                    : null;
+
+                $dynamicQuery->orWhere(function (Builder $patternQuery) use (
+                    $fullKeyPattern,
+                    $groupPattern,
+                    $keyPattern
+                ): void {
+                    if ($groupPattern !== null) {
+                        $patternQuery
+                            ->where(function (Builder $groupedTranslation) use ($groupPattern, $keyPattern): void {
+                                $groupedTranslation
+                                    ->where('group', 'like', $groupPattern)
+                                    ->where('key', 'like', $keyPattern);
+                            })
+                            ->orWhere(function (Builder $jsonTranslation) use ($fullKeyPattern): void {
+                                $jsonTranslation
+                                    ->where(function (Builder $group): void {
+                                        $group->whereNull('group')
+                                            ->orWhere('group', 'json');
+                                    })
+                                    ->where('key', 'like', $fullKeyPattern);
+                            });
+
+                        return;
+                    }
+
+                    $patternQuery
+                        ->where(function (Builder $group): void {
+                            $group->whereNull('group')
+                                ->orWhere('group', 'json');
+                        })
+                        ->where('key', 'like', $fullKeyPattern);
+                });
+            }
+        });
     }
 
     /**
@@ -427,6 +488,7 @@ class ManageController
             ['value' => 'approved', 'label' => 'Approved'],
             ['value' => 'missing', 'label' => 'Missing'],
             ['value' => 'orphan', 'label' => 'Orphan'],
+            ['value' => 'dynamic', 'label' => 'Dynamic'],
         ];
     }
 

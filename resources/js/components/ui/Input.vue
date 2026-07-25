@@ -1,6 +1,7 @@
 <script lang="ts" setup>
     import { computed, ref } from 'vue';
 
+    import { copyTextToClipboard } from '@/lib/clipboard';
     import { cn } from '@/lib/utils';
 
     import Tooltip from './Tooltip.vue';
@@ -27,31 +28,13 @@
 
     const copied = ref(false);
 
-    function copyToClipboard() {
-        const text = String(inputValue.value);
-
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(text).then(() => {
-                showCopiedFeedback();
-            });
-        } else {
-            // Fallback for non-secure contexts (e.g., HTTP)
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.style.position = 'fixed';
-            textarea.style.left = '-9999px';
-            document.body.appendChild(textarea);
-            textarea.select();
-            try {
-                document.execCommand('copy');
-                showCopiedFeedback();
-            } finally {
-                document.body.removeChild(textarea);
-            }
+    async function copyToClipboard(): Promise<void> {
+        if (await copyTextToClipboard(String(inputValue.value))) {
+            showCopiedFeedback();
         }
     }
 
-    function showCopiedFeedback() {
+    function showCopiedFeedback(): void {
         copied.value = true;
         setTimeout(() => {
             copied.value = false;
@@ -82,53 +65,52 @@
             :readonly="readonly"
             :type="type ?? 'text'"
         />
-        <Tooltip
-            class="absolute top-1/2 right-2 z-10 -translate-y-1/2"
-            :text="copied ? 'Copied!' : 'Copy to clipboard'"
-        >
-            <button
-                :aria-label="copied ? 'Copied!' : 'Copy to clipboard'"
-                :disabled="disabled"
-                class="text-muted-foreground hover:text-foreground cursor-pointer p-1 transition-colors"
-                type="button"
-                @click.stop.prevent="copyToClipboard"
-            >
-                <svg
-                    v-if="!copied"
-                    class="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
+        <span class="absolute top-1/2 right-2 z-10 -translate-y-1/2">
+            <Tooltip :text="copied ? 'Copied!' : 'Copy to clipboard'">
+                <button
+                    :aria-label="copied ? 'Copied!' : 'Copy to clipboard'"
+                    :disabled="disabled"
+                    class="text-muted-foreground hover:text-foreground cursor-pointer p-1 transition-colors"
+                    type="button"
+                    @click.stop.prevent="copyToClipboard"
                 >
-                    <rect
-                        height="14"
-                        rx="2"
-                        ry="2"
-                        width="14"
-                        x="8"
-                        y="8"
-                    />
-                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                </svg>
-                <svg
-                    v-else
-                    class="h-4 w-4 text-green-500"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <polyline points="20 6 9 17 4 12" />
-                </svg>
-            </button>
-        </Tooltip>
+                    <svg
+                        v-if="!copied"
+                        class="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                    >
+                        <rect
+                            height="14"
+                            rx="2"
+                            ry="2"
+                            width="14"
+                            x="8"
+                            y="8"
+                        />
+                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                    </svg>
+                    <svg
+                        v-else
+                        class="h-4 w-4 text-green-500"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                    >
+                        <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                </button>
+            </Tooltip>
+        </span>
     </div>
     <input
         v-else

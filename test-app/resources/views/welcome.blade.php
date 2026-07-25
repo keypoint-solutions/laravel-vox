@@ -42,6 +42,8 @@
     </header>
 
     <main class="mx-auto max-w-5xl space-y-8 px-6 py-12">
+        @php($dynamicValueKey = 'label1')
+
         <section class="max-w-2xl">
             <p class="text-xs font-semibold uppercase tracking-[0.22em] text-violet-300">Blade consumer</p>
             <h1 class="mt-3 text-3xl font-semibold tracking-tight">{{ __('frontend.Regular translation') }}</h1>
@@ -68,9 +70,25 @@
                     ])
                 >
                     {{ $availableLocale }}
+                    @if ($availableLocale === $fallbackDemoLocale)
+                        <span>· fallback</span>
+                    @endif
                 </a>
             @endforeach
         </section>
+
+        @if ($locale === $fallbackDemoLocale)
+            <section
+                data-test="fallback-notice"
+                class="rounded-xl border border-amber-400/30 bg-amber-400/10 px-5 py-4 text-sm text-amber-100"
+            >
+                <p class="font-semibold">Intentional fallback demo</p>
+                <p class="mt-1 text-amber-100/75">
+                    <code>{{ $fallbackDemoLocale }}</code> is not a configured application locale, so Laravel falls
+                    back to <code>{{ $fallbackLocale }}</code>.
+                </p>
+            </section>
+        @endif
 
         <section class="grid gap-4 md:grid-cols-2">
             <article class="rounded-xl border border-white/10 bg-white/5 p-5">
@@ -103,6 +121,25 @@
                     class="mt-2 text-lg font-medium"
                 >
                     {{ __('frontend.dynamicLabels.labels.Dynamic Label 1') }}
+                </p>
+            </article>
+            <article class="rounded-xl border border-white/10 bg-white/5 p-5">
+                <p class="text-xs uppercase tracking-wide text-slate-500">Dynamic lookup</p>
+                <p
+                    data-test="dynamic-translation"
+                    class="mt-2 text-lg font-medium"
+                >
+                    {{ __('frontend.dynamicLabels.labels.Dynamic Label 1') }}:
+                    {{ __('frontend.dynamicLabels.values.' . $dynamicValueKey) }}
+                </p>
+            </article>
+            <article class="rounded-xl border border-white/10 bg-white/5 p-5">
+                <p class="text-xs uppercase tracking-wide text-slate-500">Pluralization</p>
+                <p
+                    data-test="choice-translation"
+                    class="mt-2 text-lg font-medium"
+                >
+                    {{ trans_choice('frontend.Items selected', 2, ['count' => 2]) }}
                 </p>
             </article>
         </section>

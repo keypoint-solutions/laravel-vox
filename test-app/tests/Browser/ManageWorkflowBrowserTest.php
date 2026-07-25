@@ -15,16 +15,26 @@ beforeEach(function (): void {
 });
 
 it('creates a concrete dynamic translation from an open pattern', function (): void {
+    VoxTranslationFactory::new()
+        ->withValues(['en' => 'Ordinary browser value', 'fr' => 'Valeur ordinaire'])
+        ->create(['group' => 'browser', 'key' => 'ordinary']);
+
     visit('/vox/manage')
         ->click('[data-test="add-dynamic-translation"]')
         ->assertVisible('[data-test="dynamic-create-panel"]')
         ->select('#new_dynamic_pattern', 'browser.dynamic.*')
+        ->click('[data-test="copy-dynamic-prefix"]')
+        ->waitForText('Dynamic key prefix copied.')
+        ->assertSeeIn('[data-test="success-toast"]', 'Dynamic key prefix copied.')
         ->fill('[data-test="new-dynamic-key"]', 'browser.dynamic.admin')
         ->fill('[data-test="new-dynamic-value-en"]', 'Administrator')
         ->fill('[data-test="new-dynamic-value-fr"]', 'Administrateur')
         ->click('[data-test="store-dynamic-translation"]')
         ->waitForText('Dynamic translation browser.dynamic.admin created.')
         ->assertMissing('[data-test="dynamic-create-panel"]')
+        ->pressAndWaitFor('Dynamic')
+        ->assertSee('browser.dynamic.admin')
+        ->assertDontSee('browser.ordinary')
         ->assertNoJavaScriptErrors();
 
     $translation = VoxTranslation::query()

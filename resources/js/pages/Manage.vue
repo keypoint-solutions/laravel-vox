@@ -8,6 +8,7 @@
         ChevronRight,
         CircleAlert,
         Code,
+        Copy,
         FileText,
         GripVertical,
         Laptop,
@@ -35,6 +36,7 @@
     } from '@/components/ui';
     import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
+    import { copyTextToClipboard } from '@/lib/clipboard';
     import { cn } from '@/lib/utils';
 
     const LOCALE_ORDER_STORAGE_KEY = 'vox-locale-order';
@@ -144,6 +146,7 @@
         { value: 'updated', label: 'Updated' },
         { value: 'missing', label: 'Missing' },
         { value: 'orphan', label: 'Orphan' },
+        { value: 'dynamic', label: 'Dynamic' },
         { value: 'pending', label: 'Pending' },
         { value: 'approved', label: 'Approved' },
     ]);
@@ -173,6 +176,7 @@
     const newDynamicKey = ref('');
     const newDynamicValues = ref<Record<string, string>>({});
     const newDynamicError = ref<string | null>(null);
+    const dynamicPatternPrefix = computed(() => newDynamicPattern.value.split('*', 1)[0] ?? '');
 
     // Compact sticky header state
     const isCompactMode = ref(false);
@@ -558,6 +562,20 @@
             toast.value = null;
             toastTimer.value = null;
         }, 5000);
+    }
+
+    async function copyDynamicPatternPrefix(): Promise<void> {
+        if (dynamicPatternPrefix.value === '') {
+            return;
+        }
+
+        if (await copyTextToClipboard(dynamicPatternPrefix.value)) {
+            showToast('Dynamic key prefix copied.');
+
+            return;
+        }
+
+        showToast('Unable to copy the dynamic key prefix.', 'error');
     }
 
     function handleBulkError(errors: Record<string, string>): void {
@@ -1349,15 +1367,31 @@
         <div class="space-y-5">
             <FormField
                 id="new_dynamic_pattern"
-                description="Choose the active pattern that covers this concrete value."
+                description="Choose the active pattern that covers this concrete value. Copy its stable prefix to start the key."
                 label="Dynamic pattern"
             >
-                <Select
-                    id="new_dynamic_pattern"
-                    v-model="newDynamicPattern"
-                    :options="dynamicPatternOptions"
-                    placeholder="Choose a pattern"
-                />
+                <div class="flex items-center gap-2">
+                    <div class="min-w-0 flex-1">
+                        <Select
+                            id="new_dynamic_pattern"
+                            v-model="newDynamicPattern"
+                            :options="dynamicPatternOptions"
+                            placeholder="Choose a pattern"
+                        />
+                    </div>
+                    <Tooltip text="Copy the pattern prefix">
+                        <Button
+                            aria-label="Copy the pattern prefix"
+                            data-test="copy-dynamic-prefix"
+                            :disabled="!dynamicPatternPrefix"
+                            size="icon"
+                            variant="outline"
+                            @click="copyDynamicPatternPrefix"
+                        >
+                            <Copy class="size-4" />
+                        </Button>
+                    </Tooltip>
+                </div>
             </FormField>
 
             <FormField

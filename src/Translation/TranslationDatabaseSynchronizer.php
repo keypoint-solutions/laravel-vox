@@ -13,6 +13,7 @@ class TranslationDatabaseSynchronizer
         private VoxLocaleResolver $localeResolver,
         private VoxFrontendManifest $frontendManifest,
         private VoxDynamicKeyRegistry $dynamicKeys,
+        private FrontendTranslationArtifacts $frontendArtifacts,
     ) {}
 
     public function sync(bool $updateLanguageFiles = false): SyncResult
@@ -51,6 +52,10 @@ class TranslationDatabaseSynchronizer
         }
 
         $this->frontendManifest->writeFromDatabase();
+
+        if (config('vox.frontend.runtime.enabled', false)) {
+            $this->frontendArtifacts->publish();
+        }
 
         return $result;
     }

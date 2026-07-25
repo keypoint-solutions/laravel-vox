@@ -222,11 +222,11 @@ class TranslationScanner
 
         if (in_array($extension, ['js', 'ts', 'vue'], true)) {
             $patterns[] = [
-                'pattern' => '/(?<!\\w)(\\$t|\\$wt|trans|wTrans)\\(\\s*(`)(?![^`]*\\$\\{)\\s*(.*?)\\s*\\2/s',
+                'pattern' => '/(?<!\\w)(\\$tChoice|\\$wtChoice|transChoice|trans_choice|wTransChoice|\\$t|\\$wt|trans|wTrans)\\(\\s*(`)(?![^`]*\\$\\{)\\s*(.*?)\\s*\\2/s',
                 'is_frontend' => true,
             ];
             $patterns[] = [
-                'pattern' => '/(?<!\w)(\$t|\$wt|trans|wTrans)\(\s*([\"\'])\s*(.*?)\s*\2/s',
+                'pattern' => '/(?<!\w)(\$tChoice|\$wtChoice|transChoice|trans_choice|wTransChoice|\$t|\$wt|trans|wTrans)\(\s*([\"\'])\s*(.*?)\s*\2/s',
                 'is_frontend' => true,
             ];
         }
@@ -298,11 +298,11 @@ class TranslationScanner
 
         if (in_array($extension, ['js', 'ts', 'vue'], true)) {
             $patterns[] = [
-                'pattern' => '/(?<!\w)(\$t|\$wt|trans|wTrans)\(\s*`(?<prefix>[^`]*?)\$\{[^}]+\}(?<suffix>[^`]*)`\s*\)/s',
+                'pattern' => '/(?<!\w)(\$tChoice|\$wtChoice|transChoice|trans_choice|wTransChoice|\$t|\$wt|trans|wTrans)\(\s*`(?<prefix>[^`]*?)\$\{[^}]+\}(?<suffix>[^`]*)`\s*\)/s',
                 'is_frontend' => true,
             ];
             $patterns[] = [
-                'pattern' => '/(?<!\w)(\$t|\$wt|trans|wTrans)\(\s*([\'"])(?<prefix>(?:\\\\.|(?!\2).)*)\2\s*\+\s*[^)]*?(?:\+\s*([\'"])(?<suffix>(?:\\\\.|(?!\4).)*)\4)?\s*\)/s',
+                'pattern' => '/(?<!\w)(\$tChoice|\$wtChoice|transChoice|trans_choice|wTransChoice|\$t|\$wt|trans|wTrans)\(\s*([\'"])(?<prefix>(?:\\\\.|(?!\2).)*)\2\s*\+\s*[^)]*?(?:\+\s*([\'"])(?<suffix>(?:\\\\.|(?!\4).)*)\4)?\s*\)/s',
                 'is_frontend' => true,
             ];
         }

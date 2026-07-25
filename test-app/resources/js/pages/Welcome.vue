@@ -1,8 +1,12 @@
 <script setup lang="ts">
-    import { availableVoxLocales, trans } from '@laravel-vox/runtime.js';
+    import { availableVoxLocales, trans, transChoice } from '@laravel-vox/runtime.js';
     import { computed } from 'vue';
 
-    const currentLocale = computed(() => document.documentElement.lang.replace('-', '_'));
+    const requestedLocale = document.documentElement.dataset.requestedLocale ?? document.documentElement.lang;
+    const fallbackDemoLocale = document.documentElement.dataset.fallbackDemoLocale ?? 'und';
+    const fallbackLocale = document.documentElement.dataset.fallbackLocale ?? 'en';
+    const demoLocales = computed(() => [...new Set([...availableVoxLocales, fallbackDemoLocale])]);
+    const isFallbackDemo = computed(() => requestedLocale === fallbackDemoLocale);
     const dynamicValueKey = 'label1';
     const backendOnlyKey = ['validation', 'accepted'].join('.');
 
@@ -21,13 +25,13 @@
                 </div>
                 <nav class="flex flex-wrap items-center gap-2 text-sm">
                     <a
-                        :href="pageUrl(currentLocale, 'blade')"
+                        :href="pageUrl(requestedLocale, 'blade')"
                         class="rounded-md px-3 py-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
                     >
                         Blade page
                     </a>
                     <a
-                        :href="pageUrl(currentLocale, 'vue')"
+                        :href="pageUrl(requestedLocale, 'vue')"
                         class="rounded-md bg-violet-500 px-3 py-2 font-medium text-white"
                     >
                         Vue page
@@ -58,19 +62,32 @@
             >
                 <span class="mr-2 text-sm text-slate-400">Language</span>
                 <a
-                    v-for="locale in availableVoxLocales"
+                    v-for="locale in demoLocales"
                     :key="locale"
                     :href="pageUrl(locale, 'vue')"
-                    :aria-current="locale === currentLocale ? 'page' : undefined"
+                    :aria-current="locale === requestedLocale ? 'page' : undefined"
                     :class="[
                         'rounded-full border px-3 py-1.5 text-sm font-medium uppercase transition',
-                        locale === currentLocale
+                        locale === requestedLocale
                             ? 'border-violet-400 bg-violet-400/15 text-violet-200'
                             : 'border-white/15 text-slate-300 hover:border-white/30 hover:text-white',
                     ]"
                 >
-                    {{ locale }}
+                    {{ locale }}<span v-if="locale === fallbackDemoLocale"> · fallback</span>
                 </a>
+            </section>
+
+            <section
+                v-if="isFallbackDemo"
+                data-test="fallback-notice"
+                class="rounded-xl border border-amber-400/30 bg-amber-400/10 px-5 py-4 text-sm text-amber-100"
+            >
+                <p class="font-semibold">Intentional fallback demo</p>
+                <p class="mt-1 text-amber-100/75">
+                    <code>{{ fallbackDemoLocale }}</code> is absent from the locale catalogue, so the Vox plugin loads
+                    <code>{{ fallbackLocale }}</code
+                    >.
+                </p>
             </section>
 
             <section class="grid gap-4 md:grid-cols-2">
@@ -102,6 +119,15 @@
                     </p>
                 </article>
                 <article class="rounded-xl border border-white/10 bg-white/5 p-5">
+                    <p class="text-xs tracking-wide text-slate-500 uppercase">Nested key</p>
+                    <p
+                        data-test="nested-translation"
+                        class="mt-2 text-lg font-medium"
+                    >
+                        {{ trans('frontend.dynamicLabels.labels.Dynamic Label 1') }}
+                    </p>
+                </article>
+                <article class="rounded-xl border border-white/10 bg-white/5 p-5">
                     <p class="text-xs tracking-wide text-slate-500 uppercase">Dynamic lookup</p>
                     <p
                         data-test="dynamic-translation"
@@ -109,6 +135,15 @@
                     >
                         {{ trans('frontend.dynamicLabels.labels.Dynamic Label 1') }}:
                         {{ $t('frontend.dynamicLabels.values.' + dynamicValueKey) }}
+                    </p>
+                </article>
+                <article class="rounded-xl border border-white/10 bg-white/5 p-5">
+                    <p class="text-xs tracking-wide text-slate-500 uppercase">Pluralization</p>
+                    <p
+                        data-test="choice-translation"
+                        class="mt-2 text-lg font-medium"
+                    >
+                        {{ transChoice('frontend.Items selected', 2) }}
                     </p>
                 </article>
                 <article class="rounded-xl border border-white/10 bg-white/5 p-5 md:col-span-2">
