@@ -46,20 +46,20 @@ The repository should follow a conventional Laravel package layout. The consumer
 
 ### Translation discovery
 
-| Contract                                                                                                                       | Status   |
-| ------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| Laravel backend helpers such as `__()` are detected as backend occurrences.                                                    | Complete |
-| Vue/JavaScript calls such as `$t()`, `$wt()`, and `trans()` are detected as frontend occurrences.                              | Complete |
-| A translation is marked `is_frontend` when its discovered source is frontend code.                                             | Complete |
-| Stale frontend flags are removed on a later sync when a key is no longer used by frontend code.                                | Complete |
-| Standard Laravel framework language sources and optional Cashier sources are scanned by default.                               | Complete |
-| Supported dynamic template and concatenation expressions are recorded as wildcard patterns with source metadata.               | Complete |
-| Laravel runtime-generated translation families are retained through explicit default patterns.                                 | Complete |
-| Open patterns retain matching concrete values through Parse and Sync without preventing normal approved publishing.            | Complete |
-| Finite patterns can bind to arrays, enums, container-resolved providers, or runtime callbacks and seed their concrete keys.    | Complete |
-| Patterns detected in frontend source contribute their PHP groups to the frontend manifest.                                     | Complete |
-| Database rows absent from both scanned source and language files are retained and classified as Orphans.                       | Complete |
-| Displayed timestamps are ISO values from the server and formatted in the browser's local timezone through a shared composable. | Complete |
+| Contract                                                                                                                                         | Status   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| Laravel backend helpers such as `__()` are detected as backend occurrences.                                                                      | Complete |
+| Vue/JavaScript translation and plural helpers such as `$t()`, `trans()`, `$tChoice()`, and `transChoice()` are detected as frontend occurrences. | Complete |
+| A translation is marked `is_frontend` when its discovered source is frontend code.                                                               | Complete |
+| Stale frontend flags are removed on a later sync when a key is no longer used by frontend code.                                                  | Complete |
+| Standard Laravel framework language sources and optional Cashier sources are scanned by default.                                                 | Complete |
+| Supported dynamic template and concatenation expressions are recorded as wildcard patterns with source metadata.                                 | Complete |
+| Laravel runtime-generated translation families are retained through explicit default patterns.                                                   | Complete |
+| Open patterns retain matching concrete values through Parse and Sync without preventing normal approved publishing.                              | Complete |
+| Finite patterns can bind to arrays, enums, container-resolved providers, or runtime callbacks and seed their concrete keys.                      | Complete |
+| Patterns detected in frontend source contribute their PHP groups to the frontend manifest.                                                       | Complete |
+| Database rows absent from both scanned source and language files are retained and classified as Orphans.                                         | Complete |
+| Displayed timestamps are ISO values from the server and formatted in the browser's local timezone through a shared composable.                   | Complete |
 
 Arbitrary runtime expressions cannot be enumerated safely through source scanning. Their supported fallback is an
 explicit open pattern or finite binding. General AST/data-flow inference and opt-in runtime observation are deferred
@@ -76,13 +76,14 @@ enhancements; neither is required for deterministic cleanup safety.
 | Only PHP translation groups marked for frontend use are included in the browser bundle.                                                                | Complete |
 | Frontend groups are maintained automatically from scanner results.                                                                                     | Complete |
 | Consuming applications may explicitly override the frontend group list.                                                                                | Complete |
-| The test application provides equivalent Blade and Vue pages with a language picker.                                                                   | Complete |
+| The test application provides equivalent Blade and Vue pages with a language picker, plus an explicitly labelled undefined-locale fallback demo.       | Complete |
 | Backend-only translation groups are proven absent from the frontend bundle.                                                                            | Complete |
 | Frontend consumers may opt into a same-origin runtime strategy that loads the current locale from a backend endpoint.                                  | Complete |
 | Publish prepares one validated frontend JSON artifact per locale from JSON translations and frontend-approved PHP groups.                              | Complete |
 | The runtime endpoint serves only configured locales, uses cache validators, and never queries or compiles translations on each request.                | Complete |
 | The runtime route set exposes a cache-validated catalogue of defined locales and whether each runtime artifact exists.                                 | Complete |
 | Runtime JavaScript consumers can discover locales from the backend instead of duplicating the configured locale list.                                  | Complete |
+| Local sync refreshes enabled runtime artifacts after updating the frontend manifest, without requiring a frontend rebuild.                             | Complete |
 | The existing build-time `laravel-vue-i18n` bundling strategy remains supported for isolated SPAs and offline/static deployments.                       | Complete |
 | An isolated SPA may use the runtime strategy only through an explicitly configured absolute endpoint and application-owned CORS policy.                | Complete |
 
@@ -134,8 +135,9 @@ consuming application explicitly owns the endpoint URL and CORS boundary.
 | Status dots and icon-only actions have hover and keyboard-focus tooltips.                                   | Complete |
 | Frontend/backend group and occurrence indicators explain their meaning without relying on color alone.      | Complete |
 | Frontend group indicators describe whether export is automatic, explicitly configured, or inherent to JSON. | Complete |
-| Orphans and dynamic keys are visibly identified and can be filtered or inspected in Manage.                 | Complete |
+| Orphans and dynamic keys are visibly identified and have dedicated filters in Manage.                       | Complete |
 | Users can create concrete values covered by an open dynamic pattern, with the source-locale value required. | Complete |
+| The dynamic-value editor exposes a one-click copy action for the selected pattern's stable prefix.          | Complete |
 
 ### Locale provisioning
 

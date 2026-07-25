@@ -7,9 +7,11 @@ use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 $localeResolver = app(VoxLocaleResolver::class);
 $availableLocales = $localeResolver->resolveLocales();
 $baseLocale = $localeResolver->resolveBaseLocale($availableLocales);
+$fallbackDemoLocale = 'und';
+$demoLocales = array_values(array_unique([...$availableLocales, $fallbackDemoLocale]));
 $localePattern = implode('|', array_map(
     static fn (string $locale): string => preg_quote($locale, '/'),
-    $availableLocales
+    $demoLocales
 ));
 
 Route::redirect('/', "/{$baseLocale}/vue")->name('home');
@@ -29,18 +31,28 @@ Route::post('/vox-demo-remote/sync', function (VoxArchive $archive) {
 
 Route::prefix('{locale}')
     ->where(['locale' => $localePattern])
-    ->group(function () use ($availableLocales): void {
-        Route::get('/vue', function (string $locale) {
+    ->group(function () use ($baseLocale, $demoLocales, $fallbackDemoLocale): void {
+        Route::get('/vue', function (string $locale) use ($baseLocale, $fallbackDemoLocale) {
             app()->setLocale($locale);
 
-            return view('app');
+            return view('app', [
+                'fallbackDemoLocale' => $fallbackDemoLocale,
+                'fallbackLocale' => $baseLocale,
+                'requestedLocale' => $locale,
+            ]);
         })->name('translations.vue');
 
-        Route::get('/blade', function (string $locale) use ($availableLocales) {
+        Route::get('/blade', function (string $locale) use (
+            $baseLocale,
+            $demoLocales,
+            $fallbackDemoLocale
+        ) {
             app()->setLocale($locale);
 
             return view('welcome', [
-                'availableLocales' => $availableLocales,
+                'availableLocales' => $demoLocales,
+                'fallbackDemoLocale' => $fallbackDemoLocale,
+                'fallbackLocale' => $baseLocale,
                 'locale' => $locale,
             ]);
         })->name('translations.blade');

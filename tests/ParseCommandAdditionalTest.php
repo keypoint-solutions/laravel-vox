@@ -91,6 +91,26 @@ it('parses vue translations and json strings from Welcome.vue', function () {
     File::deleteDirectory($targetRoot);
 });
 
+it('parses frontend plural translation helpers', function (): void {
+    $targetRoot = prepareVoxFixtures();
+    $jsPath = $targetRoot.'/resources/js/app.js';
+
+    File::append(
+        $jsPath,
+        "\ntransChoice('frontend.Items selected', 2);\n\$tChoice('frontend.Template items selected', 2);\n"
+    );
+
+    $this->artisan('vox:parse', ['--no-interaction' => true])->assertExitCode(0);
+
+    $english = require $targetRoot.'/lang/en/frontend.php';
+
+    expect($english)
+        ->toHaveKey('Items selected', 'Items selected')
+        ->toHaveKey('Template items selected', 'Template items selected');
+
+    File::deleteDirectory($targetRoot);
+});
+
 it('keeps lowercase label for nested field label keys', function () {
     $targetRoot = prepareVoxFixtures();
 

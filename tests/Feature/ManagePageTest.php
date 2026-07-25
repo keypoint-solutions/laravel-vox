@@ -96,7 +96,7 @@ it('returns manage data with groups, statuses, and occurrences', function (): vo
         ->toBe('resources/views/welcome.blade.php');
 });
 
-it('marks dynamic and orphan translations and filters orphans separately', function (): void {
+it('marks and filters dynamic and orphan translations separately', function (): void {
     config()->set('vox.dynamic_keys.patterns', ['messages.legal.*']);
 
     VoxTranslation::factory()
@@ -111,12 +111,14 @@ it('marks dynamic and orphan translations and filters orphans separately', funct
 
     $all = manageTranslations($this->get('/vox/manage'))->keyBy('display_key');
     $orphans = manageTranslations($this->get('/vox/manage?status=orphan'));
+    $dynamic = manageTranslations($this->get('/vox/manage?status=dynamic'));
     $approved = manageTranslations($this->get('/vox/manage?status=approved'));
 
     expect($all['messages.legal.terms']['is_dynamic'])->toBeTrue()
         ->and($all['messages.legal.terms']['dynamic_pattern'])->toBe('messages.legal.*')
         ->and($all['messages.old']['is_orphan'])->toBeTrue()
         ->and($orphans->pluck('display_key')->all())->toBe(['messages.old'])
+        ->and($dynamic->pluck('display_key')->all())->toBe(['messages.legal.terms'])
         ->and($approved)->toBeEmpty();
 });
 

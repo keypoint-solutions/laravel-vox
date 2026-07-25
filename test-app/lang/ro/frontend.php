@@ -10,6 +10,7 @@ return [
     // 22em] text-violet-300 uppercase">Vue consumer</p> <h1 class="mt-3 text-3xl font-semibold tracking-tight">{{ $t(KEY) }}</h1> <p class="mt-3 text-slate-400"> This page loads the same Laravel translation files as the backend, including
     // resources/js/pages/Welcome.vue:48
     'Regular translation' => 'Traducere regulată',
+    'Items selected' => '{0} Niciun element selectat|{1} :count element selectat|[2,*] :count elemente selectate',
     // data-test="parameter-translation" class="mt-2 text-lg font-medium" > {{ $t(KEY, { date: '24 July 2026' }) }} </p> </article> <article class="rounded-xl border border-white/10 bg-white/5 p-5">
     // resources/js/pages/Welcome.vue:101
     'Today is :date' => 'Astăzi este :date',

@@ -116,7 +116,8 @@ Vox records supported template-string and concatenation expressions as wildcard 
 The default config includes `auth.*`, `pagination.*`, `passwords.*`, and `validation.*` because Laravel constructs
 keys in those translation families at runtime. Concrete values covered by an open pattern can be added from
 `/vox/manage`. The source-locale value is required; missing target values can then use the normal individual or bulk
-AI workflow.
+AI workflow. Manage includes a Dynamic filter, and the creation panel can copy the selected pattern's stable prefix
+to the clipboard before the concrete key is entered.
 
 Use a finite binding when the possible suffixes are known. Vox seeds every bound key during Parse and treats any
 other value as outside the binding:
@@ -336,7 +337,8 @@ needed for this mode. Publish prepares validated JSON at `storage/vox/frontend-t
 `/vox/translations/{locale}` only read those artifacts and support ETag revalidation. JSON translations and the PHP
 groups in the frontend manifest are included, while backend-only PHP groups remain private. The locale catalogue
 also reports `has_runtime_translations`, allowing a picker to distinguish defined locales whose artifacts have not
-yet been prepared.
+yet been prepared. Local `vox:sync` also refreshes these artifacts when runtime delivery is enabled, keeping the
+cache aligned with language files imported into Vox.
 
 If package routes use a custom prefix, pass both matching endpoints:
 

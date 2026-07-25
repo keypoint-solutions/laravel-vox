@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\File;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationOccurrence;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
@@ -42,6 +43,25 @@ it('syncs translation files into the vox database', function () {
         ->first();
 
     expect($vendorTranslation)->not->toBeNull();
+});
+
+it('refreshes runtime frontend artifacts when local sync is enabled', function (): void {
+    $targetRoot = prepareVoxFixtures();
+    $runtimePath = $targetRoot.'/frontend-runtime';
+
+    config()->set('vox.frontend.runtime.enabled', true);
+    config()->set('vox.frontend.runtime.path', $runtimePath);
+
+    $this->artisan('vox:parse', ['--no-interaction' => true])->assertExitCode(0);
+    $this->artisan('vox:sync')->assertExitCode(0);
+
+    $english = json_decode(File::get($runtimePath.'/en.json'), true, flags: JSON_THROW_ON_ERROR);
+    $french = json_decode(File::get($runtimePath.'/fr.json'), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($english)
+        ->toHaveKey('messages.hello', 'hello')
+        ->and($french)
+        ->toHaveKey('messages.hello', '🚩hello');
 });
 
 it('removes a stale frontend flag when a key is no longer used in frontend code', function (): void {

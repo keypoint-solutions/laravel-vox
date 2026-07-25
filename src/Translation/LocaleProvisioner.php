@@ -147,10 +147,6 @@ class LocaleProvisioner
 
                     $syncResult = $this->synchronizer->sync();
 
-                    if (config('vox.frontend.runtime.enabled', false)) {
-                        $this->frontendArtifacts->publish();
-                    }
-
                     $this->auditLogger->record('locale-provisioned', [
                         'locale' => $locale,
                         'source_locale' => $baseLocale,
