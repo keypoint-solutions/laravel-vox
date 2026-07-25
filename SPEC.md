@@ -38,7 +38,7 @@ The repository should follow a conventional Laravel package layout. The consumer
 | Keep PHP and Node dependencies current and lockfiles reproducible.                                                                             | Complete |
 | Provide one root verification command for package, build, and browser coverage.                                                                | Complete |
 | Review all advertised UI modules and remove or implement placeholders.                                                                         | Complete |
-| Identify Laravel Vox in the UI as an open-source project offered by Keypoint Solutions, with company and GitHub links.                         | Complete |
+| Credit Costin Bereveanu as creator and Keypoint Solutions SRL as project steward and copyright holder, with contact and GitHub links.          | Complete |
 | Provide a concise GitHub README covering requirements, installation, backend/frontend integration, configuration, workflows, and verification. | Complete |
 | Finish the milestone with a clean, reviewed commit.                                                                                            | Complete |
 

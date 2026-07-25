@@ -12,7 +12,8 @@
         {
             "name": "Costin Bereveanu",
             "email": "cbereveanu@gmail.com",
-            "role": "Developer"
+            "homepage": "https://github.com/schniper",
+            "role": "Creator"
         }
     ],
     "require": {

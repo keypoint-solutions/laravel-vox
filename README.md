@@ -5,7 +5,8 @@
 
 Laravel Vox discovers translation usage, manages reviewed values in a dedicated database, publishes approved translations to Laravel language files, and safely pulls administrator-edited translations back from another application. Its optional AI driver protects Laravel placeholders, markup, and line breaks.
 
-Laravel Vox is an open-source project offered by [Keypoint Solutions](https://keypoint.ro).
+Laravel Vox was created by [Costin Bereveanu](https://github.com/schniper) and is maintained and offered by
+[Keypoint Solutions](https://keypoint.ro).
 
 ## Requirements
 
@@ -451,10 +452,15 @@ composer test
 
 ## Credits
 
-- [Costin Bereveanu](https://github.com/keypoint-solutions)
-- [Keypoint Solutions](https://keypoint.ro)
+- [Costin Bereveanu](https://github.com/schniper) — creator
+- [Keypoint Solutions](https://keypoint.ro) — project home and maintainer
 - [All contributors](../../contributors)
+
+Questions and project enquiries can be sent to [cbereveanu@gmail.com](mailto:cbereveanu@gmail.com).
 
 ## License
 
-Laravel Vox is open-sourced software licensed under the [MIT license](LICENSE.md).
+Copyright © 2026 Keypoint Solutions SRL.
+
+Laravel Vox is open-sourced software licensed under the [MIT license](LICENSE.md). The license preserves the
+copyright notice while allowing broad use, modification, and distribution.
