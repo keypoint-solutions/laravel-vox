@@ -3,6 +3,21 @@
     "name": "@keypoint-solutions/laravel-vox",
     "version": "1.0.0",
     "private": false,
+    "description": "A Laravel translation manager with AI backing and a friendly management GUI.",
+    "author": {
+        "name": "Costin Bereveanu",
+        "email": "cbereveanu@gmail.com",
+        "url": "https://github.com/schniper"
+    },
+    "license": "MIT",
+    "homepage": "https://github.com/keypoint-solutions/laravel-vox#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/keypoint-solutions/laravel-vox.git"
+    },
+    "bugs": {
+        "url": "https://github.com/keypoint-solutions/laravel-vox/issues"
+    },
     "type": "module",
     "files": [
         "resources/js/consumer"

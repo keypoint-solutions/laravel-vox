@@ -1,6 +1,6 @@
 The MIT License (MIT)
 
-Copyright (c) Keypoint Solutions <cbereveanu@gmail.com>
+Copyright (c) 2026 Keypoint Solutions SRL
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

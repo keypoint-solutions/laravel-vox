@@ -1211,7 +1211,8 @@
                 {
                     "name": "Costin Bereveanu",
                     "email": "cbereveanu@gmail.com",
-                    "role": "Developer"
+                    "homepage": "https://github.com/schniper",
+                    "role": "Creator"
                 }
             ],
             "description": "A Laravel translation manager with AI backing and a friendly management GUI.",

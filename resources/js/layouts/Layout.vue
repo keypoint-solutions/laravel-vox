@@ -6,6 +6,7 @@
         Home,
         Laptop,
         Layers,
+        Mail,
         Menu,
         Moon,
         RefreshCw,
@@ -132,7 +133,16 @@
                 </div>
                 <div class="text-sidebar-foreground/55 mt-4 space-y-2 text-xs leading-relaxed">
                     <p>
-                        An open-source project offered by
+                        Created by
+                        <a
+                            class="text-sidebar-foreground/80 hover:text-sidebar-foreground font-medium"
+                            href="https://github.com/schniper"
+                            rel="noreferrer"
+                            target="_blank"
+                        >
+                            Costin Bereveanu
+                        </a>
+                        and maintained by
                         <a
                             class="text-sidebar-foreground/80 hover:text-sidebar-foreground font-medium"
                             href="https://keypoint.ro"
@@ -142,15 +152,24 @@
                             Keypoint Solutions
                         </a>
                     </p>
-                    <a
-                        class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
-                        href="https://github.com/keypoint-solutions/laravel-vox"
-                        rel="noreferrer"
-                        target="_blank"
-                    >
-                        <GitBranch class="size-3.5" />
-                        View on GitHub
-                    </a>
+                    <div class="flex flex-wrap gap-x-3 gap-y-1">
+                        <a
+                            class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
+                            href="https://github.com/keypoint-solutions/laravel-vox"
+                            rel="noreferrer"
+                            target="_blank"
+                        >
+                            <GitBranch class="size-3.5" />
+                            Source
+                        </a>
+                        <a
+                            class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
+                            href="mailto:cbereveanu@gmail.com"
+                        >
+                            <Mail class="size-3.5" />
+                            Contact
+                        </a>
+                    </div>
                 </div>
             </div>
         </aside>
@@ -296,7 +315,16 @@
                     </div>
                     <div class="text-sidebar-foreground/55 mt-4 space-y-2 text-xs leading-relaxed">
                         <p>
-                            An open-source project offered by
+                            Created by
+                            <a
+                                class="text-sidebar-foreground/80 hover:text-sidebar-foreground font-medium"
+                                href="https://github.com/schniper"
+                                rel="noreferrer"
+                                target="_blank"
+                            >
+                                Costin Bereveanu
+                            </a>
+                            and maintained by
                             <a
                                 class="text-sidebar-foreground/80 hover:text-sidebar-foreground font-medium"
                                 href="https://keypoint.ro"
@@ -306,15 +334,24 @@
                                 Keypoint Solutions
                             </a>
                         </p>
-                        <a
-                            class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
-                            href="https://github.com/keypoint-solutions/laravel-vox"
-                            rel="noreferrer"
-                            target="_blank"
-                        >
-                            <GitBranch class="size-3.5" />
-                            View on GitHub
-                        </a>
+                        <div class="flex flex-wrap gap-x-3 gap-y-1">
+                            <a
+                                class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
+                                href="https://github.com/keypoint-solutions/laravel-vox"
+                                rel="noreferrer"
+                                target="_blank"
+                            >
+                                <GitBranch class="size-3.5" />
+                                Source
+                            </a>
+                            <a
+                                class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
+                                href="mailto:cbereveanu@gmail.com"
+                            >
+                                <Mail class="size-3.5" />
+                                Contact
+                            </a>
+                        </div>
                     </div>
                 </div>
             </aside>
