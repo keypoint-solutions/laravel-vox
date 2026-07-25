@@ -15,6 +15,9 @@ it('renders Laravel translations in Blade for every demo locale', function (): v
         ->assertSeeIn('[data-test="nested-translation"]', 'Dynamic Label 1')
         ->assertSeeIn('[data-test="dynamic-translation"]', 'Dynamic Label 1: Label 1 value')
         ->assertSeeIn('[data-test="choice-translation"]', '2 items selected')
+        ->assertSeeIn('[data-test="choice-translation-directive"]', '1 item selected')
+        ->assertSeeIn('[data-test="choice-translation-facade"]', 'No items selected')
+        ->assertSeeIn('[data-test="choice-translation-instance"]', '3 items selected')
         ->assertNoJavaScriptErrors();
 
     visit('/fr/blade')
@@ -52,6 +55,9 @@ it('loads filtered Laravel translations from the runtime endpoint through the pu
         ->assertSeeIn('[data-test="nested-translation"]', 'Étiquette dynamique 1')
         ->assertSeeIn('[data-test="dynamic-translation"]', "Étiquette dynamique 1: Valeur de l'étiquette 1")
         ->assertSeeIn('[data-test="choice-translation"]', '2 éléments sélectionnés')
+        ->assertSeeIn('[data-test="choice-translation-alias"]', '1 élément sélectionné')
+        ->assertSeeIn('[data-test="choice-translation-global"]', 'Aucun élément sélectionné')
+        ->assertSeeIn('[data-test="choice-translation-reactive"]', '3 éléments sélectionnés')
         ->assertSeeIn('[data-test="backend-only-translation"]', 'validation.accepted')
         ->assertNoJavaScriptErrors();
 

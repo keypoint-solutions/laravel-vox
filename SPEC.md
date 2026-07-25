@@ -46,20 +46,20 @@ The repository should follow a conventional Laravel package layout. The consumer
 
 ### Translation discovery
 
-| Contract                                                                                                                                         | Status   |
-| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| Laravel backend helpers such as `__()` are detected as backend occurrences.                                                                      | Complete |
-| Vue/JavaScript translation and plural helpers such as `$t()`, `trans()`, `$tChoice()`, and `transChoice()` are detected as frontend occurrences. | Complete |
-| A translation is marked `is_frontend` when its discovered source is frontend code.                                                               | Complete |
-| Stale frontend flags are removed on a later sync when a key is no longer used by frontend code.                                                  | Complete |
-| Standard Laravel framework language sources and optional Cashier sources are scanned by default.                                                 | Complete |
-| Supported dynamic template and concatenation expressions are recorded as wildcard patterns with source metadata.                                 | Complete |
-| Laravel runtime-generated translation families are retained through explicit default patterns.                                                   | Complete |
-| Open patterns retain matching concrete values through Parse and Sync without preventing normal approved publishing.                              | Complete |
-| Finite patterns can bind to arrays, enums, container-resolved providers, or runtime callbacks and seed their concrete keys.                      | Complete |
-| Patterns detected in frontend source contribute their PHP groups to the frontend manifest.                                                       | Complete |
-| Database rows absent from both scanned source and language files are retained and classified as Orphans.                                         | Complete |
-| Displayed timestamps are ISO values from the server and formatted in the browser's local timezone through a shared composable.                   | Complete |
+| Contract                                                                                                                                                                             | Status   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| Laravel backend helpers and plural variants such as `__()`, `trans_choice()`, `@choice`, `Lang::choice()`, and translator `choice()` are detected as backend occurrences.            | Complete |
+| Vue/JavaScript translation and plural helpers such as `$t()`, `trans()`, `$tChoice()`, `transChoice()`, `trans_choice()`, and `wTransChoice()` are detected as frontend occurrences. | Complete |
+| A translation is marked `is_frontend` when its discovered source is frontend code.                                                                                                   | Complete |
+| Stale frontend flags are removed on a later sync when a key is no longer used by frontend code.                                                                                      | Complete |
+| Standard Laravel framework language sources and optional Cashier sources are scanned by default.                                                                                     | Complete |
+| Supported dynamic template and concatenation expressions are recorded as wildcard patterns with source metadata.                                                                     | Complete |
+| Laravel runtime-generated translation families are retained through explicit default patterns.                                                                                       | Complete |
+| Open patterns retain matching concrete values through Parse and Sync without preventing normal approved publishing.                                                                  | Complete |
+| Finite patterns can bind to arrays, enums, container-resolved providers, or runtime callbacks and seed their concrete keys.                                                          | Complete |
+| Patterns detected in frontend source contribute their PHP groups to the frontend manifest.                                                                                           | Complete |
+| Database rows absent from both scanned source and language files are retained and classified as Orphans.                                                                             | Complete |
+| Displayed timestamps are ISO values from the server and formatted in the browser's local timezone through a shared composable.                                                       | Complete |
 
 Arbitrary runtime expressions cannot be enumerated safely through source scanning. Their supported fallback is an
 explicit open pattern or finite binding. General AST/data-flow inference and opt-in runtime observation are deferred
@@ -162,6 +162,7 @@ consuming application explicitly owns the endpoint URL and CORS boundary.
 | A future Claude driver can be added without changing the settings page contract.                                                                | Complete |
 | OpenAI uses the Responses API.                                                                                                                  | Complete |
 | Laravel bound parameters, markup, and line breaks are protected and restored.                                                                   | Complete |
+| The base prompt favors natural, idiomatic target-language meaning and register over word-for-word source mirroring.                             | Complete |
 | The OpenAI integration is live-tested with the configured `gpt-5.4-mini` model when credentials are available.                                  | Complete |
 | Placeholder protection follows the newer `TranslateNewPhrases` approach reviewed in the sibling application.                                    | Complete |
 | Available model discovery is provider-backed and constrained to supported translation models.                                                   | Complete |

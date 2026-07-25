@@ -135,12 +135,44 @@
             </article>
             <article class="rounded-xl border border-white/10 bg-white/5 p-5">
                 <p class="text-xs uppercase tracking-wide text-slate-500">Pluralization</p>
-                <p
-                    data-test="choice-translation"
-                    class="mt-2 text-lg font-medium"
-                >
-                    {{ trans_choice('frontend.Items selected', 2, ['count' => 2]) }}
-                </p>
+                <div class="mt-3 space-y-2 text-sm">
+                    <div class="flex items-baseline justify-between gap-4">
+                        <code class="text-xs text-slate-500">trans_choice()</code>
+                        <span
+                            data-test="choice-translation"
+                            class="text-right font-medium"
+                        >
+                            {{ trans_choice('frontend.Items selected', 2, ['count' => 2]) }}
+                        </span>
+                    </div>
+                    <div class="flex items-baseline justify-between gap-4">
+                        <code class="text-xs text-slate-500">@@choice</code>
+                        <span
+                            data-test="choice-translation-directive"
+                            class="text-right font-medium"
+                        >
+                            @choice('frontend.Items selected', 1, ['count' => 1])
+                        </span>
+                    </div>
+                    <div class="flex items-baseline justify-between gap-4">
+                        <code class="text-xs text-slate-500">Lang::choice()</code>
+                        <span
+                            data-test="choice-translation-facade"
+                            class="text-right font-medium"
+                        >
+                            {{ \Illuminate\Support\Facades\Lang::choice('frontend.Items selected', 0, ['count' => 0]) }}
+                        </span>
+                    </div>
+                    <div class="flex items-baseline justify-between gap-4">
+                        <code class="text-xs text-slate-500">translator-&gt;choice()</code>
+                        <span
+                            data-test="choice-translation-instance"
+                            class="text-right font-medium"
+                        >
+                            {{ app('translator')->choice('frontend.Items selected', 3, ['count' => 3]) }}
+                        </span>
+                    </div>
+                </div>
             </article>
         </section>
     </main>

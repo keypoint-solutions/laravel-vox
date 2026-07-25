@@ -92,7 +92,7 @@ return [
         'driver' => env('VOX_TRANSLATE_DRIVER', 'openai'),
         'model' => env('VOX_TRANSLATE_MODEL', env('VOX_OPENAI_MODEL', 'gpt-5.4-mini')),
         'prompt' => env('VOX_TRANSLATE_PROMPT',
-            'Translate the user message from :source to :target. Return only the translation. Preserve Laravel placeholders, tokens, whitespace, line breaks, and all HTML or Markdown markup exactly.'),
+            'Translate the user message from :source to :target naturally and idiomatically, as a native speaker would express the same meaning and register in context; do not mirror the source wording. Return only the translation. Preserve Laravel placeholders, tokens, whitespace, line breaks, and all HTML or Markdown markup exactly.'),
         'guidance' => env('VOX_TRANSLATE_GUIDANCE', ''),
         'use_context' => env('VOX_TRANSLATE_USE_CONTEXT', true),
         'terms' => [

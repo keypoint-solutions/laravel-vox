@@ -191,7 +191,10 @@ VOX_TRANSLATE_MODEL=gpt-5.4-mini
 
 Supported models are retrieved from the provider account and constrained by the package's text-model catalog. Project-specific terminology or tone guidance can be stored from `/vox/settings`.
 
-The driver masks and restores Laravel parameters such as `:name`, `%count%`, `{value}`, and printf tokens while preserving markup and line breaks. A future provider can implement the package's small translation-driver contract without changing the settings UI.
+The default prompt favors natural, idiomatic target-language meaning and register rather than word-for-word source
+mirroring. The driver masks and restores Laravel parameters such as `:name`, `%count%`, `{value}`, and printf tokens
+while preserving markup and line breaks. A future provider can implement the package's small translation-driver
+contract without changing the settings UI.
 
 ## Vue frontend translations
 
