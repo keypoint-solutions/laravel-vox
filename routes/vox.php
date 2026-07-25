@@ -47,6 +47,8 @@ Route::middleware($configMiddleware)
 
         Route::post('/manage/translations', [ManageTranslationController::class, 'store'])
             ->name('manage.translations.store');
+        Route::post('/manage/translations/translate-draft', [ManageTranslationController::class, 'translateDraft'])
+            ->name('manage.translations.translate-draft');
         Route::patch('/manage/translations/{translation}', [ManageTranslationController::class, 'update'])
             ->name('manage.translations.update');
         Route::post('/manage/translations/{translation}/toggle-approval',

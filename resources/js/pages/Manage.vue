@@ -172,6 +172,7 @@
     const toastTimer = ref<ReturnType<typeof setTimeout> | null>(null);
     const isCreatingDynamic = ref(false);
     const isStoringDynamic = ref(false);
+    const isTranslatingDynamic = ref(false);
     const newDynamicPattern = ref('');
     const newDynamicKey = ref('');
     const newDynamicValues = ref<Record<string, string>>({});
@@ -344,6 +345,16 @@
     });
 
     const targetLocales = computed(() => locales.value.filter((locale) => locale !== baseLocale.value));
+    const newDynamicBaseValue = computed(() => newDynamicValues.value[baseLocale.value] ?? '');
+    const missingDynamicTargetLocales = computed(() =>
+        targetLocales.value.filter((locale) => (newDynamicValues.value[locale] ?? '').trim() === '')
+    );
+    const canTranslateDynamic = computed(
+        () =>
+            aiStatus.value.available &&
+            newDynamicBaseValue.value.trim() !== '' &&
+            missingDynamicTargetLocales.value.length > 0
+    );
     const canTranslate = computed(
         () => aiStatus.value.available && baseLocaleValue.value.trim() !== '' && targetLocales.value.length > 0
     );
@@ -496,11 +507,52 @@
     }
 
     function closeDynamicCreate(): void {
+        if (isStoringDynamic.value || isTranslatingDynamic.value) {
+            return;
+        }
+
         isCreatingDynamic.value = false;
         newDynamicPattern.value = '';
         newDynamicKey.value = '';
         newDynamicValues.value = {};
         newDynamicError.value = null;
+    }
+
+    function translateMissingDynamicValues(): void {
+        if (!canTranslateDynamic.value) {
+            return;
+        }
+
+        isTranslatingDynamic.value = true;
+        newDynamicError.value = null;
+
+        router.post(
+            voxRoutes.value?.manage_translation_translate_draft ?? '',
+            {
+                locales: missingDynamicTargetLocales.value,
+                base_value: newDynamicBaseValue.value,
+                key: newDynamicKey.value.trim(),
+            },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onError: (errors) => {
+                    newDynamicError.value = Object.values(errors)[0] ?? 'Unable to translate the target values.';
+                },
+                onSuccess: (successPage) => {
+                    const translatedValues = successPage.flash?.translated_values as Record<string, string> | undefined;
+
+                    if (translatedValues) {
+                        Object.entries(translatedValues).forEach(([locale, value]) => {
+                            newDynamicValues.value[locale] = value;
+                        });
+                    }
+                },
+                onFinish: () => {
+                    isTranslatingDynamic.value = false;
+                },
+            }
+        );
     }
 
     function storeDynamicTranslation(): void {
@@ -526,6 +578,7 @@
                 onSuccess: (successPage) => {
                     const message =
                         (successPage.flash?.success as string | undefined) ?? 'Dynamic translation created.';
+                    isStoringDynamic.value = false;
                     closeDynamicCreate();
                     showToast(message);
                 },
@@ -1415,11 +1468,27 @@
             </FormField>
 
             <div class="border-t pt-5">
-                <p class="text-sm font-semibold">Translation values</p>
-                <p class="text-muted-foreground mt-1 text-xs">
-                    The base locale is required. Create the translation first, then complete missing target locales from
-                    its editor or with bulk AI.
-                </p>
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-sm font-semibold">Translation values</p>
+                        <p class="text-muted-foreground mt-1 text-xs">
+                            Enter the required base value, then fill target locales manually or with AI before creating
+                            the translation.
+                        </p>
+                    </div>
+                    <Button
+                        v-if="aiStatus.available"
+                        data-test="translate-dynamic-missing"
+                        :disabled="!canTranslateDynamic || isTranslatingDynamic || isStoringDynamic"
+                        class="shrink-0"
+                        size="sm"
+                        variant="outline"
+                        @click="translateMissingDynamicValues"
+                    >
+                        <Sparkles class="size-4" />
+                        {{ isTranslatingDynamic ? 'Translating…' : 'AI fill missing' }}
+                    </Button>
+                </div>
 
                 <div class="mt-4 space-y-4">
                     <FormField
@@ -1443,7 +1512,7 @@
         <template #footer>
             <div class="flex items-center justify-end gap-2">
                 <Button
-                    :disabled="isStoringDynamic"
+                    :disabled="isStoringDynamic || isTranslatingDynamic"
                     variant="outline"
                     @click="closeDynamicCreate"
                 >
@@ -1453,6 +1522,7 @@
                     data-test="store-dynamic-translation"
                     :disabled="
                         isStoringDynamic ||
+                        isTranslatingDynamic ||
                         newDynamicPattern === '' ||
                         newDynamicKey.trim() === '' ||
                         !(newDynamicValues[baseLocale] ?? '').trim()

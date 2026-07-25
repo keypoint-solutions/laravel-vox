@@ -48,8 +48,10 @@ The repository should follow a conventional Laravel package layout. The consumer
 
 | Contract                                                                                                                                                                             | Status   |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| Laravel backend helpers and plural variants such as `__()`, `trans_choice()`, `@choice`, `Lang::choice()`, and translator `choice()` are detected as backend occurrences.            | Complete |
-| Vue/JavaScript translation and plural helpers such as `$t()`, `trans()`, `$tChoice()`, `transChoice()`, `trans_choice()`, and `wTransChoice()` are detected as frontend occurrences. | Complete |
+| Laravel string helpers, directives, facades, and translator calls such as `__()`, `trans()`, `@lang`, `Lang::get()`, `Lang::string()`, `trans_choice()`, and `@choice` are detected. | Complete |
+| Vue/JavaScript translation and plural helpers such as `$t()`, `trans()`, `wTrans()`, `__()`, `$tChoice()`, `transChoice()`, `trans_choice()`, and `wTransChoice()` are detected.     | Complete |
+| Static Laravel `Lang::array()` and translator `array()` calls register their complete translation subtree as a detected dynamic pattern.                                             | Complete |
+| PHP and Blade translation keys assembled only from concatenated string literals are decoded as one static key, not a dynamic wildcard.                                               | Complete |
 | A translation is marked `is_frontend` when its discovered source is frontend code.                                                                                                   | Complete |
 | Stale frontend flags are removed on a later sync when a key is no longer used by frontend code.                                                                                      | Complete |
 | Standard Laravel framework language sources and optional Cashier sources are scanned by default.                                                                                     | Complete |
@@ -64,6 +66,10 @@ The repository should follow a conventional Laravel package layout. The consumer
 Arbitrary runtime expressions cannot be enumerated safely through source scanning. Their supported fallback is an
 explicit open pattern or finite binding. General AST/data-flow inference and opt-in runtime observation are deferred
 enhancements; neither is required for deterministic cleanup safety.
+
+Existence checks such as `Lang::has()` are intentionally not treated as string occurrences. Dynamically constructed
+array-retrieval paths still require an explicit open pattern because their precise subtree cannot be resolved
+statically.
 
 ### Frontend consumption
 
@@ -137,6 +143,7 @@ consuming application explicitly owns the endpoint URL and CORS boundary.
 | Frontend group indicators describe whether export is automatic, explicitly configured, or inherent to JSON. | Complete |
 | Orphans and dynamic keys are visibly identified and have dedicated filters in Manage.                       | Complete |
 | Users can create concrete values covered by an open dynamic pattern, with the source-locale value required. | Complete |
+| The dynamic-value editor can AI-fill missing target locales from the source value before creation.          | Complete |
 | The dynamic-value editor exposes a one-click copy action for the selected pattern's stable prefix.          | Complete |
 
 ### Locale provisioning
