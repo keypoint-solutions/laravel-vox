@@ -8,6 +8,7 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use KeypointSolutions\LaravelVox\Support\AiModelDiscovery;
+use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 
 class SettingsController
@@ -15,12 +16,14 @@ class SettingsController
     public function __construct(
         private VoxSettingsRepository $settings,
         private AiModelDiscovery $models,
+        private VoxDynamicKeyRegistry $dynamicKeys,
     ) {}
 
     public function index(): Response
     {
         return Inertia::render('Settings', [
             'settings' => $this->settings->all(),
+            'dynamicPatterns' => $this->dynamicKeys->entries(),
             'ai' => $this->models->discover(),
         ]);
     }
@@ -28,15 +31,15 @@ class SettingsController
     public function update(Request $request): RedirectResponse
     {
         $section = $request->validate([
-            'section' => ['required', 'string', Rule::in(['ai', 'protection', 'sync'])],
+            'section' => ['required', 'string', Rule::in(['ai', 'dynamic_keys', 'protection', 'sync'])],
         ])['section'];
 
         if ($section === 'ai') {
             return $this->updateAiSettings($request);
         }
 
-        if ($section === 'protection') {
-            return $this->updateProtectionSettings($request);
+        if (in_array($section, ['dynamic_keys', 'protection'], true)) {
+            return $this->updateDynamicKeySettings($request, $section === 'protection');
         }
 
         return $this->updateSyncSettings($request);
@@ -95,32 +98,33 @@ class SettingsController
         return Inertia::flash('success', 'Remote sync settings saved.')->back();
     }
 
-    private function updateProtectionSettings(Request $request): RedirectResponse
+    private function updateDynamicKeySettings(Request $request, bool $legacyRequest): RedirectResponse
     {
+        $field = $legacyRequest ? 'protected_keys' : 'dynamic_key_patterns';
         $validated = $request->validate([
-            'protected_keys' => ['nullable', 'string', 'max:10000'],
+            $field => ['nullable', 'string', 'max:10000'],
         ]);
 
-        $protectedKeys = collect(preg_split('/\R/', $validated['protected_keys'] ?? '') ?: [])
-            ->map(fn (string $key): string => trim($key))
+        $patterns = collect(preg_split('/\R/', $validated[$field] ?? '') ?: [])
+            ->map(fn (string $pattern): string => VoxDynamicKeyRegistry::normalizePattern($pattern))
             ->filter()
             ->unique()
             ->values();
 
-        if ($protectedKeys->count() > 100 || $protectedKeys->contains(
-            fn (string $key): bool => mb_strlen($key) > 255
+        if ($patterns->count() > 100 || $patterns->contains(
+            fn (string $pattern): bool => mb_strlen($pattern) > 255
         )) {
             return redirect()->back()->withErrors([
-                'protected_keys' => 'Use at most 100 protected keys or prefixes, with no entry longer than 255 characters.',
+                $field => 'Use at most 100 dynamic key patterns, with no entry longer than 255 characters.',
             ]);
         }
 
-        if (! $this->settings->save(['protected_keys' => $protectedKeys->all()])) {
+        if (! $this->settings->save(['dynamic_key_patterns' => $patterns->all()])) {
             return redirect()->back()->withErrors([
                 'general' => 'Settings storage is unavailable. Run the Laravel Vox migrations and try again.',
             ]);
         }
 
-        return Inertia::flash('success', 'Protected keys saved.')->back();
+        return Inertia::flash('success', 'Dynamic key patterns saved.')->back();
     }
 }

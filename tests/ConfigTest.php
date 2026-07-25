@@ -10,6 +10,17 @@ it('scans Laravel and optional Cashier sources by default', function () {
         ->toContain('/vendor/laravel/cashier/src');
 });
 
+it('retains Laravel runtime-generated translation families by default', function (): void {
+    $defaultConfig = require __DIR__.'/../config/vox.php';
+
+    expect($defaultConfig['dynamic_keys']['patterns'])->toBe([
+        'auth.*',
+        'pagination.*',
+        'passwords.*',
+        'validation.*',
+    ])->and($defaultConfig['dynamic_keys']['bindings'])->toBe([]);
+});
+
 it('normalizes comma separated and single env list values', function (): void {
     $environment = Env::getRepository();
     $frontendGroups = $environment->get('VOX_FRONTEND_GROUPS');
@@ -42,4 +53,16 @@ it('uses a brief prompt with immutable Laravel value safeguards', function (): v
         ->toContain('Laravel placeholders')
         ->toContain('HTML or Markdown markup exactly')
         ->not->toContain(':text');
+});
+
+it('keeps runtime frontend delivery opt in', function (): void {
+    $config = require __DIR__.'/../config/vox.php';
+
+    expect($config['frontend']['runtime'])
+        ->toMatchArray([
+            'enabled' => false,
+            'middleware' => [],
+        ])
+        ->and($config['frontend']['runtime']['path'])
+        ->toEndWith('storage/vox/frontend-translations');
 });

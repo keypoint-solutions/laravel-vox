@@ -15,6 +15,10 @@
         "./vue": {
             "types": "./resources/js/consumer/vue.d.ts",
             "import": "./resources/js/consumer/vue.js"
+        },
+        "./vue/runtime": {
+            "types": "./resources/js/consumer/runtime.d.ts",
+            "import": "./resources/js/consumer/runtime.js"
         }
     },
     "scripts": {

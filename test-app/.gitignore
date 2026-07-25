@@ -21,6 +21,8 @@
 /storage/*.key
 /storage/pail
 /storage/vox/frontend.json
+/storage/vox/dynamic.json
+/storage/vox/frontend-translations/
 /vendor
 /lang/*/vox_remote_demo.php
 /lang/*/vox_browser_*.php

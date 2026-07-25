@@ -26,13 +26,13 @@ it('saves provider-neutral AI guidance with visible feedback', function (): void
         ->fill('#translate_guidance', 'Use concise browser-test wording.')
         ->pressAndWaitFor('Save AI settings')
         ->assertSee('AI settings saved')
-        ->fill('#protected_keys', "auth.\nbrowser.protected.")
-        ->pressAndWaitFor('Save protected keys')
-        ->assertSee('Protected keys saved')
+        ->fill('#dynamic_key_patterns', "auth.*\nbrowser.dynamic.*")
+        ->pressAndWaitFor('Save dynamic patterns')
+        ->assertSee('Dynamic patterns saved')
         ->assertNoJavaScriptErrors();
 
     expect(json_decode(VoxSetting::query()->findOrFail('translate_guidance')->value, true))
         ->toBe('Use concise browser-test wording.')
-        ->and(json_decode(VoxSetting::query()->findOrFail('protected_keys')->value, true))
-        ->toBe(['auth.', 'browser.protected.']);
+        ->and(json_decode(VoxSetting::query()->findOrFail('dynamic_key_patterns')->value, true))
+        ->toBe(['auth.*', 'browser.dynamic.*']);
 });

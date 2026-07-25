@@ -14,6 +14,7 @@ use KeypointSolutions\LaravelVox\Support\AiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\OpenAiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\UnavailableAiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\VoxDatabaseManager;
+use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use Spatie\LaravelPackageTools\Package;
@@ -23,10 +24,17 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
 {
     public function packageRegistered(): void
     {
+        $this->app->singleton(
+            VoxDynamicKeyRegistry::class,
+            fn ($app): VoxDynamicKeyRegistry => new VoxDynamicKeyRegistry(
+                $app->make(VoxSettingsRepository::class)
+            )
+        );
+
         $this->app->bind(
             VoxKeyProtector::class,
             fn ($app): VoxKeyProtector => new VoxKeyProtector(
-                $app->make(VoxSettingsRepository::class)->protectedKeys()
+                $app->make(VoxSettingsRepository::class)->dynamicKeyPatterns()
             )
         );
 

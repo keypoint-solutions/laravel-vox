@@ -7,49 +7,26 @@
 // psalm-disable-file
 
 return [
-    // text-sm"> <span class="text-muted-foreground">Short 2: </span> <span class="font-medium text-foreground">{{ $t(KEY) }}</span> </p> <p class="mt-2 text-sm">
-    // resources/js/pages/Welcome.vue:116
-    'Also works.' => 'Funcționează și.',
-    // >Multiline Phrase: </span> <span class="font-medium text-foreground">{{ $t(`KEY Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation
-    // resources/js/pages/Welcome.vue:146
-    'Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                                Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                                Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                                Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-    // <span class="text-muted-foreground">Phrase 1: </span> <span class="font-medium text-foreground">{{ $t(KEY, ) }}</span> </p>
-    // resources/js/pages/Welcome.vue:129
-    'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-    // text-sm"> <span class="text-muted-foreground">Regular: </span> <span class="font-medium text-foreground">{{ $t(KEY) }}</span> </p> <p class="mt-2 text-sm">
-    // resources/js/pages/Welcome.vue:104
+    // 22em] text-violet-300 uppercase">Vue consumer</p> <h1 class="mt-3 text-3xl font-semibold tracking-tight">{{ $t(KEY) }}</h1> <p class="mt-3 text-slate-400"> This page loads the same Laravel translation files as the backend, including
+    // resources/js/pages/Welcome.vue:48
     'Regular translation' => 'Traducere regulată',
-    // >Parametrized 1: </span> <span class="font-medium text-foreground">{{ $t(KEY, { date: new Date().toLocaleDateString(), }) }}</span>
-    // resources/js/pages/Welcome.vue:182
+    // data-test="parameter-translation" class="mt-2 text-lg font-medium" > {{ $t(KEY, { date: '24 July 2026' }) }} </p> </article> <article class="rounded-xl border border-white/10 bg-white/5 p-5">
+    // resources/js/pages/Welcome.vue:101
     'Today is :date' => 'Astăzi este :date',
-    // >Parametrized 2: </span> <span class="font-medium text-foreground">{{ $t(KEY, { date: new Date().toLocaleDateString(), time: new Date().toLocaleTimeString(), })
-    // resources/js/pages/Welcome.vue:192
-    'Today is :date, :time.' => 'Astăzi este :date, :time.',
-    // text-sm"> <span class="text-muted-foreground">Short 1: </span> <span class="font-medium text-foreground">{{ $t(KEY) }}</span> </p> <p class="mt-2 text-sm">
-    // resources/js/pages/Welcome.vue:110
+    // data-test="php-translation" class="mt-2 text-lg font-medium" > {{ $t(KEY) }} </p> </article> <article class="rounded-xl border border-white/10 bg-white/5 p-5">
+    // resources/js/pages/Welcome.vue:83
     'Works.' => 'Funcționează.',
-    // const dynamicLabels = computed(() => { return { label1: trans(KEY), label2: trans('frontend.dynamicLabels.labels.Dynamic Label 2'), }; });
-    // resources/js/pages/Welcome.vue:24
+    // data-test="dynamic-translation" class="mt-2 text-lg font-medium" > {{ trans(KEY) }}: {{ $t('frontend.dynamicLabels.values.' + dynamicValueKey) }} </p> </article>
+    // resources/js/pages/Welcome.vue:110
     'dynamicLabels.labels.Dynamic Label 1' => 'Etichetă Dinamică 1',
-    // = computed(() => { return { label1: trans('frontend.dynamicLabels.labels.Dynamic Label 1'), label2: trans(KEY), }; });
-    // resources/js/pages/Welcome.vue:25
-    'dynamicLabels.labels.Dynamic Label 2' => 'Etichetă Dinamică 2',
     'dynamicLabels.values.label1' => 'Valoare etichetă 1',
-    // const dynamicLabels2 = computed(() => { return { label1: trans(KEY), label2: trans('frontend.dynamicLabels2.labels.Dynamic Label 2'), }; });
-    // resources/js/pages/Welcome.vue:31
-    'dynamicLabels2.labels.Dynamic Label 1' => 'Etichetă Dinamică 1',
-    // = computed(() => { return { label1: trans('frontend.dynamicLabels2.labels.Dynamic Label 1'), label2: trans(KEY), }; }); </script>
-    // resources/js/pages/Welcome.vue:32
-    'dynamicLabels2.labels.Dynamic Label 2' => 'Etichetă Dinamică 2',
     'dynamicLabels2.values.label1' => 'Valoare etichetă 1',
-    // <span class="text-muted-foreground">Phrase 2: </span> <span class="font-medium text-foreground">{{ $t(KEY, ) }}</span> </p>
-    // resources/js/pages/Welcome.vue:137
-    'grouped.Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-    // text-sm"> <span class="text-muted-foreground">Short 3: </span> <span class="font-medium text-foreground">{{ $t(KEY) }}</span> </p> <p class="mt-2 text-sm">
-    // resources/js/pages/Welcome.vue:122
-    'grouped.Works.' => 'Funcționează.',
+    // 🗑️ 'Also works.' => 'Funcționează și.',
+    // 🗑️ 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+    // 🗑️ 'Today is :date, :time.' => 'Astăzi este :date, :time.',
+    // 🗑️ 'dynamicLabels.labels.Dynamic Label 2' => 'Etichetă Dinamică 2',
+    // 🗑️ 'dynamicLabels2.labels.Dynamic Label 1' => 'Etichetă Dinamică 1',
+    // 🗑️ 'dynamicLabels2.labels.Dynamic Label 2' => 'Etichetă Dinamică 2',
+    // 🗑️ 'grouped.Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+    // 🗑️ 'grouped.Works.' => 'Funcționează.',
 ];

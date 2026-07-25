@@ -3,6 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use KeypointSolutions\LaravelVox\Http\Controllers\AuditController;
 use KeypointSolutions\LaravelVox\Http\Controllers\DashboardController;
+use KeypointSolutions\LaravelVox\Http\Controllers\DownloadTranslationArchiveController;
+use KeypointSolutions\LaravelVox\Http\Controllers\ImportTranslationArchiveController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ManageController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ManageTranslationController;
 use KeypointSolutions\LaravelVox\Http\Controllers\PublishController;
@@ -16,6 +18,8 @@ use KeypointSolutions\LaravelVox\Http\Middleware\Authorize;
 
 $configMiddleware = config('vox.system.middleware', []);
 
+require __DIR__.'/translations.php';
+
 Route::post('/sync', SyncController::class)
     ->middleware(config('vox.sync.middleware', []))
     ->name('sync.remote');
@@ -26,6 +30,8 @@ Route::middleware($configMiddleware)
 
         Route::get('/sync', SyncPageController::class)->name('sync');
         Route::post('/sync/local', SyncLocalTranslationsController::class)->name('sync.local');
+        Route::get('/sync/archive', DownloadTranslationArchiveController::class)->name('sync.archive.download');
+        Route::post('/sync/archive', ImportTranslationArchiveController::class)->name('sync.archive.import');
         Route::post('/sync/environments', [SyncEnvironmentController::class, 'store'])
             ->name('sync.environments.store');
         Route::put('/sync/environments/{environment}', [SyncEnvironmentController::class, 'update'])
@@ -37,6 +43,8 @@ Route::middleware($configMiddleware)
 
         Route::get('/manage', ManageController::class)->name('manage');
 
+        Route::post('/manage/translations', [ManageTranslationController::class, 'store'])
+            ->name('manage.translations.store');
         Route::patch('/manage/translations/{translation}', [ManageTranslationController::class, 'update'])
             ->name('manage.translations.update');
         Route::post('/manage/translations/{translation}/toggle-approval',

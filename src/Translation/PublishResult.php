@@ -11,8 +11,8 @@ class PublishResult
         private int $values,
         private array $files,
         private int $incompleteTranslations,
-        private int $protectedTranslations,
         private int $orphanTranslations,
+        private array $frontendFiles = [],
     ) {}
 
     public function values(): int
@@ -35,9 +35,7 @@ class PublishResult
 
     public function skippedTranslations(): int
     {
-        return $this->incompleteTranslations
-            + $this->protectedTranslations
-            + $this->orphanTranslations;
+        return $this->incompleteTranslations + $this->orphanTranslations;
     }
 
     public function incompleteTranslations(): int
@@ -45,13 +43,21 @@ class PublishResult
         return $this->incompleteTranslations;
     }
 
-    public function protectedTranslations(): int
-    {
-        return $this->protectedTranslations;
-    }
-
     public function orphanTranslations(): int
     {
         return $this->orphanTranslations;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function frontendFiles(): array
+    {
+        return $this->frontendFiles;
+    }
+
+    public function frontendFileCount(): int
+    {
+        return count($this->frontendFiles);
     }
 }

@@ -3,21 +3,17 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
+use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
-use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
-use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileUpdater;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
-use KeypointSolutions\LaravelVox\Translation\TranslationKey;
 use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
 
-use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\select;
 use function Laravel\Prompts\spin;
@@ -80,7 +76,11 @@ class ParseTranslationsCommand extends Command
         );
 
         $scanResults = spin(fn () => $scanner->scan(), 'Scanning translation keys');
-        app(VoxFrontendManifest::class)->writeFromScanResults($scanResults);
+        $dynamicKeys = $scanner->dynamicKeys();
+        $dynamicKeyRegistry = app(VoxDynamicKeyRegistry::class);
+        $dynamicKeyRegistry->writeDetectedPatterns($dynamicKeys);
+        $scanResults = $dynamicKeyRegistry->mergeEnumeratedScanResults($scanResults);
+        app(VoxFrontendManifest::class)->writeFromScanResults($scanResults, $dynamicKeys);
 
         if ($this->output->isVerbose()) {
             $this->outputAnalyzedFiles($scanner);
@@ -96,9 +96,8 @@ class ParseTranslationsCommand extends Command
 
         $fileRepository = new TranslationFileRepository(new TranslationFileWriter);
         $beforeSnapshot = $this->snapshotLangFiles($fileRepository->langPath());
-        $this->handleDynamicKeys($scanner->dynamicKeys(), $fileRepository, $baseLocale);
-        $protector = app(VoxKeyProtector::class);
-        $updater = new TranslationFileUpdater($fileRepository, $protector);
+        $this->outputDynamicKeys($dynamicKeys);
+        $updater = new TranslationFileUpdater($fileRepository, app(VoxDynamicKeyRegistry::class));
 
         $result = $updater->updateFromScan($scanResults, $locales, $baseLocale);
 
@@ -122,47 +121,27 @@ class ParseTranslationsCommand extends Command
     }
 
     /**
-     * @param  array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>  $dynamicKeys
+     * @param  array<int, array{pattern: string, prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>  $dynamicKeys
      */
-    private function handleDynamicKeys(array $dynamicKeys, TranslationFileRepository $fileRepository, string $baseLocale): void
+    private function outputDynamicKeys(array $dynamicKeys): void
     {
         if ($dynamicKeys === []) {
             return;
         }
 
-        $protector = app(VoxKeyProtector::class);
-        $suggestions = $this->buildDynamicSuggestions($dynamicKeys, $protector);
-
-        if ($suggestions === []) {
-            return;
-        }
-
-        warning('Dynamic translation keys detected.');
+        info('Dynamic translation patterns detected and registered.');
         table(
-            ['Prefix', 'Sample key', 'Source', 'Location'],
+            ['Pattern', 'Exposure', 'Source', 'Location'],
             array_map(
-                fn (array $suggestion) => [
-                    $this->formatDynamicDisplay($suggestion['prefix']),
-                    $this->formatDynamicDisplay($suggestion['sample_full_key']),
-                    $this->formatDynamicSource($suggestion),
-                    $this->formatDynamicLocation($suggestion),
+                fn (array $dynamicKey) => [
+                    $this->formatDynamicDisplay($dynamicKey['pattern']),
+                    $dynamicKey['is_frontend'] ? 'Frontend' : 'Backend',
+                    $this->formatDynamicSource($dynamicKey),
+                    $this->formatDynamicLocation($dynamicKey),
                 ],
-                $suggestions
+                $dynamicKeys
             )
         );
-
-        if (! $this->input->isInteractive()) {
-            info('Run vox:parse interactively to add protected prefixes and sample keys.');
-
-            return;
-        }
-
-        if (! confirm('Add these prefixes to protected keys and create sample entries?')) {
-            return;
-        }
-
-        $this->appendProtectedPrefixes($suggestions);
-        $this->addSampleEntries($suggestions, $fileRepository, $baseLocale);
     }
 
     /**
@@ -225,48 +204,6 @@ class ParseTranslationsCommand extends Command
         return $path;
     }
 
-    /**
-     * @param  array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>  $dynamicKeys
-     * @return array<int, array{prefix: string, sample_full_key: string, group: string|null, key: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>
-     */
-    private function buildDynamicSuggestions(array $dynamicKeys, VoxKeyProtector $protector): array
-    {
-        $suggestions = [];
-        $seen = [];
-
-        foreach ($dynamicKeys as $dynamic) {
-            $prefix = $dynamic['prefix'];
-            $suffix = $dynamic['suffix'];
-            $sampleFullKey = $prefix.'VALUE'.$suffix;
-            $translationKey = TranslationKey::fromRaw($sampleFullKey);
-            $identifier = $prefix.'|'.$suffix;
-
-            if (isset($seen[$identifier])) {
-                continue;
-            }
-
-            if ($protector->isProtected($translationKey->key, $translationKey->group)) {
-                continue;
-            }
-
-            $seen[$identifier] = true;
-
-            $suggestions[] = [
-                'prefix' => $prefix,
-                'sample_full_key' => $sampleFullKey,
-                'group' => $translationKey->group,
-                'key' => $translationKey->key,
-                'source' => $dynamic['source'],
-                'is_frontend' => $dynamic['is_frontend'],
-                'file' => $dynamic['file'],
-                'line' => $dynamic['line'] ?? null,
-                'context' => $dynamic['context'] ?? null,
-            ];
-        }
-
-        return $suggestions;
-    }
-
     private function formatDynamicDisplay(string $value): string
     {
         $collapsed = preg_replace('/\s+/', ' ', $value) ?? $value;
@@ -325,116 +262,5 @@ class ParseTranslationsCommand extends Command
     private function relativePath(string $filePath): string
     {
         return ltrim(Str::replaceFirst(base_path(), '', $filePath), DIRECTORY_SEPARATOR);
-    }
-
-    /**
-     * @param  array<int, array{prefix: string, sample_full_key: string, group: string|null, key: string, source: string|null, is_frontend: bool, file: string}>  $suggestions
-     */
-    private function appendProtectedPrefixes(array $suggestions): void
-    {
-        $prefixes = array_values(array_unique(array_map(
-            fn (array $suggestion) => $suggestion['prefix'],
-            $suggestions
-        )));
-        $settings = app(VoxSettingsRepository::class);
-        $existing = $settings->protectedKeys();
-
-        $protected = array_values(array_unique(array_merge($existing, $prefixes)));
-        config()->set('vox.parse.protected_keys', $protected);
-        $settings->save(['protected_keys' => $protected]);
-
-        $configPath = config_path('vox.php');
-
-        if (! File::exists($configPath)) {
-            warning('Unable to update vox.php. Publish the config file to persist protected keys.');
-
-            return;
-        }
-
-        $contents = File::get($configPath);
-        $entry = "'protected_keys' => [\n";
-
-        foreach ($protected as $key) {
-            $sanitized = str_replace("'", "\\'", $key);
-            $entry .= "            '".$sanitized."',\n";
-        }
-
-        $entry .= '        ],';
-
-        $pattern = "/'protected_keys' => \\[[^\\]]*\\],/s";
-
-        if (preg_match($pattern, $contents) === 1) {
-            $contents = preg_replace($pattern, $entry, $contents, 1) ?? $contents;
-        } elseif (str_contains($contents, "'protected_keys' => []")) {
-            $contents = str_replace("'protected_keys' => []", $entry, $contents);
-        }
-
-        File::put($configPath, $contents);
-    }
-
-    /**
-     * @param  array<int, array{prefix: string, sample_full_key: string, group: string|null, key: string, source: string|null, is_frontend: bool, file: string}>  $suggestions
-     */
-    private function addSampleEntries(array $suggestions, TranslationFileRepository $fileRepository, string $baseLocale): void
-    {
-        foreach ($suggestions as $suggestion) {
-            if ($suggestion['group'] === null) {
-                $existing = $fileRepository->loadJson($baseLocale);
-
-                if (! array_key_exists($suggestion['key'], $existing)) {
-                    $existing[$suggestion['key']] = $suggestion['key'];
-                    $fileRepository->saveJson($baseLocale, $existing);
-                }
-
-                continue;
-            }
-
-            $existing = $fileRepository->loadGroup($baseLocale, $suggestion['group']);
-            $flatExisting = Arr::dot($existing);
-
-            if (array_key_exists($suggestion['key'], $flatExisting) || Arr::has($existing, $suggestion['key'])) {
-                continue;
-            }
-
-            if (config('vox.parse.output', 'flat') === 'nested' || Arr::has($existing, $suggestion['key'])) {
-                Arr::set($existing, $suggestion['key'], $this->sampleValueForKey($suggestion['key'], $suggestion['group']));
-            } else {
-                $existing[$suggestion['key']] = $this->sampleValueForKey($suggestion['key'], $suggestion['group']);
-            }
-
-            $fileRepository->saveGroup($baseLocale, $suggestion['group'], $existing);
-        }
-    }
-
-    private function sampleValueForKey(string $key, ?string $group): string
-    {
-        if ($group === null) {
-            return $key;
-        }
-
-        return $this->stripKeyPrefixes($key);
-    }
-
-    private function stripKeyPrefixes(string $key): string
-    {
-        $remaining = $key;
-
-        while (true) {
-            $dot = strpos($remaining, '.');
-
-            if ($dot === false || $dot === strlen($remaining) - 1) {
-                break;
-            }
-
-            $segment = substr($remaining, 0, $dot);
-
-            if ($segment === '' || preg_match('/\\s/', $segment) === 1) {
-                break;
-            }
-
-            $remaining = substr($remaining, $dot + 1);
-        }
-
-        return $remaining;
     }
 }

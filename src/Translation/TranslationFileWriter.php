@@ -108,7 +108,8 @@ class TranslationFileWriter
         $sorted = $this->sortArray($commented);
 
         foreach ($sorted as $key => $value) {
-            $lines[] = str_repeat('    ', $indent).'// '.$this->obsoleteCommentPrefix().' '.$this->exportString($key).' => '.$this->exportValue($value).',';
+            $lines[] = str_repeat('    ', $indent).'// '.$this->obsoleteCommentPrefix().' '
+                .$this->exportCommentValue((string) $key).' => '.$this->exportCommentValue($value).',';
         }
 
         return $lines;
@@ -183,5 +184,13 @@ class TranslationFileWriter
         }
 
         return var_export($value, true);
+    }
+
+    private function exportCommentValue(mixed $value): string
+    {
+        return json_encode(
+            $value,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+        );
     }
 }

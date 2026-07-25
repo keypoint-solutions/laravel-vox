@@ -1,5 +1,11 @@
 <?php
 
+use KeypointSolutions\LaravelVox\Translation\FrontendTranslationArtifacts;
+
+beforeEach(function (): void {
+    app(FrontendTranslationArtifacts::class)->publish();
+});
+
 it('renders Laravel translations in Blade for every demo locale', function (): void {
     visit('/en/blade')
         ->assertSee('Blade consumer')
@@ -20,7 +26,7 @@ it('renders Laravel translations in Blade for every demo locale', function (): v
         ->assertNoJavaScriptErrors();
 });
 
-it('loads filtered Laravel translations through the public Vue integration', function (): void {
+it('loads filtered Laravel translations from the runtime endpoint through the public Vue integration', function (): void {
     visit('/fr/vue')
         ->assertSee('Vue consumer')
         ->assertSee('Traduction régulière')

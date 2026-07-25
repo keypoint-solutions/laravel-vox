@@ -41,6 +41,19 @@ it('writes only groups discovered in frontend source', function (): void {
     ]);
 });
 
+it('includes groups discovered only through dynamic frontend patterns', function (): void {
+    app(VoxFrontendManifest::class)->writeFromScanResults([], [[
+        'pattern' => 'enums.user_roles.*',
+        'prefix' => 'enums.user_roles.',
+        'suffix' => '',
+        'is_frontend' => true,
+    ]]);
+
+    expect(json_decode(File::get($this->frontendManifestPath), true))->toBe([
+        'groups' => ['enums'],
+    ]);
+});
+
 it('allows an explicit frontend group override', function (): void {
     config()->set('vox.frontend.groups', ['shared', 'checkout']);
 

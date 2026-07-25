@@ -8,6 +8,7 @@ use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
+use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
 
 beforeEach(function (): void {
     $this->withoutVite();
@@ -64,41 +65,41 @@ it('shows real publish readiness statistics', function (): void {
             ->where('stats.publishable', 2)
             ->where('stats.pending', 1)
             ->where('stats.incomplete', 1)
-            ->where('stats.protected', 0)
+            ->where('stats.dynamic', 0)
             ->where('stats.orphan', 0)
         );
 });
 
-it('does not overwrite protected or orphan translation values', function (): void {
-    config()->set('vox.parse.protected_keys', [
-        'messages.protected.',
-        'Protected JSON',
+it('publishes complete dynamic values while leaving orphans untouched', function (): void {
+    config()->set('vox.dynamic_keys.patterns', [
+        'messages.dynamic.*',
+        'Dynamic JSON',
     ]);
 
     $files = new TranslationFileRepository(new TranslationFileWriter);
 
     foreach (['en', 'fr'] as $locale) {
         $files->saveGroup($locale, 'messages', [
-            'protected' => [
+            'dynamic' => [
                 'notice' => $locale === 'en' ? 'File-owned notice' : 'Avis du fichier',
             ],
             'orphan' => $locale === 'en' ? 'Existing orphan' : 'Orphelin existant',
             'publishable' => 'Old',
         ]);
         $files->saveJson($locale, [
-            'Protected JSON' => $locale === 'en' ? 'File-owned JSON' : 'JSON du fichier',
+            'Dynamic JSON' => $locale === 'en' ? 'File-owned JSON' : 'JSON du fichier',
         ]);
     }
 
     VoxTranslation::factory()
         ->approved()
         ->withValues(['en' => 'Database notice', 'fr' => 'Avis de la base'])
-        ->create(['group' => 'messages', 'key' => 'protected.notice']);
+        ->create(['group' => 'messages', 'key' => 'dynamic.notice']);
     VoxTranslation::factory()
         ->json()
         ->approved()
         ->withValues(['en' => 'Database JSON', 'fr' => 'JSON de la base'])
-        ->create(['key' => 'Protected JSON']);
+        ->create(['key' => 'Dynamic JSON']);
     VoxTranslation::factory()
         ->orphan()
         ->approved()
@@ -112,17 +113,17 @@ it('does not overwrite protected or orphan translation values', function (): voi
     $this->from('/vox/publish')
         ->post('/vox/publish')
         ->assertRedirect('/vox/publish')
-        ->assertInertiaFlash('success', 'Published 2 translation values across 2 files.');
+        ->assertInertiaFlash('success', 'Published 6 translation values across 4 files.');
 
     $english = require $this->publishLangPath.'/en/messages.php';
     $englishJson = json_decode(File::get($this->publishLangPath.'/en.json'), true);
     $audit = VoxAudit::query()->where('action', 'publish')->latest('id')->firstOrFail();
 
-    expect($english['protected']['notice'])->toBe('File-owned notice')
+    expect($english['dynamic']['notice'])->toBe('Database notice')
         ->and($english['orphan'])->toBe('Existing orphan')
         ->and($english['publishable'])->toBe('Published')
-        ->and($englishJson['Protected JSON'])->toBe('File-owned JSON')
-        ->and($audit->context['protected_translations'])->toBe(2)
+        ->and($englishJson['Dynamic JSON'])->toBe('Database JSON')
+        ->and($audit->context)->not->toHaveKey('protected_translations')
         ->and($audit->context['orphan_translations'])->toBe(1);
 });
 
@@ -161,4 +162,52 @@ it('publishes approved complete values without overwriting pending values', func
         ->and($englishJson['Publish example'])->toBe('Published JSON')
         ->and(File::get($this->publishLangPath.'/en/messages.php'))->toContain('// Translator note')
         ->and(VoxAudit::query()->where('action', 'publish')->exists())->toBeTrue();
+});
+
+it('rejects executable translation files before publishing any changes', function (): void {
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('fr', 'messages', ['greeting' => 'Garder cette valeur']);
+    File::ensureDirectoryExists($this->publishLangPath.'/en');
+    File::put(
+        $this->publishLangPath.'/en/messages.php',
+        "<?php return ['greeting' => strtoupper('unsafe')];"
+    );
+
+    VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => 'Safe English', 'fr' => 'Français sûr'])
+        ->create(['group' => 'messages', 'key' => 'greeting']);
+
+    expect(fn () => app(TranslationPublisher::class)->publish())
+        ->toThrow(RuntimeException::class, 'contains executable PHP');
+
+    expect(require $this->publishLangPath.'/fr/messages.php')
+        ->toBe(['greeting' => 'Garder cette valeur']);
+});
+
+it('refreshes runtime frontend artifacts after publishing language files', function (): void {
+    $runtimePath = base_path('tests/.tmp/publish-runtime-'.Str::uuid());
+    File::makeDirectory($runtimePath, 0755, true);
+    config()->set('vox.frontend.runtime.enabled', true);
+    config()->set('vox.frontend.runtime.path', $runtimePath);
+    config()->set('vox.frontend.groups', ['messages']);
+
+    try {
+        $files = app(TranslationFileRepository::class);
+        $files->saveGroup('en', 'messages', ['greeting' => 'Old greeting']);
+        $files->saveGroup('fr', 'messages', ['greeting' => 'Ancienne salutation']);
+
+        VoxTranslation::factory()
+            ->approved()
+            ->withValues(['en' => 'Published greeting', 'fr' => 'Salutation publiée'])
+            ->create(['group' => 'messages', 'key' => 'greeting']);
+
+        $result = app(TranslationPublisher::class)->publish();
+        $english = json_decode(File::get($runtimePath.'/en.json'), true);
+
+        expect($result->frontendFileCount())->toBe(2)
+            ->and($english['messages.greeting'])->toBe('Published greeting');
+    } finally {
+        File::deleteDirectory($runtimePath);
+    }
 });

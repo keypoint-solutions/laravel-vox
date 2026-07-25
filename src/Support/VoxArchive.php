@@ -4,14 +4,21 @@ namespace KeypointSolutions\LaravelVox\Support;
 
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use KeypointSolutions\LaravelVox\Translation\TranslationFileValidator;
 use RuntimeException;
 use ZipArchive;
 
 class VoxArchive
 {
+    private const MAX_ENTRIES = 5000;
+
+    private const MAX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024;
+
+    public function __construct(private TranslationFileValidator $validator) {}
+
     public function createLangArchive(string $sourcePath): string
     {
-        $archivePath = storage_path('vox/lang-'.date('YmdHis').'.zip');
+        $archivePath = storage_path('vox/lang-'.Str::uuid().'.zip');
         $directory = dirname($archivePath);
 
         if (! File::exists($directory)) {
@@ -28,11 +35,18 @@ class VoxArchive
 
         foreach ($files as $file) {
             $relativePath = ltrim(str_replace($sourcePath, '', $file->getPathname()), DIRECTORY_SEPARATOR);
+            $extension = strtolower($file->getExtension());
 
             if (Str::startsWith($file->getFilename(), 'php_') && $file->getExtension() === 'json') {
                 continue;
             }
 
+            if (! in_array($extension, ['php', 'json'], true)) {
+                continue;
+            }
+
+            $this->validator->assertTranslationPath($relativePath);
+            $this->validator->validateFile($file->getPathname());
             $zip->addFile($file->getPathname(), $relativePath);
         }
 
@@ -41,7 +55,7 @@ class VoxArchive
         return $archivePath;
     }
 
-    public function extractArchive(string $archivePath, string $destinationPath): void
+    public function extractArchive(string $archivePath, string $destinationPath): int
     {
         $zip = new ZipArchive;
 
@@ -52,7 +66,7 @@ class VoxArchive
         $stagingPath = storage_path('vox/archive-'.Str::uuid());
 
         try {
-            $this->assertSafeEntries($zip);
+            $fileCount = $this->assertSafeEntries($zip);
             File::makeDirectory($stagingPath, 0755, true);
 
             if (! $zip->extractTo($stagingPath)) {
@@ -66,14 +80,23 @@ class VoxArchive
             if (! File::copyDirectory($stagingPath, $destinationPath)) {
                 throw new RuntimeException('Unable to copy extracted translations.');
             }
+
+            return $fileCount;
         } finally {
             $zip->close();
             File::deleteDirectory($stagingPath);
         }
     }
 
-    private function assertSafeEntries(ZipArchive $zip): void
+    private function assertSafeEntries(ZipArchive $zip): int
     {
+        if ($zip->numFiles > self::MAX_ENTRIES) {
+            throw new RuntimeException('Archive contains too many entries.');
+        }
+
+        $fileCount = 0;
+        $uncompressedBytes = 0;
+
         for ($index = 0; $index < $zip->numFiles; $index++) {
             $name = $zip->getNameIndex($index);
 
@@ -99,6 +122,39 @@ class VoxArchive
             ) {
                 throw new RuntimeException('Archive contains an unsafe symbolic link.');
             }
+
+            if (str_ends_with($normalized, '/')) {
+                continue;
+            }
+
+            $statistics = $zip->statIndex($index);
+            $size = is_array($statistics) ? ($statistics['size'] ?? null) : null;
+
+            if (! is_int($size) || $size < 0) {
+                throw new RuntimeException('Archive contains an invalid entry size.');
+            }
+
+            $uncompressedBytes += $size;
+
+            if ($uncompressedBytes > self::MAX_UNCOMPRESSED_BYTES) {
+                throw new RuntimeException('Archive expands beyond the allowed size.');
+            }
+
+            $this->validator->assertTranslationPath($normalized);
+            $contents = $zip->getFromIndex($index);
+
+            if (! is_string($contents)) {
+                throw new RuntimeException("Unable to read archive entry [{$normalized}].");
+            }
+
+            $this->validator->validateContents($contents, $normalized);
+            $fileCount++;
         }
+
+        if ($fileCount === 0) {
+            throw new RuntimeException('Archive does not contain translation files.');
+        }
+
+        return $fileCount;
     }
 }

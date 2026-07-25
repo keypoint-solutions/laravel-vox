@@ -1,6 +1,7 @@
 <script lang="ts" setup>
     import { Head, router, usePage } from '@inertiajs/vue3';
     import {
+        Braces,
         Check,
         ChevronDown,
         ChevronLeft,
@@ -10,9 +11,9 @@
         FileText,
         GripVertical,
         Laptop,
+        Plus,
         RotateCcw,
         Server,
-        ShieldCheck,
         Sparkles,
         X,
     } from '@lucide/vue';
@@ -23,6 +24,8 @@
         Badge,
         Button,
         Checkbox,
+        FormField,
+        Input,
         SearchInput,
         Select,
         SlidePanel,
@@ -67,7 +70,8 @@
         has_missing_values: boolean;
         is_frontend: boolean;
         is_orphan: boolean;
-        is_protected: boolean;
+        is_dynamic: boolean;
+        dynamic_pattern: string | null;
         source: string | null;
         updated_at: string | null;
         values: Record<string, string>;
@@ -100,6 +104,11 @@
         sortOptions: SelectOption[];
         lastSyncAt: string | null;
         totalTranslations: number;
+        dynamicPatterns: {
+            pattern: string;
+            is_frontend: boolean;
+            sources: string[];
+        }[];
         ai: {
             available: boolean;
             configured: boolean;
@@ -120,6 +129,13 @@
     const lastSyncAt = computed(() => page.props.lastSyncAt ?? null);
     const totalTranslations = computed(() => page.props.totalTranslations ?? 0);
     const aiStatus = computed(() => page.props.ai ?? { available: false, configured: false, driver: 'null' });
+    const dynamicPatterns = computed(() => page.props.dynamicPatterns ?? []);
+    const dynamicPatternOptions = computed<SelectOption[]>(() =>
+        dynamicPatterns.value.map((entry) => ({
+            value: entry.pattern,
+            label: `${entry.pattern}${entry.is_frontend ? ' · Frontend' : ''}`,
+        }))
+    );
     const voxRoutes = computed(() => page.props.vox?.routes);
 
     const statusToggleOptions = computed<ToggleOption[]>(() => [
@@ -151,6 +167,12 @@
     const showOccurrences = ref(false);
     const searchDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null);
     const toastTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+    const isCreatingDynamic = ref(false);
+    const isStoringDynamic = ref(false);
+    const newDynamicPattern = ref('');
+    const newDynamicKey = ref('');
+    const newDynamicValues = ref<Record<string, string>>({});
+    const newDynamicError = ref<string | null>(null);
 
     // Compact sticky header state
     const isCompactMode = ref(false);
@@ -461,6 +483,55 @@
         actionError.value = null;
     }
 
+    function openDynamicCreate(): void {
+        newDynamicPattern.value = dynamicPatterns.value[0]?.pattern ?? '';
+        newDynamicKey.value = '';
+        newDynamicValues.value = Object.fromEntries(locales.value.map((locale) => [locale, '']));
+        newDynamicError.value = null;
+        isCreatingDynamic.value = true;
+    }
+
+    function closeDynamicCreate(): void {
+        isCreatingDynamic.value = false;
+        newDynamicPattern.value = '';
+        newDynamicKey.value = '';
+        newDynamicValues.value = {};
+        newDynamicError.value = null;
+    }
+
+    function storeDynamicTranslation(): void {
+        if (newDynamicPattern.value === '' || newDynamicKey.value.trim() === '') {
+            return;
+        }
+
+        isStoringDynamic.value = true;
+        newDynamicError.value = null;
+
+        router.post(
+            voxRoutes.value?.manage_translation_store ?? '',
+            {
+                pattern: newDynamicPattern.value,
+                key: newDynamicKey.value.trim(),
+                values: newDynamicValues.value,
+            },
+            {
+                preserveScroll: true,
+                onError: (errors) => {
+                    newDynamicError.value = Object.values(errors)[0] ?? 'Unable to create the dynamic translation.';
+                },
+                onSuccess: (successPage) => {
+                    const message =
+                        (successPage.flash?.success as string | undefined) ?? 'Dynamic translation created.';
+                    closeDynamicCreate();
+                    showToast(message);
+                },
+                onFinish: () => {
+                    isStoringDynamic.value = false;
+                },
+            }
+        );
+    }
+
     function closeEdit(): void {
         editTranslation.value = null;
         editValues.value = {};
@@ -685,9 +756,23 @@
 
     <div :class="['space-y-4', isCompactMode ? 'pt-32 sm:pt-14' : '']">
         <!-- Page Header -->
-        <div>
-            <h1 class="text-2xl font-semibold tracking-tight">Manage Translations</h1>
-            <p class="text-muted-foreground mt-1 text-sm">Browse, edit, and approve translations across all locales.</p>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <h1 class="text-2xl font-semibold tracking-tight">Manage Translations</h1>
+                <p class="text-muted-foreground mt-1 text-sm">
+                    Browse, edit, create dynamic values, and approve translations across all locales.
+                </p>
+            </div>
+            <Button
+                data-test="add-dynamic-translation"
+                :disabled="dynamicPatterns.length === 0"
+                class="shrink-0"
+                variant="outline"
+                @click="openDynamicCreate"
+            >
+                <Plus class="size-4" />
+                Add dynamic translation
+            </Button>
         </div>
 
         <!-- Stats Cards -->
@@ -1151,12 +1236,12 @@
                                         </span>
                                     </Tooltip>
                                     <Tooltip
-                                        v-if="translation.is_protected"
-                                        text="Protected: Parse keeps this key and Publish will not overwrite its file value"
+                                        v-if="translation.is_dynamic"
+                                        :text="`Dynamic: retained because runtime usage matches ${translation.dynamic_pattern}`"
                                     >
-                                        <ShieldCheck
-                                            aria-label="Protected translation key"
-                                            class="size-3 text-emerald-500"
+                                        <Braces
+                                            aria-label="Dynamic translation key"
+                                            class="size-3 text-violet-500"
                                         />
                                     </Tooltip>
                                     <Tooltip
@@ -1240,6 +1325,108 @@
         </div>
     </div>
 
+    <!-- Create Dynamic Translation Panel -->
+    <SlidePanel
+        :open="isCreatingDynamic"
+        subtitle="Runtime-resolved key"
+        title="Add dynamic translation"
+        @close="closeDynamicCreate"
+    >
+        <div
+            data-test="dynamic-create-panel"
+            class="sr-only"
+        >
+            Dynamic translation editor
+        </div>
+        <div
+            v-if="newDynamicError"
+            role="alert"
+            class="text-destructive border-destructive/40 bg-destructive/10 mb-5 rounded-lg border p-3 text-sm"
+        >
+            {{ newDynamicError }}
+        </div>
+
+        <div class="space-y-5">
+            <FormField
+                id="new_dynamic_pattern"
+                description="Choose the active pattern that covers this concrete value."
+                label="Dynamic pattern"
+            >
+                <Select
+                    id="new_dynamic_pattern"
+                    v-model="newDynamicPattern"
+                    :options="dynamicPatternOptions"
+                    placeholder="Choose a pattern"
+                />
+            </FormField>
+
+            <FormField
+                id="new_dynamic_key"
+                :description="
+                    newDynamicPattern
+                        ? `Enter the complete Laravel key matching ${newDynamicPattern}.`
+                        : 'Enter the complete Laravel translation key.'
+                "
+                label="Concrete translation key"
+            >
+                <Input
+                    id="new_dynamic_key"
+                    v-model="newDynamicKey"
+                    data-test="new-dynamic-key"
+                    placeholder="enums.user_roles.admin"
+                />
+            </FormField>
+
+            <div class="border-t pt-5">
+                <p class="text-sm font-semibold">Translation values</p>
+                <p class="text-muted-foreground mt-1 text-xs">
+                    The base locale is required. Missing target locales can be completed later or with bulk AI.
+                </p>
+
+                <div class="mt-4 space-y-4">
+                    <FormField
+                        v-for="locale in orderedLocales"
+                        :id="`new_dynamic_value_${locale}`"
+                        :key="locale"
+                        :description="locale === baseLocale ? 'Required source value' : undefined"
+                        :label="locale.toUpperCase()"
+                    >
+                        <Textarea
+                            :id="`new_dynamic_value_${locale}`"
+                            v-model="newDynamicValues[locale]"
+                            :data-test="`new-dynamic-value-${locale}`"
+                            :rows="2"
+                        />
+                    </FormField>
+                </div>
+            </div>
+        </div>
+
+        <template #footer>
+            <div class="flex items-center justify-end gap-2">
+                <Button
+                    :disabled="isStoringDynamic"
+                    variant="outline"
+                    @click="closeDynamicCreate"
+                >
+                    Cancel
+                </Button>
+                <Button
+                    data-test="store-dynamic-translation"
+                    :disabled="
+                        isStoringDynamic ||
+                        newDynamicPattern === '' ||
+                        newDynamicKey.trim() === '' ||
+                        !(newDynamicValues[baseLocale] ?? '').trim()
+                    "
+                    @click="storeDynamicTranslation"
+                >
+                    {{ isStoringDynamic ? 'Creating…' : 'Create translation' }}
+                </Button>
+            </div>
+        </template>
+    </SlidePanel>
+
     <!-- Edit Panel -->
     <SlidePanel
         :open="!!editTranslation"
@@ -1263,10 +1450,10 @@
                         Orphan
                     </Badge>
                     <Badge
-                        v-if="editTranslation?.is_protected"
-                        variant="success"
+                        v-if="editTranslation?.is_dynamic"
+                        variant="secondary"
                     >
-                        Protected
+                        Dynamic · {{ editTranslation.dynamic_pattern }}
                     </Badge>
                     <span class="text-muted-foreground">Updated {{ formatDateTime(editTranslation?.updated_at) }}</span>
                 </div>

@@ -6,7 +6,11 @@ use Illuminate\Support\Facades\File;
 
 class TranslationFileRepository
 {
-    public function __construct(private TranslationFileWriter $writer) {}
+    public function __construct(
+        private TranslationFileWriter $writer,
+        private ?TranslationFileValidator $validator = null,
+        private ?string $path = null,
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -19,6 +23,7 @@ class TranslationFileRepository
             return [];
         }
 
+        $this->validator()->validateFile($path);
         $translations = require $path;
 
         return is_array($translations) ? $translations : [];
@@ -35,6 +40,7 @@ class TranslationFileRepository
             return [];
         }
 
+        $this->validator()->validateFile($path);
         $contents = File::get($path);
         $decoded = json_decode($contents, true);
 
@@ -54,6 +60,7 @@ class TranslationFileRepository
 
         $contents = $this->writer->toPhp($data, $commented, $lineComments, $rawCommented);
 
+        $this->validator()->validateContents($contents, $path);
         File::put($path, $contents);
     }
 
@@ -210,8 +217,14 @@ class TranslationFileRepository
 
     private function parseObsoleteCommentKey(string $payload): ?string
     {
-        if (preg_match('/^(\'(?:\\\\\'|[^\'])*\')\s*=>/', $payload, $matches) !== 1) {
+        if (preg_match('/^(\'(?:\\\\\'|[^\'])*\'|"(?:\\\\.|[^"\\\\])*")\s*=>/', $payload, $matches) !== 1) {
             return null;
+        }
+
+        if (str_starts_with($matches[1], '"')) {
+            $decoded = json_decode($matches[1], true);
+
+            return is_string($decoded) ? $decoded : null;
         }
 
         return $this->unescapeExportedString($matches[1]);
@@ -275,6 +288,7 @@ class TranslationFileRepository
 
         $contents = $this->writer->toJson($data);
 
+        $this->validator()->validateContents($contents, $path);
         File::put($path, $contents);
     }
 
@@ -302,7 +316,12 @@ class TranslationFileRepository
 
     public function langPath(): string
     {
-        return rtrim(config('vox.paths.lang', lang_path()), DIRECTORY_SEPARATOR);
+        return rtrim($this->path ?? config('vox.paths.lang', lang_path()), DIRECTORY_SEPARATOR);
+    }
+
+    public function forPath(string $path): self
+    {
+        return new self($this->writer, $this->validator(), $path);
     }
 
     /**
@@ -332,5 +351,10 @@ class TranslationFileRepository
         if (! File::exists($directory)) {
             File::makeDirectory($directory, 0755, true);
         }
+    }
+
+    private function validator(): TranslationFileValidator
+    {
+        return $this->validator ??= new TranslationFileValidator;
     }
 }
