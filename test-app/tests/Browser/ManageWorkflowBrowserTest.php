@@ -19,14 +19,29 @@ it('creates a concrete dynamic translation from an open pattern', function (): v
         ->withValues(['en' => 'Ordinary browser value', 'fr' => 'Valeur ordinaire'])
         ->create(['group' => 'browser', 'key' => 'ordinary']);
 
-    visit('/vox/manage')
+    $page = visit('/vox/manage')
         ->click('[data-test="add-dynamic-translation"]')
         ->assertVisible('[data-test="dynamic-create-panel"]')
         ->select('#new_dynamic_pattern', 'browser.dynamic.*')
         ->click('[data-test="copy-dynamic-prefix"]')
         ->waitForText('Dynamic key prefix copied.')
-        ->assertSeeIn('[data-test="success-toast"]', 'Dynamic key prefix copied.')
-        ->fill('[data-test="new-dynamic-key"]', 'browser.dynamic.admin')
+        ->assertSeeIn('[data-test="success-toast"]', 'Dynamic key prefix copied.');
+
+    $panelDimensions = $page->script(
+        "() => {
+            const content = document.querySelector('[data-slot=\"slide-panel-content\"]');
+
+            return {
+                clientWidth: content.clientWidth,
+                scrollWidth: content.scrollWidth,
+            };
+        }"
+    );
+
+    expect($panelDimensions['scrollWidth'])
+        ->toBeLessThanOrEqual($panelDimensions['clientWidth']);
+
+    $page->fill('[data-test="new-dynamic-key"]', 'browser.dynamic.admin')
         ->fill('[data-test="new-dynamic-value-en"]', 'Administrator')
         ->fill('[data-test="new-dynamic-value-fr"]', 'Administrateur')
         ->click('[data-test="store-dynamic-translation"]')
