@@ -7,6 +7,10 @@ use Illuminate\Support\Str;
 
 class TranslationScanner
 {
+    private const BACKEND_TRANSLATION_CALL_PATTERN = '__|trans_choice|@choice|(?:Lang|Translator)::choice|app\(\s*[\'"]translator[\'"]\s*\)->choice';
+
+    private const FRONTEND_TRANSLATION_CALL_PATTERN = '\$tChoice|\$wtChoice|transChoice|trans_choice|wTransChoice|\$t|\$wt|trans|wTrans';
+
     /**
      * @var array<string, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>
      */
@@ -215,18 +219,18 @@ class TranslationScanner
 
         if (in_array($extension, ['php', 'blade.php'], true)) {
             $patterns[] = [
-                'pattern' => '/(?<!\w)(__|trans_choice)\(\s*([\"\'])\s*(.*?)\s*\2/s',
+                'pattern' => '/(?<!\w)('.self::BACKEND_TRANSLATION_CALL_PATTERN.')\(\s*([\"\'])\s*(.*?)\s*\2/s',
                 'is_frontend' => false,
             ];
         }
 
         if (in_array($extension, ['js', 'ts', 'vue'], true)) {
             $patterns[] = [
-                'pattern' => '/(?<!\\w)(\\$tChoice|\\$wtChoice|transChoice|trans_choice|wTransChoice|\\$t|\\$wt|trans|wTrans)\\(\\s*(`)(?![^`]*\\$\\{)\\s*(.*?)\\s*\\2/s',
+                'pattern' => '/(?<!\w)('.self::FRONTEND_TRANSLATION_CALL_PATTERN.')\(\s*(`)(?![^`]*\$\{)\s*(.*?)\s*\2/s',
                 'is_frontend' => true,
             ];
             $patterns[] = [
-                'pattern' => '/(?<!\w)(\$tChoice|\$wtChoice|transChoice|trans_choice|wTransChoice|\$t|\$wt|trans|wTrans)\(\s*([\"\'])\s*(.*?)\s*\2/s',
+                'pattern' => '/(?<!\w)('.self::FRONTEND_TRANSLATION_CALL_PATTERN.')\(\s*([\"\'])\s*(.*?)\s*\2/s',
                 'is_frontend' => true,
             ];
         }
@@ -291,18 +295,18 @@ class TranslationScanner
 
         if (in_array($extension, ['php', 'blade.php'], true)) {
             $patterns[] = [
-                'pattern' => '/(?<!\w)(__|trans_choice)\(\s*([\'"])(?<prefix>(?:\\\\.|(?!\2).)*)\2\s*\.\s*[^)]*?(?:\.\s*([\'"])(?<suffix>(?:\\\\.|(?!\4).)*)\4)?\s*\)/s',
+                'pattern' => '/(?<!\w)('.self::BACKEND_TRANSLATION_CALL_PATTERN.')\(\s*([\'"])(?<prefix>(?:\\\\.|(?!\2).)*)\2\s*\.\s*[^)]*?(?:\.\s*([\'"])(?<suffix>(?:\\\\.|(?!\4).)*)\4)?\s*\)/s',
                 'is_frontend' => false,
             ];
         }
 
         if (in_array($extension, ['js', 'ts', 'vue'], true)) {
             $patterns[] = [
-                'pattern' => '/(?<!\w)(\$tChoice|\$wtChoice|transChoice|trans_choice|wTransChoice|\$t|\$wt|trans|wTrans)\(\s*`(?<prefix>[^`]*?)\$\{[^}]+\}(?<suffix>[^`]*)`\s*\)/s',
+                'pattern' => '/(?<!\w)('.self::FRONTEND_TRANSLATION_CALL_PATTERN.')\(\s*`(?<prefix>[^`]*?)\$\{[^}]+\}(?<suffix>[^`]*)`(?=\s*[,)]\s*)/s',
                 'is_frontend' => true,
             ];
             $patterns[] = [
-                'pattern' => '/(?<!\w)(\$tChoice|\$wtChoice|transChoice|trans_choice|wTransChoice|\$t|\$wt|trans|wTrans)\(\s*([\'"])(?<prefix>(?:\\\\.|(?!\2).)*)\2\s*\+\s*[^)]*?(?:\+\s*([\'"])(?<suffix>(?:\\\\.|(?!\4).)*)\4)?\s*\)/s',
+                'pattern' => '/(?<!\w)('.self::FRONTEND_TRANSLATION_CALL_PATTERN.')\(\s*([\'"])(?<prefix>(?:\\\\.|(?!\2).)*)\2\s*\+\s*[^)]*?(?:\+\s*([\'"])(?<suffix>(?:\\\\.|(?!\4).)*)\4)?\s*\)/s',
                 'is_frontend' => true,
             ];
         }

@@ -64,6 +64,9 @@ it('uses a brief prompt with immutable Laravel value safeguards', function (): v
     $prompt = $config['translate']['prompt'];
 
     expect($prompt)
+        ->toContain('naturally and idiomatically')
+        ->toContain('same meaning and register in context')
+        ->toContain('do not mirror the source wording')
         ->toContain('Return only the translation')
         ->toContain('Laravel placeholders')
         ->toContain('HTML or Markdown markup exactly')

@@ -1,5 +1,11 @@
 <script setup lang="ts">
-    import { availableVoxLocales, trans, transChoice } from '@laravel-vox/runtime.js';
+    import {
+        availableVoxLocales,
+        trans,
+        trans_choice,
+        transChoice,
+        wTransChoice,
+    } from '@laravel-vox/runtime.js';
     import { computed } from 'vue';
 
     const requestedLocale = document.documentElement.dataset.requestedLocale ?? document.documentElement.lang;
@@ -9,6 +15,7 @@
     const isFallbackDemo = computed(() => requestedLocale === fallbackDemoLocale);
     const dynamicValueKey = 'label1';
     const backendOnlyKey = ['validation', 'accepted'].join('.');
+    const reactiveChoiceTranslation = wTransChoice('frontend.Items selected', 3);
 
     function pageUrl(locale: string, page: 'blade' | 'vue'): string {
         return `/${locale}/${page}`;
@@ -139,12 +146,44 @@
                 </article>
                 <article class="rounded-xl border border-white/10 bg-white/5 p-5">
                     <p class="text-xs tracking-wide text-slate-500 uppercase">Pluralization</p>
-                    <p
-                        data-test="choice-translation"
-                        class="mt-2 text-lg font-medium"
-                    >
-                        {{ transChoice('frontend.Items selected', 2) }}
-                    </p>
+                    <div class="mt-3 space-y-2 text-sm">
+                        <div class="flex items-baseline justify-between gap-4">
+                            <code class="text-xs text-slate-500">transChoice()</code>
+                            <span
+                                data-test="choice-translation"
+                                class="text-right font-medium"
+                            >
+                                {{ transChoice('frontend.Items selected', 2) }}
+                            </span>
+                        </div>
+                        <div class="flex items-baseline justify-between gap-4">
+                            <code class="text-xs text-slate-500">trans_choice()</code>
+                            <span
+                                data-test="choice-translation-alias"
+                                class="text-right font-medium"
+                            >
+                                {{ trans_choice('frontend.Items selected', 1) }}
+                            </span>
+                        </div>
+                        <div class="flex items-baseline justify-between gap-4">
+                            <code class="text-xs text-slate-500">$tChoice()</code>
+                            <span
+                                data-test="choice-translation-global"
+                                class="text-right font-medium"
+                            >
+                                {{ $tChoice('frontend.Items selected', 0) }}
+                            </span>
+                        </div>
+                        <div class="flex items-baseline justify-between gap-4">
+                            <code class="text-xs text-slate-500">wTransChoice()</code>
+                            <span
+                                data-test="choice-translation-reactive"
+                                class="text-right font-medium"
+                            >
+                                {{ reactiveChoiceTranslation }}
+                            </span>
+                        </div>
+                    </div>
                 </article>
                 <article class="rounded-xl border border-white/10 bg-white/5 p-5 md:col-span-2">
                     <p class="text-xs tracking-wide text-slate-500 uppercase">Bundle boundary</p>

@@ -91,22 +91,49 @@ it('parses vue translations and json strings from Welcome.vue', function () {
     File::deleteDirectory($targetRoot);
 });
 
-it('parses frontend plural translation helpers', function (): void {
+it('parses Laravel and frontend plural translation helper variants', function (): void {
     $targetRoot = prepareVoxFixtures();
     $jsPath = $targetRoot.'/resources/js/app.js';
+    $bladePath = $targetRoot.'/resources/views/plural-variants.blade.php';
 
     File::append(
         $jsPath,
-        "\ntransChoice('frontend.Items selected', 2);\n\$tChoice('frontend.Template items selected', 2);\n"
+        implode("\n", [
+            '',
+            "transChoice('frontend.Function items selected', 2);",
+            "trans_choice('frontend.Alias items selected', 2);",
+            "wTransChoice('frontend.Reactive items selected', 2);",
+            "\$tChoice('frontend.Template items selected', 2);",
+            "i18n.transChoice('frontend.Instance items selected', 2);",
+            '',
+        ])
+    );
+    File::put(
+        $bladePath,
+        <<<'BLADE'
+{{ trans_choice('messages.Helper items selected', 2) }}
+@choice('messages.Directive items selected', 2)
+{{ Lang::choice('messages.Facade items selected', 2) }}
+{{ app('translator')->choice('messages.Instance items selected', 2) }}
+BLADE
     );
 
     $this->artisan('vox:parse', ['--no-interaction' => true])->assertExitCode(0);
 
-    $english = require $targetRoot.'/lang/en/frontend.php';
+    $frontend = require $targetRoot.'/lang/en/frontend.php';
+    $messages = require $targetRoot.'/lang/en/messages.php';
 
-    expect($english)
-        ->toHaveKey('Items selected', 'Items selected')
-        ->toHaveKey('Template items selected', 'Template items selected');
+    expect($frontend)
+        ->toHaveKey('Function items selected', 'Function items selected')
+        ->toHaveKey('Alias items selected', 'Alias items selected')
+        ->toHaveKey('Reactive items selected', 'Reactive items selected')
+        ->toHaveKey('Template items selected', 'Template items selected')
+        ->toHaveKey('Instance items selected', 'Instance items selected')
+        ->and($messages)
+        ->toHaveKey('Helper items selected', 'Helper items selected')
+        ->toHaveKey('Directive items selected', 'Directive items selected')
+        ->toHaveKey('Facade items selected', 'Facade items selected')
+        ->toHaveKey('Instance items selected', 'Instance items selected');
 
     File::deleteDirectory($targetRoot);
 });
@@ -145,6 +172,46 @@ it('detects dynamic vue keys from concatenation and template strings', function 
         ->and($prefixes)->toContain('frontend.dynamicLabels2.values.')
         ->and($patterns)->toContain('frontend.dynamicLabels.values.*')
         ->and($patterns)->toContain('frontend.dynamicLabels2.values.*');
+
+    File::deleteDirectory($targetRoot);
+});
+
+it('detects dynamic plural keys across Laravel and frontend variants', function (): void {
+    $targetRoot = prepareVoxFixtures();
+
+    File::append(
+        $targetRoot.'/resources/js/Welcome.vue',
+        <<<'VUE'
+
+transChoice(`frontend.choice.${key}`, count);
+wTransChoice('frontend.reactive.' + key, count);
+VUE
+    );
+    File::append(
+        $targetRoot.'/resources/views/welcome.blade.php',
+        <<<'BLADE'
+
+@choice('messages.choice.' . $key, 2)
+{{ Lang::choice('messages.facade.' . $key, 2) }}
+BLADE
+    );
+
+    $scanner = new TranslationScanner(
+        base_path(),
+        [$targetRoot.'/resources'],
+        [],
+        ['vue', 'blade.php'],
+        1
+    );
+
+    $scanner->scan();
+    $patterns = array_column($scanner->dynamicKeys(), 'pattern');
+
+    expect($patterns)
+        ->toContain('frontend.choice.*')
+        ->toContain('frontend.reactive.*')
+        ->toContain('messages.choice.*')
+        ->toContain('messages.facade.*');
 
     File::deleteDirectory($targetRoot);
 });
