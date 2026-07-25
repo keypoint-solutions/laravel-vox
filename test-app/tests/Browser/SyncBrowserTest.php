@@ -17,7 +17,10 @@ afterEach(function (): void {
     File::delete(
         lang_path('en/vox_browser_sync.php'),
         lang_path('fr/vox_browser_sync.php'),
+        lang_path('en/vox_browser_import.php'),
+        lang_path('fr/vox_browser_import.php'),
         storage_path('framework/testing/vox-browser-remote.zip'),
+        storage_path('framework/testing/vox-browser-import.zip'),
     );
 });
 
@@ -29,7 +32,52 @@ it('asks whether to update language files before local sync', function (): void 
         ->assertSee('Update files & sync')
         ->pressAndWaitFor('Sync files as they are')
         ->assertSee('Synchronized')
+        ->assertSee('Download publishable files')
+        ->assertSee('Import language files')
         ->assertNoJavaScriptErrors();
+});
+
+it('selects a translation archive and enables the import action', function (): void {
+    $archivePath = storage_path('framework/testing/vox-browser-import.zip');
+    File::ensureDirectoryExists(dirname($archivePath));
+    $archive = new ZipArchive;
+    $archive->open($archivePath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $archive->addFromString(
+        'en/vox_browser_import.php',
+        "<?php\n\nreturn ['message' => 'Imported without sync'];\n"
+    );
+    $archive->addFromString(
+        'fr/vox_browser_import.php',
+        "<?php\n\nreturn ['message' => 'Importé sans synchronisation'];\n"
+    );
+    $archive->close();
+
+    $encodedArchive = json_encode(base64_encode(File::get($archivePath)), JSON_THROW_ON_ERROR);
+    $page = visit('/vox/sync');
+    $page->script(
+        "() => {
+            const bytes = Uint8Array.from(atob({$encodedArchive}), (character) => character.charCodeAt(0));
+            const transfer = new DataTransfer();
+            transfer.items.add(new File([bytes], 'vox-browser-import.zip', { type: 'application/zip' }));
+            const input = document.querySelector('[name=\"archive\"]');
+            input.files = transfer.files;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        }"
+    );
+
+    expect($page->script(
+        "() => ({
+            files: document.querySelector('[name=\"archive\"]').files.length,
+            filename: document.querySelector('[name=\"archive\"]').files[0]?.name,
+            disabled: document.querySelector('[data-test=\"sync-archive-import\"]').disabled,
+        })"
+    ))->toMatchArray([
+        'files' => 1,
+        'filename' => 'vox-browser-import.zip',
+        'disabled' => false,
+    ]);
+
+    $page->assertNoJavaScriptErrors();
 });
 
 it('pulls production values, preserves local-only keys, and reopens conflicts', function (): void {

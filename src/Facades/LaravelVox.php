@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Facade;
 
 /**
  * @method static void routes(?string $prefix = null)
+ * @method static void translationRoutes(?string $prefix = null)
+ * @method static void dynamicKeys(string $pattern, iterable|callable|string $source)
  *
  * @see \KeypointSolutions\LaravelVox\LaravelVox
  */

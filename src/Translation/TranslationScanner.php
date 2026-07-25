@@ -353,7 +353,9 @@ class TranslationScanner
         $relative = $this->relativePath($filePath);
 
         foreach ($matches as $match) {
-            $key = $match['prefix'].'|'.$match['suffix'].'|'.($match['is_frontend'] ? 'frontend' : 'backend');
+            $suffixPattern = preg_replace('/\$\{[^}]+\}/s', '*', $match['suffix']) ?? $match['suffix'];
+            $pattern = $match['prefix'].'*'.$suffixPattern;
+            $key = $pattern.'|'.($match['is_frontend'] ? 'frontend' : 'backend');
 
             if (isset($this->dynamicKeys[$key])) {
                 continue;
@@ -365,6 +367,7 @@ class TranslationScanner
             $context = is_string($context) ? $this->normalizeContext($context) : null;
 
             $this->dynamicKeys[$key] = [
+                'pattern' => $pattern,
                 'prefix' => $match['prefix'],
                 'suffix' => $match['suffix'],
                 'source' => $match['source'],
@@ -513,7 +516,7 @@ class TranslationScanner
     }
 
     /**
-     * @return array<int, array{prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>
+     * @return array<int, array{pattern: string, prefix: string, suffix: string, source: string|null, is_frontend: bool, file: string, line: int|null, context: string|null}>
      */
     public function dynamicKeys(): array
     {

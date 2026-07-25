@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "62398b6712aa1599428efeb90e9b385e",
+    "content-hash": "3af19bce597b8fa3191e19eeead77c70",
     "packages": [
         {
             "name": "brick/math",
@@ -1135,7 +1135,7 @@
             "dist": {
                 "type": "path",
                 "url": "..",
-                "reference": "fcc896d2ad794a3912d06820560b8c43d5a01b0d"
+                "reference": "8d88070b92f2e48e550615d2419bf0c47b8b6a61"
             },
             "require": {
                 "illuminate/contracts": "^11.0 || ^12.0 || ^13.0",
@@ -1189,6 +1189,8 @@
                 "test:ui": [
                     "npm run build",
                     "@php test-app/artisan vendor:publish --tag=vox-assets --force",
+                    "@php test-app/artisan migrate --force",
+                    "@php test-app/artisan vox:sync --no-interaction",
                     "npm --prefix test-app run build",
                     "composer --working-dir=test-app test:browser"
                 ],

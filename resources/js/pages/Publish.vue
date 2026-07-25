@@ -1,6 +1,6 @@
 <script setup lang="ts">
     import { Head, router, usePage } from '@inertiajs/vue3';
-    import { Check, CircleAlert, FileCheck2, ShieldCheck, UploadCloud } from '@lucide/vue';
+    import { Check, CircleAlert, FileCheck2, Sparkles, UploadCloud } from '@lucide/vue';
     import { computed, ref } from 'vue';
 
     import { Button } from '@/components/ui';
@@ -17,7 +17,7 @@
             publishable: number;
             pending: number;
             incomplete: number;
-            protected: number;
+            dynamic: number;
             orphan: number;
         };
         lastPublishAt: string | null;
@@ -32,7 +32,7 @@
                 publishable: 0,
                 pending: 0,
                 incomplete: 0,
-                protected: 0,
+                dynamic: 0,
                 orphan: 0,
             }
     );
@@ -75,8 +75,8 @@
                 <p class="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">Language files</p>
                 <h1 class="mt-2 text-2xl font-semibold">Publish approved translations</h1>
                 <p class="text-muted-foreground mt-2 max-w-2xl text-sm">
-                    Write reviewed database values back to Laravel PHP and JSON files. Pending, incomplete, protected,
-                    and orphan translations remain untouched.
+                    Write reviewed database values back to Laravel PHP and JSON files. Pending, incomplete, and orphan
+                    translations remain untouched; approved dynamic translations publish normally.
                 </p>
             </div>
             <Button
@@ -125,9 +125,9 @@
                     <p class="text-muted-foreground mt-1 text-xs">Skipped until every locale is complete</p>
                 </div>
                 <div class="p-5">
-                    <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Protected approved</p>
-                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.protected }}</p>
-                    <p class="text-muted-foreground mt-1 text-xs">Language-file values stay untouched</p>
+                    <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Dynamic approved</p>
+                    <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.dynamic }}</p>
+                    <p class="text-muted-foreground mt-1 text-xs">Published when complete</p>
                 </div>
                 <div class="p-5">
                     <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Orphan approved</p>
@@ -169,14 +169,14 @@
         </section>
 
         <section
-            v-if="stats.protected > 0"
+            v-if="stats.dynamic > 0"
             class="flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4"
         >
-            <ShieldCheck class="mt-0.5 size-5 shrink-0 text-emerald-500" />
+            <Sparkles class="mt-0.5 size-5 shrink-0 text-emerald-500" />
             <p class="text-sm">
-                {{ stats.protected }} approved
-                {{ stats.protected === 1 ? 'translation is' : 'translations are' }} protected and will keep the value
-                already present in each language file.
+                {{ stats.dynamic }} approved dynamic
+                {{ stats.dynamic === 1 ? 'translation is' : 'translations are' }} eligible for normal publishing when
+                every locale is complete.
             </p>
         </section>
 

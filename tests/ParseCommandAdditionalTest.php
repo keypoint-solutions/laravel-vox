@@ -4,11 +4,11 @@ use Illuminate\Support\Facades\File;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
 use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
 
-it('removes orphan protected keys in non-base locales when keep_orphan_other_locales_keys is false', function () {
+it('retains dynamic keys in non-base locales when keep_orphan_other_locales_keys is false', function () {
     $targetRoot = prepareVoxFixtures();
 
     config()->set('vox.parse.keep_orphan_other_locales_keys', false);
-    config()->set('vox.parse.protected_keys', ['messages.']);
+    config()->set('vox.dynamic_keys.patterns', ['messages.*']);
 
     $frMessagesPath = $targetRoot.'/lang/fr/messages.php';
     $frMessages = require $frMessagesPath;
@@ -18,7 +18,7 @@ it('removes orphan protected keys in non-base locales when keep_orphan_other_loc
     $this->artisan('vox:parse', ['--no-interaction' => true])->assertExitCode(0);
 
     $updated = require $frMessagesPath;
-    expect($updated)->not->toHaveKey('test');
+    expect($updated)->toHaveKey('test', 'Test');
 
     File::deleteDirectory($targetRoot);
 });
@@ -35,13 +35,13 @@ it('keeps obsolete comment lines between parse runs', function () {
     $contents = File::get($authPath);
 
     expect($contents)->toContain($writer->obsoleteCommentPrefix())
-        ->and($contents)->toContain("'obsolete' =>");
+        ->and($contents)->toContain('"obsolete" =>');
 
     $this->artisan('vox:parse', ['--no-interaction' => true])->assertExitCode(0);
     $contents = File::get($authPath);
 
     expect($contents)->toContain($writer->obsoleteCommentPrefix())
-        ->and($contents)->toContain("'obsolete' =>");
+        ->and($contents)->toContain('"obsolete" =>');
 
     File::deleteDirectory($targetRoot);
 });
@@ -117,10 +117,14 @@ it('detects dynamic vue keys from concatenation and template strings', function 
     );
 
     $scanner->scan();
-    $prefixes = array_map(fn (array $entry) => $entry['prefix'], $scanner->dynamicKeys());
+    $dynamicKeys = $scanner->dynamicKeys();
+    $prefixes = array_column($dynamicKeys, 'prefix');
+    $patterns = array_column($dynamicKeys, 'pattern');
 
     expect($prefixes)->toContain('frontend.dynamicLabels.values.')
-        ->and($prefixes)->toContain('frontend.dynamicLabels2.values.');
+        ->and($prefixes)->toContain('frontend.dynamicLabels2.values.')
+        ->and($patterns)->toContain('frontend.dynamicLabels.values.*')
+        ->and($patterns)->toContain('frontend.dynamicLabels2.values.*');
 
     File::deleteDirectory($targetRoot);
 });

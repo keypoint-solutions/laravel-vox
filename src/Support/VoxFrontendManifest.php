@@ -9,8 +9,9 @@ class VoxFrontendManifest
 {
     /**
      * @param  array<string, array<string, mixed>>  $scanResults
+     * @param  array<int, array{pattern?: string, prefix: string, suffix: string, is_frontend: bool}>  $dynamicKeys
      */
-    public function writeFromScanResults(array $scanResults): void
+    public function writeFromScanResults(array $scanResults, array $dynamicKeys = []): void
     {
         $groups = [];
 
@@ -22,6 +23,22 @@ class VoxFrontendManifest
             }
 
             $groups[] = $group;
+        }
+
+        foreach ($dynamicKeys as $dynamicKey) {
+            if (($dynamicKey['is_frontend'] ?? false) !== true) {
+                continue;
+            }
+
+            $pattern = VoxDynamicKeyRegistry::normalizePattern(
+                $dynamicKey['pattern'] ?? $dynamicKey['prefix'].'*'.$dynamicKey['suffix']
+            );
+
+            if (preg_match('/^([^\s.*]+)\./', $pattern, $matches) !== 1) {
+                continue;
+            }
+
+            $groups[] = $matches[1];
         }
 
         $this->write($groups);

@@ -3,6 +3,7 @@
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationOccurrence;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
+use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
 use KeypointSolutions\LaravelVox\Translation\TranslationSyncer;
@@ -51,7 +52,7 @@ it('removes a stale frontend flag when a key is no longer used in frontend code'
         ->create(['group' => 'messages', 'key' => 'hello']);
 
     $repository = new TranslationFileRepository(new TranslationFileWriter);
-    $syncer = new TranslationSyncer($repository);
+    $syncer = new TranslationSyncer($repository, app(VoxDynamicKeyRegistry::class));
     $syncer->sync(['en', 'fr'], [
         'messages.hello' => [
             'group' => 'messages',
@@ -70,6 +71,27 @@ it('removes a stale frontend flag when a key is no longer used in frontend code'
     expect($translation->fresh())
         ->is_frontend->toBeFalse()
         ->source->toBe('__');
+});
+
+it('keeps database-only dynamic translations active during sync', function (): void {
+    prepareVoxFixtures();
+    config()->set('vox.dynamic_keys.patterns', ['enums.user_roles.*']);
+
+    $translation = VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => 'Administrator', 'fr' => 'Administrateur'])
+        ->create([
+            'group' => 'enums',
+            'key' => 'user_roles.admin',
+            'source' => 'dynamic',
+        ]);
+
+    $this->artisan('vox:sync')->assertExitCode(0);
+
+    expect($translation->fresh())
+        ->is_orphan->toBeFalse()
+        ->source->toBe('dynamic')
+        ->status->toBe('approved');
 });
 
 it('keeps an unchanged approved translation approved during sync', function (): void {

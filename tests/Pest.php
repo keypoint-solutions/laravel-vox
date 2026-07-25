@@ -25,10 +25,12 @@ function prepareVoxFixtures(): string
         $targetRoot.'/resources',
     ]);
     config()->set('vox.parse.exclude', []);
-    config()->set('vox.parse.protected_keys', [
-        'frontend.dynamicLabels.values.',
-        'frontend.dynamicLabels2.values.',
+    config()->set('vox.dynamic_keys.patterns', [
+        'frontend.dynamicLabels.values.*',
+        'frontend.dynamicLabels2.values.*',
     ]);
+    config()->set('vox.parse.protected_keys', []);
+    config()->set('vox.dynamic_keys.manifest', $targetRoot.'/dynamic.json');
     config()->set('vox.translate.locales', ['en', 'fr']);
     config()->set('vox.translate.base_locale', 'en');
 

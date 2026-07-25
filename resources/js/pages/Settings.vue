@@ -1,6 +1,6 @@
 <script lang="ts" setup>
     import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-    import { Check, KeyRound, Loader2, RefreshCw, ShieldCheck } from '@lucide/vue';
+    import { Braces, Check, KeyRound, Loader2, RefreshCw, ShieldCheck } from '@lucide/vue';
     import { computed, ref, watch } from 'vue';
 
     import { Badge, Button, Checkbox, FormField, Select, Textarea } from '@/components/ui';
@@ -19,11 +19,21 @@
 
     interface SettingsProps {
         settings: {
-            protected_keys: string[];
+            dynamic_key_patterns: string[];
+            configured_dynamic_key_patterns: string[];
             translate_guidance: string;
             sync_enabled: boolean;
             sync_key_set: boolean;
         };
+        dynamicPatterns: {
+            pattern: string;
+            is_frontend: boolean;
+            sources: ('config' | 'settings' | 'detected' | 'binding')[];
+            occurrences: {
+                file: string;
+                line: number | null;
+            }[];
+        }[];
         ai: {
             provider: {
                 id: string;
@@ -56,13 +66,13 @@
         section: 'sync',
         sync_enabled: settings.value.sync_enabled,
     });
-    const protectionForm = useForm({
-        section: 'protection',
-        protected_keys: settings.value.protected_keys.join('\n'),
+    const dynamicKeysForm = useForm({
+        section: 'dynamic_keys',
+        dynamic_key_patterns: settings.value.dynamic_key_patterns.join('\n'),
     });
 
     const aiSaved = ref(false);
-    const protectionSaved = ref(false);
+    const dynamicKeysSaved = ref(false);
     const syncSaved = ref(false);
     const refreshingModels = ref(false);
     const modelRefreshSuccess = ref(false);
@@ -106,10 +116,10 @@
     );
 
     watch(
-        () => protectionForm.protected_keys,
+        () => dynamicKeysForm.dynamic_key_patterns,
         () => {
-            if (protectionForm.isDirty) {
-                protectionSaved.value = false;
+            if (dynamicKeysForm.isDirty) {
+                dynamicKeysSaved.value = false;
             }
         }
     );
@@ -147,14 +157,14 @@
         });
     }
 
-    function saveProtectionSettings(): void {
-        protectionSaved.value = false;
+    function saveDynamicKeySettings(): void {
+        dynamicKeysSaved.value = false;
 
-        protectionForm.post(settingsUpdateRoute.value, {
+        dynamicKeysForm.post(settingsUpdateRoute.value, {
             preserveScroll: true,
             onSuccess: () => {
-                protectionForm.defaults();
-                protectionSaved.value = true;
+                dynamicKeysForm.defaults();
+                dynamicKeysSaved.value = true;
             },
         });
     }
@@ -344,12 +354,12 @@
         <section class="bg-card rounded-xl border">
             <div class="border-b p-6">
                 <div class="flex items-start gap-3">
-                    <ShieldCheck class="mt-0.5 size-5 shrink-0 text-emerald-500" />
+                    <Braces class="mt-0.5 size-5 shrink-0 text-violet-500" />
                     <div>
-                        <h2 class="text-lg font-semibold">Protected translation keys</h2>
+                        <h2 class="text-lg font-semibold">Dynamic translation keys</h2>
                         <p class="text-muted-foreground mt-1 max-w-2xl text-sm">
-                            Protected values remain owned by their language files. Parse will not remove them and
-                            Publish will never overwrite them.
+                            Patterns describe keys resolved at runtime. Matching values remain manageable, reviewable,
+                            and publish normally, but Parse will not remove them just because no static key is visible.
                         </p>
                     </div>
                 </div>
@@ -357,49 +367,93 @@
 
             <form
                 class="space-y-6 p-6"
-                @submit.prevent="saveProtectionSettings"
+                @submit.prevent="saveDynamicKeySettings"
             >
                 <div
-                    v-if="protectionForm.errors.general"
+                    v-if="dynamicKeysForm.errors.general"
                     role="alert"
                     class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border p-3 text-sm"
                 >
-                    {{ protectionForm.errors.general }}
+                    {{ dynamicKeysForm.errors.general }}
                 </div>
 
                 <FormField
-                    id="protected_keys"
-                    :error="protectionForm.errors.protected_keys"
-                    description="Enter one complete key or prefix per line. A trailing dot protects the whole group or prefix, for example auth. or messages.legal."
-                    label="Keys and prefixes"
+                    id="dynamic_key_patterns"
+                    :error="dynamicKeysForm.errors.dynamic_key_patterns"
+                    description="Enter one wildcard pattern per line. * matches any remaining characters, including dots. A legacy trailing dot is converted to *, so messages.legal. becomes messages.legal.*."
+                    label="Additional application patterns"
                 >
                     <Textarea
-                        id="protected_keys"
-                        v-model="protectionForm.protected_keys"
+                        id="dynamic_key_patterns"
+                        v-model="dynamicKeysForm.dynamic_key_patterns"
                         :rows="7"
-                        placeholder="auth.&#10;validation.&#10;messages.legal."
+                        placeholder="enums.user_roles.*&#10;messages.dynamic.*"
                     />
                 </FormField>
 
+                <div
+                    v-if="page.props.dynamicPatterns?.length"
+                    class="bg-muted/30 rounded-lg border p-4"
+                >
+                    <p class="text-sm font-medium">Effective patterns</p>
+                    <p class="text-muted-foreground mt-1 text-xs">
+                        Package/config patterns are read-only here. Automatically detected patterns are refreshed by
+                        Parse and Sync.
+                    </p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <span
+                            v-for="entry in page.props.dynamicPatterns"
+                            :key="entry.pattern"
+                            class="bg-background inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-xs"
+                        >
+                            {{ entry.pattern }}
+                            <Badge
+                                v-if="entry.sources.includes('config')"
+                                variant="secondary"
+                            >
+                                Config
+                            </Badge>
+                            <Badge
+                                v-if="entry.sources.includes('detected')"
+                                variant="outline"
+                            >
+                                Detected
+                            </Badge>
+                            <Badge
+                                v-if="entry.sources.includes('binding')"
+                                variant="secondary"
+                            >
+                                Bound
+                            </Badge>
+                            <Badge
+                                v-if="entry.is_frontend"
+                                variant="success"
+                            >
+                                Frontend
+                            </Badge>
+                        </span>
+                    </div>
+                </div>
+
                 <div class="flex flex-wrap items-center gap-3 border-t pt-5">
                     <Button
-                        :disabled="protectionForm.processing || !protectionForm.isDirty"
+                        :disabled="dynamicKeysForm.processing || !dynamicKeysForm.isDirty"
                         type="submit"
                     >
                         <Loader2
-                            v-if="protectionForm.processing"
+                            v-if="dynamicKeysForm.processing"
                             class="size-4 animate-spin"
                         />
-                        <span>{{ protectionForm.processing ? 'Saving…' : 'Save protected keys' }}</span>
+                        <span>{{ dynamicKeysForm.processing ? 'Saving…' : 'Save dynamic patterns' }}</span>
                     </Button>
                     <span
-                        v-if="protectionSaved"
+                        v-if="dynamicKeysSaved"
                         role="status"
                         aria-live="polite"
                         class="flex items-center gap-1.5 text-sm text-emerald-600"
                     >
                         <Check class="size-4" />
-                        Protected keys saved
+                        Dynamic patterns saved
                     </span>
                 </div>
             </form>

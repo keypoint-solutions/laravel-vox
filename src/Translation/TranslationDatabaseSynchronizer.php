@@ -2,8 +2,8 @@
 
 namespace KeypointSolutions\LaravelVox\Translation;
 
+use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
-use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 
 class TranslationDatabaseSynchronizer
@@ -12,7 +12,7 @@ class TranslationDatabaseSynchronizer
         private TranslationFileRepository $files,
         private VoxLocaleResolver $localeResolver,
         private VoxFrontendManifest $frontendManifest,
-        private VoxKeyProtector $keyProtector,
+        private VoxDynamicKeyRegistry $dynamicKeys,
     ) {}
 
     public function sync(bool $updateLanguageFiles = false): SyncResult
@@ -25,6 +25,8 @@ class TranslationDatabaseSynchronizer
             (int) config('vox.parse.context_lines', 3)
         );
         $scanResults = $scanner->scan();
+        $this->dynamicKeys->writeDetectedPatterns($scanner->dynamicKeys());
+        $scanResults = $this->dynamicKeys->mergeEnumeratedScanResults($scanResults);
         $locales = $this->localeResolver->resolveLocales();
         $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
 
@@ -35,11 +37,11 @@ class TranslationDatabaseSynchronizer
         $languageFileResult = null;
 
         if ($updateLanguageFiles) {
-            $languageFileResult = (new TranslationFileUpdater($this->files, $this->keyProtector))
+            $languageFileResult = (new TranslationFileUpdater($this->files, $this->dynamicKeys))
                 ->updateFromScan($scanResults, $locales, $baseLocale);
         }
 
-        $result = (new TranslationSyncer($this->files))->sync($locales, $scanResults);
+        $result = (new TranslationSyncer($this->files, $this->dynamicKeys))->sync($locales, $scanResults);
 
         if ($languageFileResult !== null) {
             $result->setLanguageFileChanges(

@@ -12,8 +12,8 @@ use Inertia\Inertia;
 use Inertia\Response;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
-use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 
 class ManageController
@@ -21,7 +21,7 @@ class ManageController
     public function __construct(
         private VoxLocaleResolver $localeResolver,
         private VoxFrontendManifest $frontendManifest,
-        private VoxKeyProtector $keyProtector,
+        private VoxDynamicKeyRegistry $dynamicKeys,
     ) {}
 
     public function __invoke(Request $request): Response
@@ -48,6 +48,11 @@ class ManageController
             'lastSyncAt' => $lastSync?->created_at?->toIso8601String(),
             'ai' => $this->aiStatus(),
             'totalTranslations' => $totalTranslations,
+            'dynamicPatterns' => array_values(array_filter(
+                $this->dynamicKeys->entries(),
+                fn (array $entry): bool => str_contains($entry['pattern'], '*')
+                    && $entry['mode'] === 'open'
+            )),
         ]);
     }
 
@@ -211,6 +216,10 @@ class ManageController
             ->withQueryString()
             ->through(function (VoxTranslation $translation) use ($locales, $lastSyncAt): array {
                 $values = array_fill_keys($locales, '');
+                $dynamicMatch = $this->dynamicKeys->match(
+                    $translation->key,
+                    $translation->group === 'json' ? null : $translation->group
+                );
 
                 foreach ($translation->values as $value) {
                     $values[$value->locale] = $value->value;
@@ -226,10 +235,8 @@ class ManageController
                     'has_missing_values' => $this->hasMissingValues($translation, $locales),
                     'is_frontend' => $translation->is_frontend,
                     'is_orphan' => $translation->is_orphan,
-                    'is_protected' => $this->keyProtector->isProtected(
-                        $translation->key,
-                        $translation->group === 'json' ? null : $translation->group
-                    ),
+                    'is_dynamic' => $dynamicMatch !== null,
+                    'dynamic_pattern' => $dynamicMatch['pattern'] ?? null,
                     'source' => $translation->source,
                     'updated_at' => $translation->updated_at?->toIso8601String(),
                     'values' => $values,

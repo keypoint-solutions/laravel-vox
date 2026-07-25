@@ -77,6 +77,8 @@ class HandleInertiaRequests extends Middleware
             'sync' => route($routeNamePrefix.'sync', absolute: false),
             'sync_remote' => route($routeNamePrefix.'sync.remote', absolute: false),
             'sync_local' => route($routeNamePrefix.'sync.local', absolute: false),
+            'sync_archive_download' => route($routeNamePrefix.'sync.archive.download', absolute: false),
+            'sync_archive_import' => route($routeNamePrefix.'sync.archive.import', absolute: false),
             'sync_environment_store' => route($routeNamePrefix.'sync.environments.store', absolute: false),
             'sync_environment_update' => route(
                 $routeNamePrefix.'sync.environments.update',
@@ -94,6 +96,10 @@ class HandleInertiaRequests extends Middleware
                 false
             ),
             'manage' => route($routeNamePrefix.'manage', absolute: false),
+            'manage_translation_store' => route(
+                $routeNamePrefix.'manage.translations.store',
+                absolute: false
+            ),
             'manage_translation_update' => route(
                 $routeNamePrefix.'manage.translations.update',
                 ['translation' => '__translation__'],

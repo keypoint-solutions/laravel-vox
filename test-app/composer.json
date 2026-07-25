@@ -76,7 +76,10 @@
     "repositories": [
         {
             "type": "path",
-            "url": "../"
+            "url": "../",
+            "options": {
+                "reference": "config"
+            }
         }
     ],
     "config": {

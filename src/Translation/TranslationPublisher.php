@@ -3,20 +3,80 @@
 namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
-use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use RuntimeException;
 
 class TranslationPublisher
 {
     public function __construct(
         private TranslationFileRepository $files,
         private VoxLocaleResolver $localeResolver,
-        private VoxKeyProtector $keyProtector,
+        private TranslationFileValidator $validator,
+        private FrontendTranslationArtifacts $frontendArtifacts,
     ) {}
 
     public function publish(): PublishResult
+    {
+        $langPath = $this->files->langPath();
+        $stagingPath = storage_path('vox/publish-'.Str::uuid());
+        $this->validator->validateDirectory($langPath);
+        File::makeDirectory($stagingPath, 0755, true);
+
+        try {
+            if (File::isDirectory($langPath) && ! File::copyDirectory($langPath, $stagingPath)) {
+                throw new RuntimeException('Unable to prepare translation files for publishing.');
+            }
+
+            $stagedResult = $this->publishTo($stagingPath);
+            $publishedFiles = [];
+
+            foreach ($stagedResult->files() as $stagedFile) {
+                $prefix = rtrim($stagingPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
+
+                if (! str_starts_with($stagedFile, $prefix)) {
+                    throw new RuntimeException('A generated translation file escaped the publishing directory.');
+                }
+
+                $relativePath = substr($stagedFile, strlen($prefix));
+                $destination = rtrim($langPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$relativePath;
+                File::ensureDirectoryExists(dirname($destination));
+
+                if (! File::copy($stagedFile, $destination)) {
+                    throw new RuntimeException("Unable to publish translation file [{$relativePath}].");
+                }
+
+                $publishedFiles[] = $destination;
+            }
+
+            $frontendFiles = config('vox.frontend.runtime.enabled', false)
+                ? $this->frontendArtifacts->publish($langPath)
+                : [];
+
+            return new PublishResult(
+                $stagedResult->values(),
+                $publishedFiles,
+                $stagedResult->incompleteTranslations(),
+                $stagedResult->orphanTranslations(),
+                $frontendFiles,
+            );
+        } finally {
+            File::deleteDirectory($stagingPath);
+        }
+    }
+
+    public function publishTo(string $langPath): PublishResult
+    {
+        $this->validator->validateDirectory($langPath);
+        $result = $this->publishUsing($this->files->forPath($langPath));
+        $this->validator->validateDirectory($langPath);
+
+        return $result;
+    }
+
+    private function publishUsing(TranslationFileRepository $files): PublishResult
     {
         $locales = $this->localeResolver->resolveLocales();
         $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
@@ -31,7 +91,6 @@ class TranslationPublisher
         $jsonUpdates = [];
         $valueCount = 0;
         $incompleteTranslations = 0;
-        $protectedTranslations = 0;
         $orphanTranslations = 0;
 
         $translations = VoxTranslation::query()
@@ -44,12 +103,6 @@ class TranslationPublisher
         foreach ($translations as $translation) {
             if ($translation->is_orphan) {
                 $orphanTranslations++;
-
-                continue;
-            }
-
-            if ($this->isProtected($translation)) {
-                $protectedTranslations++;
 
                 continue;
             }
@@ -87,7 +140,7 @@ class TranslationPublisher
 
         foreach ($groupUpdates as $locale => $groups) {
             foreach ($groups as $group => $updates) {
-                $existing = $this->files->loadGroup($locale, $group);
+                $existing = $files->loadGroup($locale, $group);
                 $updated = $existing;
                 $changedValues = 0;
 
@@ -104,23 +157,23 @@ class TranslationPublisher
                     continue;
                 }
 
-                $this->files->saveGroup(
+                $files->saveGroup(
                     $locale,
                     $group,
                     $updated,
                     [],
-                    $this->files->loadLineComments($locale, $group),
-                    array_values($this->files->loadObsoleteComments($locale, $group))
+                    $files->loadLineComments($locale, $group),
+                    array_values($files->loadObsoleteComments($locale, $group))
                 );
                 $valueCount += $changedValues;
-                $changedFiles[] = $this->files->groupPath($locale, $group);
+                $changedFiles[] = $files->groupPath($locale, $group);
             }
         }
 
         foreach ($jsonUpdates as $locale => $namespaces) {
             foreach ($namespaces as $namespace => $updates) {
                 $resolvedNamespace = $namespace !== '' ? $namespace : null;
-                $existing = $this->files->loadJson($locale, $resolvedNamespace);
+                $existing = $files->loadJson($locale, $resolvedNamespace);
                 $updated = $existing;
                 $changedValues = 0;
 
@@ -137,9 +190,9 @@ class TranslationPublisher
                     continue;
                 }
 
-                $this->files->saveJson($locale, $updated, $resolvedNamespace);
+                $files->saveJson($locale, $updated, $resolvedNamespace);
                 $valueCount += $changedValues;
-                $changedFiles[] = $this->files->jsonPath($locale, $resolvedNamespace);
+                $changedFiles[] = $files->jsonPath($locale, $resolvedNamespace);
             }
         }
 
@@ -149,18 +202,7 @@ class TranslationPublisher
             $valueCount,
             $changedFiles,
             $incompleteTranslations,
-            $protectedTranslations,
             $orphanTranslations,
-        );
-    }
-
-    private function isProtected(VoxTranslation $translation): bool
-    {
-        return $this->keyProtector->isProtected(
-            $translation->key,
-            $translation->group === null || $translation->group === 'json'
-                ? null
-                : $translation->group
         );
     }
 

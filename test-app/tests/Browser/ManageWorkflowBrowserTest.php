@@ -2,24 +2,39 @@
 
 use App\Models\User;
 use KeypointSolutions\LaravelVox\Database\Factories\VoxTranslationFactory;
-use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriver;
-
-final class BrowserTranslationDriver implements TranslationDriver
-{
-    /**
-     * @param  array<string, mixed>  $context
-     */
-    public function translate(string $text, string $sourceLocale, string $targetLocale, array $context = []): string
-    {
-        return "AI {$targetLocale}: {$text}";
-    }
-}
+use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use Tests\Support\BrowserTranslationDriver;
 
 beforeEach(function (): void {
     config()->set('vox.translate.locales', ['en', 'fr']);
     config()->set('vox.translate.base_locale', 'en');
+    config()->set('vox.dynamic_keys.patterns', ['browser.dynamic.*']);
 
     $this->actingAs(User::factory()->create(['email' => 'admin@keypoint.ro']));
+});
+
+it('creates a concrete dynamic translation from an open pattern', function (): void {
+    visit('/vox/manage')
+        ->click('[data-test="add-dynamic-translation"]')
+        ->assertVisible('[data-test="dynamic-create-panel"]')
+        ->select('#new_dynamic_pattern', 'browser.dynamic.*')
+        ->fill('[data-test="new-dynamic-key"]', 'browser.dynamic.admin')
+        ->fill('[data-test="new-dynamic-value-en"]', 'Administrator')
+        ->fill('[data-test="new-dynamic-value-fr"]', 'Administrateur')
+        ->click('[data-test="store-dynamic-translation"]')
+        ->waitForText('Dynamic translation browser.dynamic.admin created.')
+        ->assertMissing('[data-test="dynamic-create-panel"]')
+        ->assertNoJavaScriptErrors();
+
+    $translation = VoxTranslation::query()
+        ->with('values')
+        ->where('group', 'browser')
+        ->where('key', 'dynamic.admin')
+        ->firstOrFail();
+
+    expect($translation->is_orphan)->toBeFalse()
+        ->and($translation->values->pluck('value', 'locale')->all())
+        ->toBe(['en' => 'Administrator', 'fr' => 'Administrateur']);
 });
 
 it('filters and individually approves a translation with visible feedback', function (): void {

@@ -43,6 +43,11 @@ return [
     'frontend' => [
         'groups' => $listOrAuto(env('VOX_FRONTEND_GROUPS', 'auto')),
         'manifest' => storage_path('vox/frontend.json'),
+        'runtime' => [
+            'enabled' => env('VOX_FRONTEND_RUNTIME_ENABLED', false),
+            'path' => storage_path('vox/frontend-translations'),
+            'middleware' => [],
+        ],
     ],
     'system' => [
         'middleware' => [
@@ -58,6 +63,19 @@ return [
     ],
     'paths' => [
         'lang' => lang_path(),
+    ],
+    'dynamic_keys' => [
+        'manifest' => storage_path('vox/dynamic.json'),
+        'patterns' => [
+            'auth.*',
+            'pagination.*',
+            'passwords.*',
+            'validation.*',
+        ],
+        'bindings' => [
+            // 'enums.user_roles.*' => App\Enums\UserRole::class,
+            // 'enums.order_statuses.*' => ['draft', 'submitted', 'paid'],
+        ],
     ],
     'parse' => [
         'paths' => [
@@ -87,12 +105,7 @@ return [
         'sort_obsolete_last' => true,
         'escape_unicode' => false,
         'missing_translation_prefix' => env('VOX_MISSING_TRANSLATION_PREFIX', '🚩'),
-        'protected_keys' => [
-            'auth.',
-            'pagination.',
-            'passwords.',
-            'validation.',
-        ],
+        'protected_keys' => [],
     ],
     'translate' => [
         'driver' => env('VOX_TRANSLATE_DRIVER', 'openai'),

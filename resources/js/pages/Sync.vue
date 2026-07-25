@@ -1,7 +1,18 @@
 <script setup lang="ts">
     import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-    import { Check, KeyRound, Pencil, Plus, RefreshCw, Server, Trash2 } from '@lucide/vue';
-    import { computed, ref } from 'vue';
+    import {
+        Check,
+        Download,
+        FileArchive,
+        KeyRound,
+        Pencil,
+        Plus,
+        RefreshCw,
+        Server,
+        Trash2,
+        Upload,
+    } from '@lucide/vue';
+    import { computed, markRaw, ref } from 'vue';
 
     import { Badge, Button, Input, Label, Tooltip } from '@/components/ui';
     import { useDateTime } from '@/composables/useDateTime';
@@ -33,6 +44,8 @@
     const isSyncingLocal = ref(false);
     const showLocalSyncOptions = ref(false);
     const pullingId = ref<number | null>(null);
+    const archiveInput = ref<HTMLInputElement | null>(null);
+    const isImportingArchive = ref(false);
     const success = ref<string | null>(null);
     const actionError = ref<string | null>(null);
     const form = useForm({
@@ -40,6 +53,9 @@
         type: 'staging',
         url: '',
         secret_key: '',
+    });
+    const archiveForm = useForm<{ archive: File | null }>({
+        archive: null,
     });
 
     function environmentRoute(template: string | undefined, id: number): string {
@@ -134,6 +150,56 @@
         );
     }
 
+    function selectArchive(event: Event): void {
+        const file = (event.target as HTMLInputElement).files?.[0];
+        archiveForm.archive = file ? markRaw(file) : null;
+        archiveForm.clearErrors();
+        success.value = null;
+        actionError.value = null;
+    }
+
+    function downloadArchive(): void {
+        window.location.assign(routes.value?.sync_archive_download ?? '');
+    }
+
+    function importArchive(): void {
+        success.value = null;
+        actionError.value = null;
+        archiveForm.clearErrors();
+
+        const archive = archiveInput.value?.files?.[0];
+
+        if (!archive) {
+            archiveForm.setError('archive', 'Choose a ZIP archive to import.');
+
+            return;
+        }
+
+        isImportingArchive.value = true;
+        const payload = new FormData();
+        payload.append('archive', archive);
+
+        router.post(routes.value?.sync_archive_import ?? '', payload, {
+            preserveScroll: true,
+            onError: (errors) => {
+                const message = errors.archive ?? 'Translation archive import failed.';
+                archiveForm.setError('archive', message);
+                actionError.value = message;
+            },
+            onSuccess: (responsePage) => {
+                success.value = (responsePage.flash?.success as string | undefined) ?? 'Translation archive imported.';
+                archiveForm.reset();
+
+                if (archiveInput.value) {
+                    archiveInput.value.value = '';
+                }
+            },
+            onFinish: () => {
+                isImportingArchive.value = false;
+            },
+        });
+    }
+
     function remove(environment: EnvironmentItem): void {
         if (!window.confirm(`Remove ${environment.name}?`)) {
             return;
@@ -204,6 +270,83 @@
             >
                 {{ isSyncingLocal ? 'Synchronizing…' : 'Sync local files' }}
             </Button>
+        </section>
+
+        <section class="bg-card overflow-hidden rounded-xl border">
+            <div class="border-b p-5">
+                <div class="flex items-start gap-3">
+                    <div class="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+                        <FileArchive class="size-4" />
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-semibold">Translation archive</h2>
+                        <p class="text-muted-foreground mt-1 text-xs">
+                            Move reviewed language files without coupling the transfer to publishing or database sync.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                <div class="space-y-4 p-5">
+                    <div>
+                        <h3 class="text-sm font-medium">Download publishable files</h3>
+                        <p class="text-muted-foreground mt-1 text-xs">
+                            Build the same language-file result as Publish and download it as a ZIP. Local files are not
+                            changed.
+                        </p>
+                    </div>
+                    <Button
+                        data-test="sync-archive-download"
+                        type="button"
+                        variant="outline"
+                        @click="downloadArchive"
+                    >
+                        <Download class="size-4" />
+                        Download ZIP
+                    </Button>
+                </div>
+
+                <form
+                    class="space-y-4 p-5"
+                    enctype="multipart/form-data"
+                    @submit.prevent="importArchive"
+                >
+                    <div>
+                        <h3 class="text-sm font-medium">Import language files</h3>
+                        <p class="text-muted-foreground mt-1 text-xs">
+                            Validate and copy a Vox ZIP over the language directory. This does not run Local sync.
+                        </p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="translation-archive">Translation ZIP</Label>
+                        <input
+                            id="translation-archive"
+                            ref="archiveInput"
+                            accept=".zip,application/zip"
+                            class="border-input bg-background file:text-foreground file:bg-muted h-10 w-full rounded-lg border px-3 py-1.5 text-sm file:mr-3 file:rounded file:border-0 file:px-2 file:py-1"
+                            data-test="sync-archive-file"
+                            name="archive"
+                            type="file"
+                            @change="selectArchive"
+                        />
+                        <p
+                            v-if="archiveForm.errors.archive"
+                            class="text-destructive text-xs"
+                        >
+                            {{ archiveForm.errors.archive }}
+                        </p>
+                    </div>
+                    <Button
+                        data-test="sync-archive-import"
+                        :disabled="isImportingArchive || archiveForm.archive === null"
+                        type="submit"
+                    >
+                        <Upload class="size-4" />
+                        {{ isImportingArchive ? 'Importing…' : 'Import ZIP' }}
+                    </Button>
+                </form>
+            </div>
         </section>
 
         <section class="bg-card rounded-xl border">
@@ -402,7 +545,7 @@
                 class="text-muted-foreground mt-2 text-sm"
             >
                 Both choices scan source code and refresh occurrences. Updating first also adds discovered keys and
-                applies your obsolete-key and protected-key rules before importing the files into Vox.
+                applies your obsolete-key and dynamic-key rules before importing the files into Vox.
             </p>
             <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button

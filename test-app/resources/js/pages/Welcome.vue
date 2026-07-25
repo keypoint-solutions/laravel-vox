@@ -1,5 +1,5 @@
 <script setup lang="ts">
-    import { availableVoxLocales, trans } from '@laravel-vox/vue.js';
+    import { availableVoxLocales, trans } from '@laravel-vox/runtime.js';
     import { computed } from 'vue';
 
     const currentLocale = computed(() => document.documentElement.lang.replace('-', '_'));

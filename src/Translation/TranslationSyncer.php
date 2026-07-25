@@ -7,10 +7,14 @@ use Illuminate\Support\Facades\File;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationOccurrence;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
+use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 
 class TranslationSyncer
 {
-    public function __construct(private TranslationFileRepository $files) {}
+    public function __construct(
+        private TranslationFileRepository $files,
+        private VoxDynamicKeyRegistry $dynamicKeys,
+    ) {}
 
     /**
      * @param  array<int, string>  $locales
@@ -26,6 +30,7 @@ class TranslationSyncer
 
         $translations = $this->loadTranslations($groupFiles, $jsonFiles);
         $translations = $this->applyScanMetadata($translations, $scanResults);
+        $translations = $this->applyDynamicMetadata($translations);
         $seenTranslationIds = [];
 
         foreach ($translations as $fullKey => $payload) {
@@ -124,7 +129,28 @@ class TranslationSyncer
             $orphanQuery->whereNotIn('id', $seenTranslationIds);
         }
 
-        $orphanIds = $orphanQuery->pluck('id');
+        $orphanIds = $orphanQuery
+            ->get()
+            ->filter(function (VoxTranslation $translation): bool {
+                $match = $this->dynamicKeys->match(
+                    $translation->key,
+                    $translation->group === 'json' ? null : $translation->group
+                );
+
+                if ($match === null) {
+                    return true;
+                }
+
+                $translation->timestamps = false;
+                $translation->is_frontend = $match['is_frontend'];
+                $translation->is_orphan = false;
+                $translation->source = 'dynamic';
+                $translation->save();
+                $translation->timestamps = true;
+
+                return false;
+            })
+            ->pluck('id');
 
         if ($orphanIds->isNotEmpty()) {
             VoxTranslation::query()
@@ -144,6 +170,46 @@ class TranslationSyncer
         $result->setOrphanTranslations($orphanIds->count());
 
         return $result;
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $translations
+     * @return array<string, array<string, mixed>>
+     */
+    private function applyDynamicMetadata(array $translations): array
+    {
+        foreach ($translations as $fullKey => $payload) {
+            $group = ($payload['group'] ?? null) === 'json' ? null : ($payload['group'] ?? null);
+            $key = $payload['key'] ?? null;
+
+            if (! is_string($key)) {
+                continue;
+            }
+
+            $match = $this->dynamicKeys->match($key, is_string($group) ? $group : null);
+
+            if ($match === null) {
+                continue;
+            }
+
+            $translations[$fullKey]['is_frontend'] = ($payload['is_frontend'] ?? false)
+                || $match['is_frontend'];
+            $translations[$fullKey]['source'] = $payload['source'] ?? 'dynamic';
+
+            if (($translations[$fullKey]['occurrences'] ?? []) === []) {
+                $translations[$fullKey]['occurrences'] = array_map(
+                    static fn (array $occurrence): array => [
+                        'file' => $occurrence['file'],
+                        'line' => $occurrence['line'],
+                        'before' => '',
+                        'after' => $occurrence['context'] ?? '',
+                    ],
+                    $match['occurrences']
+                );
+            }
+        }
+
+        return $translations;
     }
 
     /**

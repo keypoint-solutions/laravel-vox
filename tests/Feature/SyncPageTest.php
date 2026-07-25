@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -174,4 +175,104 @@ it('pulls a remote archive and synchronizes it into the local database', functio
         ->and(VoxAudit::query()->where('action', 'sync-remote')->exists())->toBeTrue();
 
     Http::assertSent(fn ($request): bool => $request->hasHeader('X-Vox-Key', 'secret-value'));
+});
+
+it('downloads the would-be published translations without changing local files', function (): void {
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('en', 'messages', ['greeting' => 'Old English']);
+    $files->saveGroup('fr', 'messages', ['greeting' => 'Ancien français']);
+
+    VoxTranslation::factory()
+        ->approved()
+        ->withValues([
+            'en' => 'Downloaded English',
+            'fr' => 'Français téléchargé',
+        ])
+        ->create(['group' => 'messages', 'key' => 'greeting']);
+
+    $response = $this->get('/vox/sync/archive')
+        ->assertOk()
+        ->assertDownload();
+    $archivePath = $response->baseResponse->getFile()->getPathname();
+    $zip = new ZipArchive;
+
+    expect($zip->open($archivePath))->toBeTrue();
+    $englishArchive = $zip->getFromName('en/messages.php');
+    $frenchArchive = $zip->getFromName('fr/messages.php');
+    $zip->close();
+
+    expect($englishArchive)->toBeString()->toContain('Downloaded English')
+        ->and($frenchArchive)->toBeString()->toContain('Français téléchargé')
+        ->and(require $this->syncLangPath.'/en/messages.php')
+        ->toBe(['greeting' => 'Old English']);
+});
+
+it('imports a validated translation archive without synchronizing the database', function (): void {
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('en', 'import_demo', ['message' => 'Existing file']);
+    $translation = VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => 'Database value', 'fr' => 'Valeur de la base'])
+        ->create(['group' => 'import_demo', 'key' => 'message']);
+
+    $archivePath = $this->syncRoot.'/import.zip';
+    $zip = new ZipArchive;
+    $zip->open($archivePath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $zip->addFromString('en/import_demo.php', "<?php\n\nreturn ['message' => 'Imported file'];\n");
+    $zip->addFromString('fr/import_demo.php', "<?php\n\nreturn ['message' => 'Fichier importé'];\n");
+    $zip->close();
+
+    $this->from('/vox/sync')
+        ->post('/vox/sync/archive', [
+            'archive' => new UploadedFile(
+                $archivePath,
+                'translations.zip',
+                'application/zip',
+                null,
+                true
+            ),
+        ])
+        ->assertRedirect('/vox/sync')
+        ->assertInertiaFlash(
+            'success',
+            'Imported 2 translation files. Run Local sync when you want to update the Vox database.'
+        );
+
+    expect(require $this->syncLangPath.'/en/import_demo.php')
+        ->toBe(['message' => 'Imported file'])
+        ->and($translation->fresh()->values->firstWhere('locale', 'en')?->value)
+        ->toBe('Database value')
+        ->and(VoxAudit::query()->where('action', 'translation-archive-imported')->exists())
+        ->toBeTrue();
+});
+
+it('validates the complete archive before overwriting any translation file', function (): void {
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('en', 'safe_demo', ['message' => 'Keep English']);
+    $files->saveGroup('fr', 'safe_demo', ['message' => 'Garder français']);
+
+    $archivePath = $this->syncRoot.'/unsafe-import.zip';
+    $zip = new ZipArchive;
+    $zip->open($archivePath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $zip->addFromString('en/safe_demo.php', "<?php return ['message' => 'Would overwrite'];");
+    $zip->addFromString('fr/safe_demo.php', "<?php return ['message' => strtoupper('unsafe')];");
+    $zip->close();
+
+    $this->from('/vox/sync')
+        ->post('/vox/sync/archive', [
+            'archive' => new UploadedFile(
+                $archivePath,
+                'translations.zip',
+                'application/zip',
+                null,
+                true
+            ),
+        ])
+        ->assertRedirect('/vox/sync')
+        ->assertSessionHasErrors('archive');
+
+    expect(require $this->syncLangPath.'/en/safe_demo.php')
+        ->toBe(['message' => 'Keep English'])
+        ->and(require $this->syncLangPath.'/fr/safe_demo.php')
+        ->toBe(['message' => 'Garder français']);
 });

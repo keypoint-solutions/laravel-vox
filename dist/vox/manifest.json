@@ -1,167 +1,167 @@
 {
-  "_Badge-mTow72eG.js": {
-    "file": "assets/Badge-mTow72eG.js",
+  "_Badge-DHCzXI2r.js": {
+    "file": "assets/Badge-DHCzXI2r.js",
     "name": "Badge",
     "imports": [
       "resources/js/vox.ts",
-      "_Layout-BMrgLGpt.js"
+      "_Layout-Dlat-cqd.js"
     ]
   },
-  "_Label-CSTocoxz.js": {
-    "file": "assets/Label-CSTocoxz.js",
+  "_Input-C9iRNWL5.js": {
+    "file": "assets/Input-C9iRNWL5.js",
+    "name": "Input",
+    "imports": [
+      "resources/js/vox.ts",
+      "_Layout-Dlat-cqd.js"
+    ]
+  },
+  "_Label-B3Ywd5fa.js": {
+    "file": "assets/Label-B3Ywd5fa.js",
     "name": "Label",
     "imports": [
       "resources/js/vox.ts",
-      "_Layout-BMrgLGpt.js"
+      "_Layout-Dlat-cqd.js"
     ]
   },
-  "_Layout-BMrgLGpt.js": {
-    "file": "assets/Layout-BMrgLGpt.js",
+  "_Layout-Dlat-cqd.js": {
+    "file": "assets/Layout-Dlat-cqd.js",
     "name": "Layout",
     "imports": [
       "resources/js/vox.ts"
     ]
   },
-  "_Textarea-6yL1NNFy.js": {
-    "file": "assets/Textarea-6yL1NNFy.js",
+  "_Textarea-CMyRGUOV.js": {
+    "file": "assets/Textarea-CMyRGUOV.js",
     "name": "Textarea",
     "imports": [
       "resources/js/vox.ts",
-      "_Layout-BMrgLGpt.js",
-      "_check-DcrMgPpH.js"
+      "_Layout-Dlat-cqd.js",
+      "_check-BjpucpXR.js",
+      "_Label-B3Ywd5fa.js"
     ]
   },
-  "_check-DcrMgPpH.js": {
-    "file": "assets/check-DcrMgPpH.js",
+  "_check-BjpucpXR.js": {
+    "file": "assets/check-BjpucpXR.js",
     "name": "check",
     "imports": [
-      "_Layout-BMrgLGpt.js"
+      "_Layout-Dlat-cqd.js"
     ]
   },
-  "_chevron-right-wSYn7TJc.js": {
-    "file": "assets/chevron-right-wSYn7TJc.js",
+  "_chevron-right-BWEnQOJf.js": {
+    "file": "assets/chevron-right-BWEnQOJf.js",
     "name": "chevron-right",
     "imports": [
-      "_Layout-BMrgLGpt.js"
+      "_Layout-Dlat-cqd.js"
     ]
   },
-  "_circle-alert-BWSjSiX_.js": {
-    "file": "assets/circle-alert-BWSjSiX_.js",
-    "name": "circle-alert",
+  "_key-round-B9T_RtEX.js": {
+    "file": "assets/key-round-B9T_RtEX.js",
+    "name": "key-round",
     "imports": [
-      "_Layout-BMrgLGpt.js"
+      "_Layout-Dlat-cqd.js"
     ]
   },
-  "_server-D7049NAU.js": {
-    "file": "assets/server-D7049NAU.js",
-    "name": "server",
+  "_sparkles-lybzg-hw.js": {
+    "file": "assets/sparkles-lybzg-hw.js",
+    "name": "sparkles",
     "imports": [
-      "_Layout-BMrgLGpt.js"
+      "_Layout-Dlat-cqd.js"
     ]
   },
-  "_shield-check-CEVTEBUo.js": {
-    "file": "assets/shield-check-CEVTEBUo.js",
-    "name": "shield-check",
-    "imports": [
-      "_Layout-BMrgLGpt.js"
-    ]
-  },
-  "_useDateTime-Dw0RE0JJ.js": {
-    "file": "assets/useDateTime-Dw0RE0JJ.js",
+  "_useDateTime-K427ANhA.js": {
+    "file": "assets/useDateTime-K427ANhA.js",
     "name": "useDateTime",
     "imports": [
       "resources/js/vox.ts",
-      "_Layout-BMrgLGpt.js"
+      "_Layout-Dlat-cqd.js"
     ]
   },
   "resources/js/pages/Audit.vue": {
-    "file": "assets/Audit-C68_hrGC.js",
+    "file": "assets/Audit-AeYnKx1Z.js",
     "name": "Audit",
     "src": "resources/js/pages/Audit.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/vox.ts",
-      "_Layout-BMrgLGpt.js",
-      "_chevron-right-wSYn7TJc.js",
-      "_Badge-mTow72eG.js",
-      "_useDateTime-Dw0RE0JJ.js"
+      "_Layout-Dlat-cqd.js",
+      "_chevron-right-BWEnQOJf.js",
+      "_Badge-DHCzXI2r.js",
+      "_useDateTime-K427ANhA.js"
     ]
   },
   "resources/js/pages/Dashboard.vue": {
-    "file": "assets/Dashboard-CUCLvj02.js",
+    "file": "assets/Dashboard-D92dDn63.js",
     "name": "Dashboard",
     "src": "resources/js/pages/Dashboard.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/vox.ts",
-      "_Layout-BMrgLGpt.js"
+      "_Layout-Dlat-cqd.js"
     ]
   },
   "resources/js/pages/Manage.vue": {
-    "file": "assets/Manage-sMjuH3Or.js",
+    "file": "assets/Manage-C1BlVTGJ.js",
     "name": "Manage",
     "src": "resources/js/pages/Manage.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/vox.ts",
-      "_Layout-BMrgLGpt.js",
-      "_check-DcrMgPpH.js",
-      "_Textarea-6yL1NNFy.js",
-      "_chevron-right-wSYn7TJc.js",
-      "_circle-alert-BWSjSiX_.js",
-      "_server-D7049NAU.js",
-      "_shield-check-CEVTEBUo.js",
-      "_Badge-mTow72eG.js",
-      "_useDateTime-Dw0RE0JJ.js"
+      "_Layout-Dlat-cqd.js",
+      "_Textarea-CMyRGUOV.js",
+      "_check-BjpucpXR.js",
+      "_chevron-right-BWEnQOJf.js",
+      "_sparkles-lybzg-hw.js",
+      "_Input-C9iRNWL5.js",
+      "_Badge-DHCzXI2r.js",
+      "_useDateTime-K427ANhA.js"
     ]
   },
   "resources/js/pages/Publish.vue": {
-    "file": "assets/Publish-DsvFahYx.js",
+    "file": "assets/Publish-ByFUk3tY.js",
     "name": "Publish",
     "src": "resources/js/pages/Publish.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/vox.ts",
-      "_Layout-BMrgLGpt.js",
-      "_check-DcrMgPpH.js",
-      "_circle-alert-BWSjSiX_.js",
-      "_shield-check-CEVTEBUo.js",
-      "_useDateTime-Dw0RE0JJ.js"
+      "_Layout-Dlat-cqd.js",
+      "_check-BjpucpXR.js",
+      "_sparkles-lybzg-hw.js",
+      "_useDateTime-K427ANhA.js"
     ]
   },
   "resources/js/pages/Settings.vue": {
-    "file": "assets/Settings-D5N-nShJ.js",
+    "file": "assets/Settings-Cmi1yoES.js",
     "name": "Settings",
     "src": "resources/js/pages/Settings.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/vox.ts",
-      "_Layout-BMrgLGpt.js",
-      "_check-DcrMgPpH.js",
-      "_Textarea-6yL1NNFy.js",
-      "_Label-CSTocoxz.js",
-      "_shield-check-CEVTEBUo.js",
-      "_Badge-mTow72eG.js",
-      "_useDateTime-Dw0RE0JJ.js"
+      "_Layout-Dlat-cqd.js",
+      "_Textarea-CMyRGUOV.js",
+      "_check-BjpucpXR.js",
+      "_key-round-B9T_RtEX.js",
+      "_Badge-DHCzXI2r.js",
+      "_useDateTime-K427ANhA.js"
     ]
   },
   "resources/js/pages/Sync.vue": {
-    "file": "assets/Sync-EiGDKj3i.js",
+    "file": "assets/Sync-CrDGkqPg.js",
     "name": "Sync",
     "src": "resources/js/pages/Sync.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/vox.ts",
-      "_Layout-BMrgLGpt.js",
-      "_check-DcrMgPpH.js",
-      "_Label-CSTocoxz.js",
-      "_server-D7049NAU.js",
-      "_Badge-mTow72eG.js",
-      "_useDateTime-Dw0RE0JJ.js"
+      "_Layout-Dlat-cqd.js",
+      "_check-BjpucpXR.js",
+      "_key-round-B9T_RtEX.js",
+      "_Input-C9iRNWL5.js",
+      "_Badge-DHCzXI2r.js",
+      "_useDateTime-K427ANhA.js",
+      "_Label-B3Ywd5fa.js"
     ]
   },
   "resources/js/vox.ts": {
-    "file": "assets/vox-BcjBuOYq.js",
+    "file": "assets/vox-DJQHfHcy.js",
     "name": "vox",
     "src": "resources/js/vox.ts",
     "isEntry": true,
@@ -174,7 +174,7 @@
       "resources/js/pages/Sync.vue"
     ],
     "css": [
-      "assets/vox-C713D63a.css"
+      "assets/vox-JP_PuGOG.css"
     ]
   }
 }

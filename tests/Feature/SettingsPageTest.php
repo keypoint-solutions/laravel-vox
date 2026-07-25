@@ -85,22 +85,39 @@ it('stores the remote sync toggle without exposing its key', function (): void {
         );
 });
 
-it('stores protected keys as a normalized editable list', function (): void {
+it('stores UI dynamic patterns separately from configured patterns', function (): void {
+    config()->set('vox.dynamic_keys.patterns', ['validation.*']);
+
     $this->from('/vox/settings')
         ->post('/vox/settings', [
-            'section' => 'protection',
-            'protected_keys' => "auth.\nmessages.legal.\nauth.\n",
+            'section' => 'dynamic_keys',
+            'dynamic_key_patterns' => "enums.user_roles.*\nmessages.legal.\nenums.user_roles.*\n",
         ])
         ->assertRedirect('/vox/settings')
-        ->assertInertiaFlash('success', 'Protected keys saved.');
+        ->assertInertiaFlash('success', 'Dynamic key patterns saved.');
 
-    expect(json_decode(VoxSetting::query()->findOrFail('protected_keys')->value, true))
-        ->toBe(['auth.', 'messages.legal.']);
+    expect(json_decode(VoxSetting::query()->findOrFail('dynamic_key_patterns')->value, true))
+        ->toBe(['enums.user_roles.*', 'messages.legal.*']);
 
     $this->get('/vox/settings')
         ->assertInertia(fn (AssertableInertia $page) => $page
-            ->where('settings.protected_keys', ['auth.', 'messages.legal.'])
+            ->where('settings.dynamic_key_patterns', ['enums.user_roles.*', 'messages.legal.*'])
+            ->where('settings.configured_dynamic_key_patterns', ['validation.*'])
+            ->has('dynamicPatterns', 3)
         );
+});
+
+it('normalizes legacy protected-key requests into dynamic patterns', function (): void {
+    $this->from('/vox/settings')
+        ->post('/vox/settings', [
+            'section' => 'protection',
+            'protected_keys' => "auth.\nmessages.legal.\n",
+        ])
+        ->assertRedirect('/vox/settings')
+        ->assertInertiaFlash('success', 'Dynamic key patterns saved.');
+
+    expect(json_decode(VoxSetting::query()->findOrFail('dynamic_key_patterns')->value, true))
+        ->toBe(['auth.*', 'messages.legal.*']);
 });
 
 it('requires the dedicated settings ability outside local development', function (): void {

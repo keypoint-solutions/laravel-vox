@@ -68,6 +68,13 @@ Route::middleware('auth')
 
 Surrounding middleware, domains, prefixes, and route-name prefixes are inherited. `LaravelVox::routes('admin/translations')` may also receive a prefix directly.
 
+`LaravelVox::routes()` includes the optional frontend translation endpoint. Applications that disable the GUI and
+only need runtime frontend translations can mount that route alone:
+
+```php
+LaravelVox::translationRoutes('translations');
+```
+
 ## Discovering and managing translations
 
 Configure locales and scan paths in `config/vox.php`, then run:
@@ -89,9 +96,86 @@ The management UI separates workflow state from source freshness:
 
 From `/vox/manage`, translations can be edited, AI-translated individually, or selected in bulk to fill only missing target values. Bulk AI results return to pending review; selected translations can then be approved or returned to review together. Successful saves close the editor and appear in an accessible toast. `/vox/publish` writes complete approved values to PHP and JSON language files without publishing pending changes.
 
-Protected keys and prefixes can be maintained in `/vox/settings`. The configured defaults are shown until an
-application saves its own list. Protected keys stay visible in Manage, are retained by Parse, and are never
-overwritten by Publish.
+## Dynamic translation keys
+
+Dynamic application code can assemble a translation key at runtime:
+
+```ts
+$t(`enums.user_roles.${user.role}`);
+```
+
+Vox records supported template-string and concatenation expressions as wildcard patterns such as
+`enums.user_roles.*`. A wildcard can span dots. Effective patterns are the union of:
+
+- patterns detected by the latest scan;
+- application-owned `vox.dynamic_keys.patterns`;
+- additional patterns maintained in `/vox/settings`;
+- finite bindings registered by the application.
+
+The default config includes `auth.*`, `pagination.*`, `passwords.*`, and `validation.*` because Laravel constructs
+keys in those translation families at runtime. Concrete values covered by an open pattern can be added from
+`/vox/manage`. The source-locale value is required; missing target values can then use the normal individual or bulk
+AI workflow.
+
+Use a finite binding when the possible suffixes are known. Vox seeds every bound key during Parse and treats any
+other value as outside the binding:
+
+```php
+use App\Enums\UserRole;
+use App\Vox\OrderStatusKeys;
+
+'dynamic_keys' => [
+    'patterns' => [
+        'validation.*',
+    ],
+    'bindings' => [
+        'enums.user_roles.*' => UserRole::class,
+        'features.*' => ['search', 'export'],
+        'orders.statuses.*' => OrderStatusKeys::class,
+    ],
+],
+```
+
+Backed enums use their values; unit enums use their case names. Container-resolved provider classes implement
+`DynamicKeyProvider`:
+
+```php
+use KeypointSolutions\LaravelVox\DynamicKeyProvider;
+
+final class OrderStatusKeys implements DynamicKeyProvider
+{
+    public function values(): iterable
+    {
+        return ['draft', 'submitted', 'paid'];
+    }
+}
+```
+
+For values that must be resolved at runtime, register a callback from an application service provider:
+
+```php
+use KeypointSolutions\LaravelVox\Facades\LaravelVox;
+
+public function boot(): void
+{
+    LaravelVox::dynamicKeys(
+        'features.*',
+        fn (): array => array_keys(config('features', [])),
+    );
+}
+```
+
+Callbacks should be deterministic and side-effect free. They are registered at runtime instead of being placed in
+`config/vox.php`, so `php artisan config:cache` remains safe.
+
+Dynamic values stay active during cleanup and synchronization. Once complete and approved, they publish normally;
+being dynamic is not a reason to preserve an older file value. Patterns discovered in frontend code also include
+their PHP group in the frontend manifest. The legacy `vox.parse.protected_keys` option is still read as an open
+pattern list for compatibility, but new applications should use `vox.dynamic_keys`.
+
+Automatic discovery deliberately covers statically understandable templates and concatenation. Arbitrary runtime
+expressions cannot be enumerated reliably; use an explicit pattern or binding for those. General AST/data-flow
+inference and opt-in runtime usage telemetry are future enhancements, not current requirements.
 
 ## AI translation
 
@@ -206,6 +290,43 @@ The current locale is read from `<html lang>`. Laravel JSON translations remain 
 
 Applications that prefer a fixed list can use `vox({ frontendGroups: ['frontend', 'checkout'] })` or set `vox.frontend.groups` explicitly.
 
+### Runtime loading without a frontend rebuild
+
+Same-origin Laravel and Inertia applications can load published translations from the backend instead of bundling
+them with Vite. Enable the endpoint:
+
+```dotenv
+VOX_FRONTEND_RUNTIME_ENABLED=true
+```
+
+Use the runtime Vue entry point and provide the application locales:
+
+```ts
+import { createVoxI18n } from '@keypoint-solutions/laravel-vox/vue/runtime';
+
+createApp(App)
+    .use(createVoxI18n({ locales: ['en', 'fr', 'ro'] }))
+    .mount('#app');
+```
+
+Composer-vendor consumers import `@laravel-vox/runtime.js` from the same alias shown above. No Vox Vite plugin is
+needed for this mode. Publish prepares validated JSON at `storage/vox/frontend-translations`; requests to
+`/vox/translations/{locale}` only read those artifacts and support ETag revalidation. JSON translations and the PHP
+groups in the frontend manifest are included, while backend-only PHP groups remain private.
+
+If package routes use a custom prefix, pass the matching endpoint template:
+
+```ts
+createVoxI18n({
+    locales: ['en', 'fr'],
+    endpoint: '/admin/translations/translations/{locale}',
+});
+```
+
+Build-time bundling remains the safer default for isolated, offline, or static SPAs. A cross-origin SPA may opt into
+runtime loading with an absolute endpoint or endpoint callback, but authentication and CORS remain the consuming
+application's responsibility.
+
 ## Local and remote synchronization
 
 Local sync imports the current application's language files into the Vox database:
@@ -221,13 +342,16 @@ language files are retained as Orphans for deliberate review instead of silently
 
 Remote sync addresses production-edited translations. On the source application, generate a shared key:
 
-```bash
-php artisan vox:generate-sync-key
-```
-
-This enables the keyed `POST /vox/sync` archive endpoint. In the receiving application's Sync page, add the source URL and key, then pull it. Matching remote values are authoritative, local-only keys are retained, and changed approved translations return to pending review before the next publish or deployment.
-
 Remote archives reject absolute paths, traversal entries, and symbolic links. Secrets are never returned to the settings or environment UI.
+
+The Sync page can also download a ZIP representing the exact files a Publish would produce, without changing the
+local language directory. Import validates an entire Vox ZIP before merging its PHP and JSON files over the language
+directory and deliberately does not start a database sync; run local sync when ready to review the imported values.
+
+Publish, ZIP download, remote pull, and ZIP import share a structural translation-file validator. PHP files must
+return one literal, optionally nested array with string keys and string values. Variables, interpolation,
+concatenation, function calls, includes, and other executable PHP are rejected before any validated archive is
+applied.
 
 ## Configuration highlights
 
@@ -236,9 +360,10 @@ The published `config/vox.php` controls:
 - automatic or manual route registration;
 - enabled dashboard features and middleware;
 - database connection and language path;
-- scan paths, exclusions, protected/dynamic keys, output formatting, and missing-value marker;
+- scan paths, exclusions, dynamic-key patterns and bindings, output formatting, and missing-value marker;
 - locales, base locale, AI driver, model, guidance, and provider credentials;
 - frontend group auto-detection or explicit overrides;
+- optional prebuilt runtime frontend artifacts, endpoint path, and middleware;
 - remote sync enablement, key, and endpoint middleware.
 
 `VOX_FRONTEND_GROUPS` and `VOX_TRANSLATE_LOCALES` accept `auto`, one value, or a comma-separated list such as
@@ -246,7 +371,8 @@ The published `config/vox.php` controls:
 
 ## Development and testing
 
-The repository includes a stock Laravel 13 consumer application with Blade and Vue translation pages plus a headless remote-sync fixture.
+The repository includes a stock Laravel 13 consumer application with Blade and runtime-loaded Vue translation pages
+plus a headless remote-sync fixture.
 
 Initial setup:
 

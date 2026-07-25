@@ -94,8 +94,8 @@ it('returns manage data with groups, statuses, and occurrences', function (): vo
         ->toBe('resources/views/welcome.blade.php');
 });
 
-it('marks protected and orphan translations and filters orphans separately', function (): void {
-    config()->set('vox.parse.protected_keys', ['messages.legal.']);
+it('marks dynamic and orphan translations and filters orphans separately', function (): void {
+    config()->set('vox.dynamic_keys.patterns', ['messages.legal.*']);
 
     VoxTranslation::factory()
         ->withValues(['en' => 'Terms', 'fr' => 'Conditions'])
@@ -111,10 +111,68 @@ it('marks protected and orphan translations and filters orphans separately', fun
     $orphans = manageTranslations($this->get('/vox/manage?status=orphan'));
     $approved = manageTranslations($this->get('/vox/manage?status=approved'));
 
-    expect($all['messages.legal.terms']['is_protected'])->toBeTrue()
+    expect($all['messages.legal.terms']['is_dynamic'])->toBeTrue()
+        ->and($all['messages.legal.terms']['dynamic_pattern'])->toBe('messages.legal.*')
         ->and($all['messages.old']['is_orphan'])->toBeTrue()
         ->and($orphans->pluck('display_key')->all())->toBe(['messages.old'])
         ->and($approved)->toBeEmpty();
+});
+
+it('creates concrete values covered by a dynamic pattern', function (): void {
+    $this->withoutMiddleware(PreventRequestForgery::class);
+    config()->set('vox.dynamic_keys.patterns', ['enums.user_roles.*']);
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations', [
+            'pattern' => 'enums.user_roles.*',
+            'key' => 'enums.user_roles.admin',
+            'values' => [
+                'en' => 'Administrator',
+                'fr' => '',
+            ],
+        ])
+        ->assertRedirect('/vox/manage')
+        ->assertInertiaFlash('success', 'Dynamic translation enums.user_roles.admin created.');
+
+    $translation = VoxTranslation::query()
+        ->with('values')
+        ->where('group', 'enums')
+        ->where('key', 'user_roles.admin')
+        ->firstOrFail();
+
+    expect($translation)
+        ->status->toBe('pending')
+        ->is_orphan->toBeFalse()
+        ->source->toBe('dynamic')
+        ->and($translation->values->pluck('value', 'locale')->all())
+        ->toBe(['en' => 'Administrator', 'fr' => ''])
+        ->and(VoxAudit::query()->where('action', 'dynamic-translation-created')->exists())
+        ->toBeTrue();
+});
+
+it('rejects dynamic values outside the selected pattern and duplicate keys', function (): void {
+    $this->withoutMiddleware(PreventRequestForgery::class);
+    config()->set('vox.dynamic_keys.patterns', ['enums.user_roles.*']);
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations', [
+            'pattern' => 'enums.user_roles.*',
+            'key' => 'enums.permissions.edit',
+            'values' => ['en' => 'Edit'],
+        ])
+        ->assertRedirect('/vox/manage')
+        ->assertSessionHasErrors('key');
+
+    VoxTranslation::factory()->create(['group' => 'enums', 'key' => 'user_roles.admin']);
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations', [
+            'pattern' => 'enums.user_roles.*',
+            'key' => 'enums.user_roles.admin',
+            'values' => ['en' => 'Administrator'],
+        ])
+        ->assertRedirect('/vox/manage')
+        ->assertSessionHasErrors('key');
 });
 
 it('filters translations by group scope', function (): void {

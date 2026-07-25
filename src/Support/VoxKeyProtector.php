@@ -2,8 +2,9 @@
 
 namespace KeypointSolutions\LaravelVox\Support;
 
-use Illuminate\Support\Str;
-
+/**
+ * @deprecated Use VoxDynamicKeyRegistry.
+ */
 class VoxKeyProtector
 {
     /**
@@ -14,51 +15,9 @@ class VoxKeyProtector
     public function isProtected(string $key, ?string $group): bool
     {
         foreach ($this->protectedKeys as $protected) {
-            if ($protected === '') {
-                continue;
-            }
+            $fullKey = $group === null || $group === 'json' ? $key : $group.'.'.$key;
 
-            if (Str::startsWith($protected, '.')) {
-                $protectedKey = ltrim($protected, '.');
-
-                if ($protectedKey === '') {
-                    continue;
-                }
-
-                if (Str::endsWith($protectedKey, '.') && Str::startsWith($key, $protectedKey)) {
-                    return true;
-                }
-
-                if ($key === $protectedKey) {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if (preg_match('/^[^\s.]+\./', $protected) === 1) {
-                [$protectedGroup, $protectedKey] = explode('.', $protected, 2);
-
-                if ($protectedKey === '') {
-                    if ($group === $protectedGroup) {
-                        return true;
-                    }
-
-                    continue;
-                }
-
-                if ($group === $protectedGroup && Str::endsWith($protectedKey, '.') && Str::startsWith($key, $protectedKey)) {
-                    return true;
-                }
-
-                if ($group === $protectedGroup && $protectedKey === $key) {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if ($group === null && $key === $protected) {
+            if (VoxDynamicKeyRegistry::patternMatches($protected, $fullKey)) {
                 return true;
             }
         }

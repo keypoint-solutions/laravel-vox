@@ -14,6 +14,7 @@ class VoxSettingsRepository
     private const EDITABLE_KEYS = [
         'translate_guidance',
         'translate_model',
+        'dynamic_key_patterns',
         'protected_keys',
         'sync_enabled',
     ];
@@ -28,7 +29,8 @@ class VoxSettingsRepository
                 'translate_guidance',
                 config('vox.translate.guidance', '')
             ),
-            'protected_keys' => $this->protectedKeys(),
+            'dynamic_key_patterns' => $this->editableDynamicKeyPatterns(),
+            'configured_dynamic_key_patterns' => $this->configuredDynamicKeyPatterns(),
             'sync_enabled' => (bool) $this->get('sync_enabled', config('vox.sync.enabled', true)),
             'sync_key_set' => filled(config('vox.sync.key')),
         ];
@@ -37,23 +39,52 @@ class VoxSettingsRepository
     /**
      * @return array<int, string>
      */
-    public function protectedKeys(): array
+    public function dynamicKeyPatterns(): array
     {
-        $configured = config('vox.parse.protected_keys', []);
-        $defaults = is_array($configured) ? $configured : [];
-        $protectedKeys = $this->get('protected_keys', $defaults);
+        return array_values(array_unique(array_merge(
+            $this->configuredDynamicKeyPatterns(),
+            $this->editableDynamicKeyPatterns()
+        )));
+    }
 
-        if (! is_array($protectedKeys)) {
-            return $defaults;
+    /**
+     * @return array<int, string>
+     */
+    public function configuredDynamicKeyPatterns(): array
+    {
+        $configured = config('vox.dynamic_keys.patterns', []);
+        $bindings = config('vox.dynamic_keys.bindings', []);
+        $legacy = config('vox.parse.protected_keys', []);
+
+        return $this->normalizePatterns(array_merge(
+            is_array($configured) ? $configured : [$configured],
+            is_array($bindings) ? array_keys($bindings) : [],
+            is_array($legacy) ? $legacy : [$legacy]
+        ));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function editableDynamicKeyPatterns(): array
+    {
+        $patterns = $this->get('dynamic_key_patterns');
+
+        if (! is_array($patterns)) {
+            $patterns = $this->get('protected_keys', []);
         }
 
-        return array_values(array_unique(array_filter(
-            array_map(
-                static fn (mixed $key): string => is_string($key) ? trim($key) : '',
-                $protectedKeys
-            ),
-            static fn (string $key): bool => $key !== ''
-        )));
+        return $this->normalizePatterns(is_array($patterns) ? $patterns : []);
+    }
+
+    /**
+     * @deprecated Use dynamicKeyPatterns().
+     *
+     * @return array<int, string>
+     */
+    public function protectedKeys(): array
+    {
+        return $this->dynamicKeyPatterns();
     }
 
     /**
@@ -101,5 +132,20 @@ class VoxSettingsRepository
     private function tableExists(): bool
     {
         return Schema::connection(config('vox.database.connection', 'vox'))->hasTable('vox_settings');
+    }
+
+    /**
+     * @param  array<int, mixed>  $patterns
+     * @return array<int, string>
+     */
+    private function normalizePatterns(array $patterns): array
+    {
+        return array_values(array_unique(array_filter(
+            array_map(
+                static fn (mixed $pattern): string => VoxDynamicKeyRegistry::normalizePattern($pattern),
+                $patterns
+            ),
+            static fn (string $pattern): bool => $pattern !== ''
+        )));
     }
 }

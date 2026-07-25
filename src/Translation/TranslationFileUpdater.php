@@ -3,13 +3,13 @@
 namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Arr;
-use KeypointSolutions\LaravelVox\Support\VoxKeyProtector;
+use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 
 class TranslationFileUpdater
 {
     public function __construct(
         private TranslationFileRepository $files,
-        private VoxKeyProtector $protector
+        private VoxDynamicKeyRegistry $dynamicKeys
     ) {}
 
     /**
@@ -53,7 +53,7 @@ class TranslationFileUpdater
             $keys = array_values(array_unique($keys));
             $baseExisting = $this->files->loadGroup($baseLocale, $group);
             $baseFlat = Arr::dot($baseExisting);
-            $keys = array_values(array_unique(array_merge($keys, $this->protectedKeysFromBase($baseFlat, $group))));
+            $keys = array_values(array_unique(array_merge($keys, $this->dynamicKeysFromBase($baseFlat, $group))));
             $lineComments = $this->buildLineComments($scanResults, $group);
 
             foreach ($locales as $locale) {
@@ -83,13 +83,11 @@ class TranslationFileUpdater
 
                 foreach ($obsoleteKeys as $obsoleteKey) {
                     $existsInBase = array_key_exists($obsoleteKey, $baseFlat);
-                    $shouldBypassProtection = $this->shouldBypassProtectionForOrphan($locale, $baseLocale, $existsInBase);
-
                     if ($this->shouldKeepOrphanKey($locale, $baseLocale, $existsInBase)) {
                         continue;
                     }
 
-                    if (! $shouldBypassProtection && $this->protector->isProtected($obsoleteKey, $group)) {
+                    if ($this->dynamicKeys->matches($obsoleteKey, $group)) {
                         continue;
                     }
 
@@ -150,13 +148,11 @@ class TranslationFileUpdater
 
             foreach ($obsoleteKeys as $obsoleteKey) {
                 $existsInBase = array_key_exists($obsoleteKey, $baseJson);
-                $shouldBypassProtection = $this->shouldBypassProtectionForOrphan($locale, $baseLocale, $existsInBase);
-
                 if ($this->shouldKeepOrphanKey($locale, $baseLocale, $existsInBase)) {
                     continue;
                 }
 
-                if (! $shouldBypassProtection && $this->protector->isProtected($obsoleteKey, null)) {
+                if ($this->dynamicKeys->matches($obsoleteKey, null)) {
                     continue;
                 }
 
@@ -191,13 +187,11 @@ class TranslationFileUpdater
 
                 foreach ($obsoleteKeys as $obsoleteKey) {
                     $existsInBase = array_key_exists($obsoleteKey, $baseJson);
-                    $shouldBypassProtection = $this->shouldBypassProtectionForOrphan($locale, $baseLocale, $existsInBase);
-
                     if ($this->shouldKeepOrphanKey($locale, $baseLocale, $existsInBase)) {
                         continue;
                     }
 
-                    if (! $shouldBypassProtection && $this->protector->isProtected($namespace.'::'.$obsoleteKey, null)) {
+                    if ($this->dynamicKeys->matches($namespace.'::'.$obsoleteKey, null)) {
                         continue;
                     }
 
@@ -354,25 +348,16 @@ class TranslationFileUpdater
         return $locale !== $baseLocale && ! $existsInBase;
     }
 
-    private function shouldBypassProtectionForOrphan(string $locale, string $baseLocale, bool $existsInBase): bool
-    {
-        if (config('vox.parse.keep_orphan_other_locales_keys', true)) {
-            return false;
-        }
-
-        return $locale !== $baseLocale && ! $existsInBase;
-    }
-
     /**
      * @param  array<string, mixed>  $baseFlat
      * @return array<int, string>
      */
-    private function protectedKeysFromBase(array $baseFlat, string $group): array
+    private function dynamicKeysFromBase(array $baseFlat, string $group): array
     {
         $keys = [];
 
         foreach (array_keys($baseFlat) as $key) {
-            if ($this->protector->isProtected($key, $group)) {
+            if ($this->dynamicKeys->matches($key, $group)) {
                 $keys[] = $key;
             }
         }

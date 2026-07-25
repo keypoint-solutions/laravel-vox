@@ -53,9 +53,17 @@ The repository should follow a conventional Laravel package layout. The consumer
 | A translation is marked `is_frontend` when its discovered source is frontend code.                                             | Complete |
 | Stale frontend flags are removed on a later sync when a key is no longer used by frontend code.                                | Complete |
 | Standard Laravel framework language sources and optional Cashier sources are scanned by default.                               | Complete |
-| Dynamic keys are surfaced and can be protected from destructive cleanup.                                                       | Complete |
+| Supported dynamic template and concatenation expressions are recorded as wildcard patterns with source metadata.               | Complete |
+| Laravel runtime-generated translation families are retained through explicit default patterns.                                 | Complete |
+| Open patterns retain matching concrete values through Parse and Sync without preventing normal approved publishing.            | Complete |
+| Finite patterns can bind to arrays, enums, container-resolved providers, or runtime callbacks and seed their concrete keys.    | Complete |
+| Patterns detected in frontend source contribute their PHP groups to the frontend manifest.                                     | Complete |
 | Database rows absent from both scanned source and language files are retained and classified as Orphans.                       | Complete |
 | Displayed timestamps are ISO values from the server and formatted in the browser's local timezone through a shared composable. | Complete |
+
+Arbitrary runtime expressions cannot be enumerated safely through source scanning. Their supported fallback is an
+explicit open pattern or finite binding. General AST/data-flow inference and opt-in runtime observation are deferred
+enhancements; neither is required for deterministic cleanup safety.
 
 ### Frontend consumption
 
@@ -70,6 +78,11 @@ The repository should follow a conventional Laravel package layout. The consumer
 | Consuming applications may explicitly override the frontend group list.                                                                                | Complete |
 | The test application provides equivalent Blade and Vue pages with a language picker.                                                                   | Complete |
 | Backend-only translation groups are proven absent from the frontend bundle.                                                                            | Complete |
+| Frontend consumers may opt into a same-origin runtime strategy that loads the current locale from a backend endpoint.                                  | Complete |
+| Publish prepares one validated frontend JSON artifact per locale from JSON translations and frontend-approved PHP groups.                              | Complete |
+| The runtime endpoint serves only configured locales, uses cache validators, and never queries or compiles translations on each request.                | Complete |
+| The existing build-time `laravel-vue-i18n` bundling strategy remains supported for isolated SPAs and offline/static deployments.                       | Complete |
+| An isolated SPA may use the runtime strategy only through an explicitly configured absolute endpoint and application-owned CORS policy.                | Complete |
 
 The intended standard integration is:
 
@@ -97,6 +110,11 @@ Its Composer path-repository symlink is a development detail, not an end-user in
 
 `laravel-vue-i18n` remains the frontend translation runtime. Vox must integrate with it rather than reimplement its parameter replacement, pluralization, or locale-loading behavior.
 
+The runtime delivery strategy is designed primarily for same-origin Laravel/Inertia applications. It removes the
+need to rebuild frontend assets after publishing translations by serving prebuilt per-locale JSON. It does not turn
+the translation endpoint into an unrestricted cross-origin API; isolated SPAs retain build-time bundling unless the
+consuming application explicitly owns the endpoint URL and CORS boundary.
+
 ### Management workflow
 
 | Contract                                                                                                    | Status   |
@@ -114,7 +132,8 @@ Its Composer path-repository symlink is a development detail, not an end-user in
 | Status dots and icon-only actions have hover and keyboard-focus tooltips.                                   | Complete |
 | Frontend/backend group and occurrence indicators explain their meaning without relying on color alone.      | Complete |
 | Frontend group indicators describe whether export is automatic, explicitly configured, or inherent to JSON. | Complete |
-| Orphans and protected keys are visibly identified and can be filtered or inspected in Manage.               | Complete |
+| Orphans and dynamic keys are visibly identified and can be filtered or inspected in Manage.                 | Complete |
+| Users can create concrete values covered by an open dynamic pattern, with the source-locale value required. | Complete |
 
 ### AI translation
 
@@ -133,50 +152,58 @@ Its Composer path-repository symlink is a development detail, not an end-user in
 
 ### Routing and settings
 
-| Contract                                                                                        | Status   |
-| ----------------------------------------------------------------------------------------------- | -------- |
-| Package routes can register automatically using the configured prefix.                          | Complete |
-| Automatic route registration can be disabled.                                                   | Complete |
-| Applications can inject the complete package route set where desired.                           | Complete |
-| Settings validate constrained choices and do not expose environment-owned credentials.          | Complete |
-| The settings UI describes provider-neutral concepts even when OpenAI is the active driver.      | Complete |
-| Protected keys and prefixes can be maintained in Settings and use the same resolver everywhere. | Complete |
-| List-valued environment settings accept `auto`, a single value, or comma-separated values.      | Complete |
+| Contract                                                                                                         | Status   |
+| ---------------------------------------------------------------------------------------------------------------- | -------- |
+| Package routes can register automatically using the configured prefix.                                           | Complete |
+| Automatic route registration can be disabled.                                                                    | Complete |
+| Applications can inject the complete package route set where desired.                                            | Complete |
+| Applications can inject only the runtime frontend translation route where desired.                               | Complete |
+| Settings validate constrained choices and do not expose environment-owned credentials.                           | Complete |
+| The settings UI describes provider-neutral concepts even when OpenAI is the active driver.                       | Complete |
+| Additional open dynamic patterns can be maintained in Settings while config and detected sources remain visible. | Complete |
+| List-valued environment settings accept `auto`, a single value, or comma-separated values.                       | Complete |
 
 ### Publish
 
-| Contract                                                                                       | Status   |
-| ---------------------------------------------------------------------------------------------- | -------- |
-| The UI reports publishable, pending, incomplete, protected, and orphan translation counts.     | Complete |
-| Publishing writes approved database values to Laravel PHP and JSON language files.             | Complete |
-| Publishing preserves existing PHP comments and obsolete-key comments.                          | Complete |
-| Pending database changes do not overwrite language files.                                      | Complete |
-| Protected PHP and JSON values remain owned by language files and are never overwritten.        | Complete |
-| Orphan database rows are never written back into language files.                               | Complete |
-| Publish activity and affected-file counts are audited.                                         | Complete |
-| The UI reports a clear success result after publishing.                                        | Complete |
-| The package does not execute an application's arbitrary deployment command from a web request. | Complete |
+| Contract                                                                                            | Status   |
+| --------------------------------------------------------------------------------------------------- | -------- |
+| The UI reports publishable, pending, incomplete, dynamic, and orphan translation counts.            | Complete |
+| Publishing writes approved database values to Laravel PHP and JSON language files.                  | Complete |
+| Publishing preserves existing PHP comments and obsolete-key comments.                               | Complete |
+| Pending database changes do not overwrite language files.                                           | Complete |
+| Complete approved dynamic values publish through the same contract as statically discovered values. | Complete |
+| Orphan database rows are never written back into language files.                                    | Complete |
+| Publish activity and affected-file counts are audited.                                              | Complete |
+| The UI reports a clear success result after publishing.                                             | Complete |
+| The package does not execute an application's arbitrary deployment command from a web request.      | Complete |
+| Generated PHP translation files are structurally validated before Publish or archive Download.      | Complete |
+| Translation PHP accepts only a literal returned nested array with string keys and string values.    | Complete |
+| Variables, interpolation, concatenation, calls, includes, and other executable PHP are rejected.    | Complete |
 
 ### Remote sync
 
-| Contract                                                                                                              | Status   |
-| --------------------------------------------------------------------------------------------------------------------- | -------- |
-| Local sync scans current source and language files into the Vox database.                                             | Complete |
-| Local sync can be triggered from both CLI and UI with the same service.                                               | Complete |
-| Local sync asks whether source-discovered keys should update language files before database import.                   | Complete |
-| CLI users can request the same combined scan, file update, and database sync with `vox:sync --parse`.                 | Complete |
-| A keyed endpoint can provide a language archive to another Vox application.                                           | Complete |
-| Remote environments can be configured and triggered from the UI.                                                      | Complete |
-| Remote archive extraction rejects unsafe paths.                                                                       | Complete |
-| Remote sync pulls translations from a production, staging, or other Vox app into the local application for review.    | Complete |
-| Production remote values replace matching local values while local-only keys are retained for merging.                | Complete |
-| A later local Publish/build preserves the pulled production-admin edits for the next deployment.                      | Complete |
-| A synchronized value that differs from an approved database value returns that translation to pending review.         | Complete |
-| Unchanged approved translations remain approved after local or remote sync.                                           | Complete |
-| Pulling and merging a remote archive refreshes the local Vox database through the same local-sync service as the CLI. | Complete |
-| The test project exposes a headless fixture endpoint for visual and browser-test verification.                        | Complete |
-| A second full Laravel UI application is not required for sync verification.                                           | Complete |
-| Remote sync reports a clear success or failure result in the UI and audit trail.                                      | Complete |
+| Contract                                                                                                                     | Status   |
+| ---------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Local sync scans current source and language files into the Vox database.                                                    | Complete |
+| Local sync can be triggered from both CLI and UI with the same service.                                                      | Complete |
+| Local sync asks whether source-discovered keys should update language files before database import.                          | Complete |
+| CLI users can request the same combined scan, file update, and database sync with `vox:sync --parse`.                        | Complete |
+| A keyed endpoint can provide a language archive to another Vox application.                                                  | Complete |
+| Remote environments can be configured and triggered from the UI.                                                             | Complete |
+| Remote archive extraction rejects unsafe paths.                                                                              | Complete |
+| Remote sync pulls translations from a production, staging, or other Vox app into the local application for review.           | Complete |
+| Production remote values replace matching local values while local-only keys are retained for merging.                       | Complete |
+| A later local Publish/build preserves the pulled production-admin edits for the next deployment.                             | Complete |
+| A synchronized value that differs from an approved database value returns that translation to pending review.                | Complete |
+| Unchanged approved translations remain approved after local or remote sync.                                                  | Complete |
+| Pulling and merging a remote archive refreshes the local Vox database through the same local-sync service as the CLI.        | Complete |
+| The test project exposes a headless fixture endpoint for visual and browser-test verification.                               | Complete |
+| A second full Laravel UI application is not required for sync verification.                                                  | Complete |
+| Remote sync reports a clear success or failure result in the UI and audit trail.                                             | Complete |
+| Sync can download a ZIP containing the exact translation files that are currently publishable without changing local files.  | Complete |
+| Sync can import a Vox translation ZIP over the local language directory after validating the complete archive.               | Complete |
+| Archive import accepts only locale PHP/JSON translation files and rejects traversal, links, extra files, and invalid shapes. | Complete |
+| Archive import changes language files only; it never starts a local database sync automatically.                             | Complete |
 
 ### Audit
 
@@ -191,7 +218,7 @@ The settings page is a safe editor for supported package behavior, not a free-fo
 
 - Secrets remain environment-owned and are represented only by configured/not-configured status.
 - Provider credentials, locale discovery, and the base locale remain environment/configuration owned.
-- The settings UI edits only the active provider's supported model, translation guidance, protected keys, and remote-sync enablement.
+- The settings UI edits only the active provider's supported model, translation guidance, additional dynamic-key patterns, and remote-sync enablement.
 - OpenAI model discovery may refresh the supported model list, with a maintained fallback catalog when discovery is unavailable.
 - Low-level provider endpoints are package implementation details unless a future driver has a concrete, validated need to expose one.
 - User feedback is visible after saving, refreshing provider data, or encountering a validation/provider error.
@@ -232,7 +259,7 @@ The required browser flows are:
 | -------- | --------------------------------------------------------------------------------------------------- |
 | Consumer | Switch locales and verify matching Blade and Vue PHP-group, JSON, nested, and parameterized values. |
 | Manage   | Search/filter, edit/save, approve/reopen, inspect tooltips, and verify the Approved tab.            |
-| Settings | Save constrained AI and protected-key settings, refresh provider models, and observe feedback.      |
+| Settings | Save constrained AI and dynamic-key settings, refresh provider models, and observe feedback.        |
 | Publish  | Publish an approved value, observe success, and verify the resulting language file.                 |
 | Sync     | Choose a local-sync mode, then pull the headless fixture and verify the imported translation.       |
 | Audit    | Verify the preceding actions appear with locally formatted timestamps and useful context.           |
@@ -242,7 +269,7 @@ The required browser flows are:
 The current milestone is complete when:
 
 1. Blade and Vue consumer pages work in English, French, and Romanian through Herd.
-2. Frontend bundles contain scanner-approved PHP groups plus JSON translations, but not backend-only groups.
+2. Build-time bundles and runtime artifacts contain scanner-approved PHP groups plus JSON translations, but not backend-only groups.
 3. Manage approval, saving feedback, status explanations, and filtering pass feature and browser tests.
 4. Publish, Sync, and Audit are functional rather than placeholder pages.
 5. The headless remote fixture demonstrates a real pull into the current test app.
@@ -259,12 +286,20 @@ The current milestone is complete when:
 - Vox exposes package-owned Vite and Vue entry points so consuming apps do not copy bootstrap logic.
 - The npm package is optional; a Composer-vendor import path is supported and exercised by the test application.
 - JSON translations are frontend-addressable; PHP group export is allow-listed by the frontend manifest.
+- Frontend delivery has two supported modes: Vite bundling and opt-in prebuilt runtime JSON served by a same-origin endpoint.
+- Publish refreshes runtime JSON artifacts; runtime requests never query or compile translations.
+- Isolated SPAs keep build-time bundling unless their application explicitly owns the endpoint and CORS boundary.
 - The package keeps a small provider-neutral translation-driver abstraction instead of adding `laravel/ai` as a mandatory Composer dependency.
 - Remote-sync visual testing uses a deterministic headless fixture in the current Laravel 13 test app.
 - Remote sync treats the selected production/staging app as authoritative for matching keys while retaining newly developed local-only keys.
 - Publishing updates language artifacts only; application deployment remains the consuming application's responsibility.
-- Protected keys are one shared Parse, Manage, Settings, and Publish contract; Publish leaves their existing file values untouched.
+- Dynamic keys use one shared Parse, Sync, Manage, Settings, frontend-manifest, and Publish resolver.
+- Open patterns retain matching values; finite bindings enumerate only their array, enum, provider, or callback values.
+- Complete approved dynamic translations publish normally. Dynamic metadata is not a file-ownership or publish lock.
+- The legacy `parse.protected_keys` list is interpreted as open dynamic patterns for backward compatibility.
 - Orphan is independent metadata for DB-only rows, and orphan values never re-enter source files through Publish.
+- Translation archives are validated as a whole before import, and archive import never starts a database sync implicitly.
+- PHP translation files are data-only literal arrays; executable expressions are rejected before Publish or archive operations.
 
 ## Verification log
 
@@ -272,8 +307,8 @@ The current milestone is complete when:
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Baseline package and browser suite before this milestone | 41 tests, 246 assertions; passed                                                                          |
 | Manage and synchronization regression tests              | 16 tests, 148 assertions; passed                                                                          |
-| Package feature and unit suite                           | 68 tests, 506 assertions; passed                                                                          |
+| Package feature and unit suite                           | 98 tests, 644 assertions; passed                                                                          |
 | Consumer Vite build                                      | Passed; frontend PHP/JSON plus backend-only negative boundary verified                                    |
-| Herd-hosted Pest Browser suite                           | 9 tests, 69 assertions; passed                                                                            |
+| Herd-hosted Pest Browser suite                           | 11 tests, 84 assertions; passed                                                                           |
 | Final `composer test`                                    | Passed: package tests, package build, asset publish, consumer build, and browser suite                    |
 | Live Herd browser audit                                  | Passed: bulk AI control, save dismissal/toast, tooltips/footer, Sync, and Vue boundary; no console errors |

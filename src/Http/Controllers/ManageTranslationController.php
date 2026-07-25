@@ -7,17 +7,124 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
+use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
+use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
+use KeypointSolutions\LaravelVox\Translation\TranslationKey;
 use Throwable;
 
 class ManageTranslationController
 {
-    public function __construct(private VoxLocaleResolver $localeResolver) {}
+    public function __construct(
+        private VoxLocaleResolver $localeResolver,
+        private VoxDynamicKeyRegistry $dynamicKeys,
+    ) {}
+
+    public function store(
+        Request $request,
+        VoxAuditLogger $auditLogger,
+        VoxFrontendManifest $frontendManifest,
+    ): RedirectResponse {
+        $patterns = array_column($this->dynamicKeys->entries(), 'pattern');
+        $validated = $request->validate([
+            'pattern' => ['required', 'string', Rule::in($patterns)],
+            'key' => ['required', 'string', 'max:500'],
+            'values' => ['required', 'array'],
+            'values.*' => ['nullable', 'string'],
+        ]);
+        $fullKey = trim($validated['key']);
+
+        if ($fullKey === '' || str_contains($fullKey, '*') || preg_match('/[\r\n]/', $fullKey) === 1) {
+            throw ValidationException::withMessages([
+                'key' => 'Enter one concrete translation key without wildcards or line breaks.',
+            ]);
+        }
+
+        if (! $this->dynamicKeys->patternAccepts($validated['pattern'], $fullKey)) {
+            throw ValidationException::withMessages([
+                'key' => "The translation key must match {$validated['pattern']}.",
+            ]);
+        }
+
+        [$locales, $baseLocale] = $this->resolveLocales();
+        $baseValue = $validated['values'][$baseLocale] ?? null;
+
+        if (! is_string($baseValue) || trim($baseValue) === '') {
+            throw ValidationException::withMessages([
+                "values.{$baseLocale}" => "The {$baseLocale} source value is required.",
+            ]);
+        }
+
+        $translationKey = TranslationKey::fromRaw($fullKey);
+        $group = $translationKey->group ?? 'json';
+
+        if (VoxTranslation::query()->where('key', $translationKey->key)->where('group', $group)->exists()) {
+            throw ValidationException::withMessages([
+                'key' => 'That translation key already exists.',
+            ]);
+        }
+
+        $match = $this->dynamicKeys->match(
+            $translationKey->key,
+            $group === 'json' ? null : $group
+        );
+
+        if ($match === null) {
+            throw ValidationException::withMessages([
+                'key' => 'The translation key is not covered by an active dynamic pattern.',
+            ]);
+        }
+
+        $translation = DB::connection(config('vox.database.connection', 'vox'))
+            ->transaction(function () use (
+                $translationKey,
+                $group,
+                $match,
+                $locales,
+                $validated,
+                $auditLogger
+            ): VoxTranslation {
+                $translation = VoxTranslation::query()->create([
+                    'key' => $translationKey->key,
+                    'group' => $group,
+                    'is_frontend' => $match['is_frontend'],
+                    'is_orphan' => false,
+                    'source' => 'dynamic',
+                    'status' => 'pending',
+                ]);
+
+                foreach ($locales as $locale) {
+                    $value = $validated['values'][$locale] ?? '';
+
+                    VoxTranslationValue::query()->create([
+                        'translation_id' => $translation->id,
+                        'locale' => $locale,
+                        'value' => is_string($value) ? $value : '',
+                        'is_obsolete' => false,
+                    ]);
+                }
+
+                $auditLogger->record('dynamic-translation-created', [
+                    'translation_id' => $translation->id,
+                    'key' => $translationKey->fullKey(),
+                    'pattern' => $match['pattern'],
+                ]);
+
+                return $translation;
+            });
+
+        if ($translation->is_frontend) {
+            $frontendManifest->writeFromDatabase();
+        }
+
+        return Inertia::flash('success', "Dynamic translation {$fullKey} created.")->back();
+    }
 
     public function update(
         Request $request,
