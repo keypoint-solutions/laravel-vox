@@ -6,6 +6,7 @@ class PublishResult
 {
     /**
      * @param  array<int, string>  $files
+     * @param  array<int, string>  $publishedValues
      */
     public function __construct(
         private int $values,
@@ -13,11 +14,20 @@ class PublishResult
         private int $incompleteTranslations,
         private int $orphanTranslations,
         private array $frontendFiles = [],
+        private array $publishedValues = [],
     ) {}
 
     public function values(): int
     {
         return $this->values;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function publishedValues(): array
+    {
+        return $this->publishedValues;
     }
 
     /**

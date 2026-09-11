@@ -10,6 +10,7 @@ use KeypointSolutions\LaravelVox\Http\Controllers\ManageTranslationController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ProvisionLocaleController;
 use KeypointSolutions\LaravelVox\Http\Controllers\PublishController;
 use KeypointSolutions\LaravelVox\Http\Controllers\PullRemoteTranslationsController;
+use KeypointSolutions\LaravelVox\Http\Controllers\ReconcileRemoteTranslationsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SettingsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncEnvironmentController;
@@ -31,6 +32,7 @@ Route::middleware($configMiddleware)
 
         Route::get('/sync', SyncPageController::class)->name('sync');
         Route::post('/sync/local', SyncLocalTranslationsController::class)->name('sync.local');
+        Route::post('/sync/reconcile', ReconcileRemoteTranslationsController::class)->name('sync.reconcile');
         Route::post('/sync/locales', ProvisionLocaleController::class)->name('sync.locales.store');
         Route::get('/sync/archive', DownloadTranslationArchiveController::class)->name('sync.archive.download');
         Route::post('/sync/archive', ImportTranslationArchiveController::class)->name('sync.archive.import');

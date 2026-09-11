@@ -42,6 +42,7 @@ class ManualRouteRegistrationTest extends TestCase
                 ->where('vox.routes.dashboard', '/admin/translations')
                 ->where('vox.routes.manage', '/admin/translations/manage')
                 ->where('vox.routes.sync_locale_store', '/admin/translations/sync/locales')
+                ->where('vox.routes.sync_reconcile', '/admin/translations/sync/reconcile')
                 ->where('vox.routes.settings_update', '/admin/translations/settings')
             );
 

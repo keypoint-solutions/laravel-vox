@@ -13,10 +13,12 @@ class VoxTranslationValue extends VoxModel
         'locale',
         'value',
         'is_obsolete',
+        'is_pending_publish',
     ];
 
     protected $casts = [
         'is_obsolete' => 'bool',
+        'is_pending_publish' => 'bool',
     ];
 
     public function translation(): BelongsTo

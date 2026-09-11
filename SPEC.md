@@ -207,38 +207,53 @@ consuming application explicitly owns the endpoint URL and CORS boundary.
 
 ### Remote sync
 
-| Contract                                                                                                                     | Status   |
-| ---------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Local sync scans current source and language files into the Vox database.                                                    | Complete |
-| Local sync can be triggered from both CLI and UI with the same service.                                                      | Complete |
-| Local sync asks whether source-discovered keys should update language files before database import.                          | Complete |
-| CLI users can request the same combined scan, file update, and database sync with `vox:sync --parse`.                        | Complete |
-| A keyed endpoint can provide a language archive to another Vox application.                                                  | Complete |
-| Remote environments can be configured and triggered from the UI.                                                             | Complete |
-| Remote archive extraction rejects unsafe paths.                                                                              | Complete |
-| Remote sync pulls translations from a production, staging, or other Vox app into the local application for review.           | Complete |
-| Production remote values replace matching local values while local-only keys are retained for merging.                       | Complete |
-| A later local Publish/build preserves the pulled production-admin edits for the next deployment.                             | Complete |
-| A synchronized value that differs from an approved database value returns that translation to pending review.                | Complete |
-| Unchanged approved translations remain approved after local or remote sync.                                                  | Complete |
-| Pulling and merging a remote archive refreshes the local Vox database through the same local-sync service as the CLI.        | Complete |
-| The test project exposes a headless fixture endpoint for visual and browser-test verification.                               | Complete |
-| A second full Laravel UI application is not required for sync verification.                                                  | Complete |
-| Remote sync reports a clear success or failure result in the UI and audit trail.                                             | Complete |
-| Sync can download a ZIP containing the exact translation files that are currently publishable without changing local files.  | Complete |
-| Sync can import a Vox translation ZIP over the local language directory after validating the complete archive.               | Complete |
-| Archive import accepts only locale PHP/JSON translation files and rejects traversal, links, extra files, and invalid shapes. | Complete |
-| Archive import changes language files only; it never starts a local database sync automatically.                             | Complete |
+| Contract                                                                                                                         | Status   |
+| -------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Local sync scans current source and language files into the Vox database.                                                        | Complete |
+| Local sync can be triggered from both CLI and UI with the same service.                                                          | Complete |
+| Local sync asks whether source-discovered keys should update language files before database import.                              | Complete |
+| CLI users can request the same combined scan, file update, and database sync with `vox:sync --parse`.                            | Complete |
+| A keyed endpoint can provide a language archive to another Vox application.                                                      | Complete |
+| Remote environments can be configured and triggered from the UI.                                                                 | Complete |
+| Remote archive extraction rejects unsafe paths.                                                                                  | Complete |
+| Remote sync pulls translations from a production, staging, or other Vox app into the local application for review.               | Complete |
+| Remote values become candidates; local values and language files remain unchanged until an explicit review decision and Publish. | Complete |
+| A later local Publish/build preserves the pulled production-admin edits for the next deployment.                                 | Complete |
+| Accepting a remote value that differs from an approved database value returns that translation to pending review.                | Complete |
+| Unchanged approved translations remain approved after local or remote sync.                                                      | Complete |
+| UI and CLI pulls use the same reconciliation service; neither automatically runs local sync or writes local language files.      | Complete |
+| The test project exposes a headless fixture endpoint for visual and browser-test verification.                                   | Complete |
+| A second full Laravel UI application is not required for sync verification.                                                      | Complete |
+| Remote sync reports a clear success or failure result in the UI and audit trail.                                                 | Complete |
+| Sync can download a ZIP containing the exact translation files that are currently publishable without changing local files.      | Complete |
+| Sync can import a Vox translation ZIP over the local language directory after validating the complete archive.                   | Complete |
+| Archive import accepts only locale PHP/JSON translation files and rejects traversal, links, extra files, and invalid shapes.     | Complete |
+| Archive import changes language files only; it never starts a local database sync automatically.                                 | Complete |
 
-The accepted next remote-sync architecture is a DB-to-DB reconciliation workflow:
+Remote synchronization uses a DB-to-DB reconciliation workflow, with legacy ZIP sources adapted into the same candidates:
 
-| Contract                                                                                                                       | Status  |
-| ------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| Remote pull imports values as reviewable database candidates and never writes local language files.                            | Planned |
-| Local, remote, and last-seen values are retained so incoming, outgoing, reconciled, and conflicting changes can be classified. | Planned |
-| Users can accept, reject, keep, or edit remote candidates individually and in bulk before Publish.                             | Planned |
-| Only Publish writes accepted reconciled values to local language files.                                                        | Planned |
-| An optional CI/pre-deploy guard reuses reconciliation state to block unresolved production overwrites.                         | Planned |
+| Contract                                                                                                                       | Status   |
+| ------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| Remote pull imports values as reviewable database candidates and never writes local language files.                            | Complete |
+| Local, remote, and last-seen values are retained so incoming, outgoing, reconciled, and conflicting changes can be classified. | Complete |
+| Users can accept or reject candidates individually or in bulk and edit an individual merged value before Publish.              | Complete |
+| Only Publish writes accepted reconciled values to local language files.                                                        | Complete |
+| An optional CI/pre-deploy guard reuses reconciliation state to block unresolved production overwrites.                         | Complete |
+| Bulk decisions support selected rows across pages or all matching filtered changes, with one atomic audited operation.         | Complete |
+| Stale local values, newer pulls, and conflicting values from multiple selected environments reject the whole acceptance batch. | Complete |
+| Accepted values survive later local sync until published; ZIP previews never clear that protection.                            | Complete |
+
+Comparison baselines are maintained per environment, key, and locale. The first differing pair of existing values is
+a conflict because no shared baseline exists; a missing local value is incoming. Matching values establish a baseline.
+Review decisions acknowledge the current remote version and chosen local value. Repeated unresolved pulls retain the
+baseline, while new remote changes can require review again. Keep local is rejection of the current remote version.
+Omissions in a snapshot mark values unavailable without deleting local data. Unknown locales must be configured before
+acceptance, and accepting an existing orphan does not override its publishing restriction.
+
+`vox:sync-remote --environment=ID --check --no-interaction` pulls a fresh snapshot, then exits unsuccessfully if the
+selected environment has incoming/conflicting changes or local review values are not yet reflected in language files.
+Accepted values still require the normal approval and complete-locale publishing contract. The check does not push
+values, perform deployment, or guarantee that the remote will remain unchanged after the check.
 
 ### Audit
 
@@ -315,7 +330,7 @@ The current milestone is complete when:
 ## Accepted implementation decisions
 
 - Workflow approval and source freshness are separate dimensions.
-- `pending` is the review state for new translations and for previously approved values changed by local or remote synchronization.
+- `pending` is the review state for new translations and for previously approved values changed by local synchronization or an accepted remote review decision.
 - Frontend detection is automatic from scanned source calls; explicit frontend group configuration is an override.
 - The public Vite override is named `frontendGroups`.
 - Frontend groups and translation locales use explicit `mode: auto|configured` plus `values` settings; configured
@@ -330,7 +345,7 @@ The current milestone is complete when:
 - Isolated SPAs keep build-time bundling unless their application explicitly owns the endpoint and CORS boundary.
 - The package keeps a small provider-neutral translation-driver abstraction instead of adding `laravel/ai` as a mandatory Composer dependency.
 - Remote-sync visual testing uses a deterministic headless fixture in the current Laravel 13 test app.
-- The current archive remote pull remains available, but its accepted replacement is DB-to-DB candidate reconciliation with no automatic language-file writes.
+- Remote pull uses DB-to-DB candidate reconciliation with no automatic language-file writes; legacy ZIP responses are adapted into candidates.
 - Publishing updates language artifacts only; application deployment remains the consuming application's responsibility.
 - Dynamic keys use one shared Parse, Sync, Manage, Settings, frontend-manifest, and Publish resolver.
 - Open patterns retain matching values; finite bindings enumerate only their array, enum, provider, or callback values.
@@ -343,12 +358,14 @@ The current milestone is complete when:
 
 ## Verification log
 
-| Check                                                    | Latest result                                                                                             |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Baseline package and browser suite before this milestone | 41 tests, 246 assertions; passed                                                                          |
-| Manage and synchronization regression tests              | 16 tests, 148 assertions; passed                                                                          |
-| Package feature and unit suite                           | 103 tests, 694 assertions; passed                                                                         |
-| Consumer Vite build                                      | Passed; frontend PHP/JSON plus backend-only negative boundary verified                                    |
-| Herd-hosted Pest Browser suite                           | 12 tests, 91 assertions; passed                                                                           |
-| Final `composer test`                                    | Passed: package tests, package build, asset publish, consumer build, and browser suite                    |
-| Live Herd browser audit                                  | Passed: bulk AI control, save dismissal/toast, tooltips/footer, Sync, and Vue boundary; no console errors |
+| Check                                                    | Latest result                                                                                                    |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Baseline package and browser suite before this milestone | 41 tests, 246 assertions; passed                                                                                 |
+| Manage and synchronization regression tests              | 16 tests, 148 assertions; passed                                                                                 |
+| Package feature and unit suite                           | 133 tests, 912 assertions; passed (2026-09-11)                                                                   |
+| Consumer Vite build                                      | Passed; frontend PHP/JSON plus backend-only negative boundary verified                                           |
+| Herd-hosted Pest Browser suite                           | 15 tests, 168 assertions; passed (2026-09-11)                                                                    |
+| Final `composer test`                                    | Passed: package tests, package build, asset publish, consumer build, and browser suite                           |
+| Live Herd browser audit                                  | Passed: bulk AI control, save dismissal/toast, tooltips/footer, Sync, and Vue boundary; no console errors        |
+| Remote reconciliation and bulk review                    | Passed: 1,205-value atomic batch, selected/all-filtered review, stale guards, namespaces, sync/publish retention |
+| Live reconciliation browser audit                        | Passed: real keyed demo pull and bulk selection; desktop and 390px mobile layouts; no console errors             |

@@ -2,10 +2,12 @@
 
 namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use KeypointSolutions\LaravelVox\Support\VoxArchive;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Support\VoxSyncKey;
+use KeypointSolutions\LaravelVox\Translation\RemoteTranslationSnapshot;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class SyncController
@@ -15,7 +17,8 @@ class SyncController
         VoxArchive $archive,
         VoxSyncKey $syncKey,
         VoxSettingsRepository $settings,
-    ): BinaryFileResponse {
+        RemoteTranslationSnapshot $snapshot,
+    ): BinaryFileResponse|JsonResponse {
         if (! $settings->get('sync_enabled', config('vox.sync.enabled', true))) {
             abort(404);
         }
@@ -23,8 +26,12 @@ class SyncController
         $configuredKey = $syncKey->get();
         $providedKey = $request->header('X-Vox-Key') ?? $request->input('key');
 
-        if (! is_string($configuredKey) || $configuredKey === '' || $configuredKey !== $providedKey) {
+        if (! is_string($configuredKey) || $configuredKey === '' || ! is_string($providedKey) || ! hash_equals($configuredKey, $providedKey)) {
             abort(403);
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json($snapshot->export())->header('Cache-Control', 'no-store');
         }
 
         $langPath = config('vox.paths.lang', resource_path('lang'));

@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
+use KeypointSolutions\LaravelVox\Models\VoxRemoteTranslation;
 
 class SyncEnvironmentController
 {
@@ -27,7 +28,17 @@ class SyncEnvironmentController
             unset($validated['secret_key']);
         }
 
-        $environment->update($validated);
+        $environment->getConnection()->transaction(function () use ($environment, $validated): void {
+            $locked = VoxEnvironment::query()->lockForUpdate()->findOrFail($environment->id);
+
+            if ($locked->url !== $validated['url']) {
+                VoxRemoteTranslation::query()->where('environment_id', $locked->id)->delete();
+                $locked->sync_revision++;
+                $locked->last_pulled_at = null;
+            }
+
+            $locked->fill($validated)->save();
+        });
 
         return Inertia::flash('success', 'Environment updated.')->back();
     }
