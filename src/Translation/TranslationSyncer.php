@@ -3,6 +3,7 @@
 namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationOccurrence;
@@ -22,6 +23,16 @@ class TranslationSyncer
      */
     public function sync(array $locales, array $scanResults): SyncResult
     {
+        return DB::connection(config('vox.database.connection', 'vox'))
+            ->transaction(fn (): SyncResult => $this->syncTranslations($locales, $scanResults));
+    }
+
+    /**
+     * @param  array<int, string>  $locales
+     * @param  array<string, array<string, mixed>>  $scanResults
+     */
+    private function syncTranslations(array $locales, array $scanResults): SyncResult
+    {
         $langPath = $this->files->langPath();
         $result = new SyncResult;
 
@@ -34,7 +45,7 @@ class TranslationSyncer
         $seenTranslationIds = [];
 
         foreach ($translations as $fullKey => $payload) {
-            $translation = VoxTranslation::query()->firstOrNew([
+            $translation = VoxTranslation::query()->lockForUpdate()->firstOrNew([
                 'key' => $payload['key'],
                 'group' => $payload['group'],
             ]);
@@ -73,12 +84,16 @@ class TranslationSyncer
             $contentChanged = false;
 
             foreach ($payload['values'] as $locale => $value) {
-                $translationValue = VoxTranslationValue::query()->firstOrNew(
+                $translationValue = VoxTranslationValue::query()->lockForUpdate()->firstOrNew(
                     [
                         'translation_id' => $translation->id,
                         'locale' => $locale,
                     ]
                 );
+
+                if ($translationValue->is_pending_publish && $translationValue->value !== $value) {
+                    continue;
+                }
 
                 if (
                     ! $translationValue->exists
@@ -91,6 +106,7 @@ class TranslationSyncer
                 $translationValue->fill([
                     'value' => $value,
                     'is_obsolete' => false,
+                    'is_pending_publish' => false,
                 ])->save();
             }
 
@@ -130,8 +146,14 @@ class TranslationSyncer
         }
 
         $orphanIds = $orphanQuery
+            ->lockForUpdate()
+            ->with('values')
             ->get()
             ->filter(function (VoxTranslation $translation): bool {
+                if (! $translation->is_orphan && $translation->values->contains('is_pending_publish', true)) {
+                    return false;
+                }
+
                 $match = $this->dynamicKeys->match(
                     $translation->key,
                     $translation->group === 'json' ? null : $translation->group

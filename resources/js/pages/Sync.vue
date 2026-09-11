@@ -15,6 +15,7 @@
     } from '@lucide/vue';
     import { computed, markRaw, ref } from 'vue';
 
+    import RemoteReconciliationPanel, { type ReconciliationPage } from '@/components/RemoteReconciliationPanel.vue';
     import { Badge, Button, Input, Label, Tooltip } from '@/components/ui';
     import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
@@ -33,6 +34,7 @@
     }
 
     interface SyncPageProps {
+        reconciliation: ReconciliationPage;
         environments: EnvironmentItem[];
         lastSyncAt: string | null;
         locales: {
@@ -258,8 +260,8 @@
             <p class="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">Remote environments</p>
             <h1 class="mt-2 text-2xl font-semibold">Synchronize translations</h1>
             <p class="text-muted-foreground mt-2 max-w-2xl text-sm">
-                Pull a keyed language archive from another Vox application, validate it, merge it into this app, and
-                refresh the management database.
+                Pull translations from another Vox application, review differences, and accept the wording you want
+                before approval and publishing.
             </p>
         </header>
 
@@ -471,7 +473,8 @@
                 <div>
                     <h2 class="text-sm font-semibold">Configured environments</h2>
                     <p class="text-muted-foreground mt-1 text-xs">
-                        Pull production or staging values into local files for merging. Last successful sync:
+                        Pull production or staging values into review without changing local files. Last successful
+                        sync:
                         {{ formatDateTime(page.props.lastSyncAt, 'Not synced yet') }}
                     </p>
                 </div>
@@ -539,6 +542,11 @@
                 </div>
             </div>
         </section>
+
+        <RemoteReconciliationPanel
+            :review="page.props.reconciliation"
+            :environments="environments"
+        />
 
         <section class="bg-card rounded-xl border p-5">
             <div class="mb-5 flex items-start gap-3">

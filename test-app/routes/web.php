@@ -1,8 +1,12 @@
 <?php
 
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 use KeypointSolutions\LaravelVox\Support\VoxArchive;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\RemoteTranslationSnapshot;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 $localeResolver = app(VoxLocaleResolver::class);
 $availableLocales = $localeResolver->resolveLocales();
@@ -16,18 +20,25 @@ $localePattern = implode('|', array_map(
 
 Route::redirect('/', "/{$baseLocale}/vue")->name('home');
 
-Route::post('/vox-demo-remote/sync', function (VoxArchive $archive) {
+Route::post('/vox-demo-remote/sync', function (VoxArchive $archive, RemoteTranslationSnapshot $snapshot): JsonResponse|BinaryFileResponse {
     abort_unless(
         hash_equals('vox-demo-key', (string) request()->header('X-Vox-Key')),
         403
     );
+
+    if (request()->wantsJson()) {
+        return response()->json([
+            'format' => RemoteTranslationSnapshot::FORMAT,
+            'values' => $snapshot->fromDirectory(base_path('tests/Fixtures/remote-lang')),
+        ])->header('Cache-Control', 'no-store');
+    }
 
     $archivePath = $archive->createLangArchive(
         base_path('tests/Fixtures/remote-lang')
     );
 
     return response()->download($archivePath)->deleteFileAfterSend(true);
-})->name('vox-demo-remote.sync');
+})->withoutMiddleware(PreventRequestForgery::class)->name('vox-demo-remote.sync');
 
 Route::prefix('{locale}')
     ->where(['locale' => $localePattern])

@@ -106,7 +106,7 @@ language values and source metadata into the review database.
 The management UI separates workflow state from source freshness:
 
 - new and changed values are `pending`;
-- approved values changed by a later local or remote sync return to `pending`;
+- approved values changed by local sync or an accepted remote review decision return to `pending`;
 - unchanged approved values remain approved;
 - database rows absent from both source code and language files are shown as `Orphan`;
 - only complete approved translations are eligible for publishing.
@@ -392,7 +392,9 @@ php artisan vox:sync
 Use `php artisan vox:sync --parse` to update language files from discovered source keys first, then import the result
 with the same scan. In `/vox/sync`, choosing local sync asks whether to perform that file-updating step or import the
 files as they are. Both paths refresh source occurrences and frontend metadata. Rows found in neither source nor
-language files are retained as Orphans for deliberate review instead of silently disappearing.
+language files are retained as Orphans for deliberate review instead of silently disappearing. Accepted remote values
+remain protected from file imports and orphan classification until Publish writes them; existing orphans retain their
+normal publishing restriction.
 
 ### Adding a language
 
@@ -415,8 +417,42 @@ Remote sync addresses production-edited translations. On the source application,
 php artisan vox:generate-sync-key
 ```
 
-Configure that application URL and key under **Configured environments** in `/vox/sync`, then pull the language
-archive into the local files and review database.
+Configure that application URL and key under **Configured environments** in `/vox/sync`, then select **Pull now**.
+Current Vox endpoints exchange database snapshots, including unpublished administrator edits. Older ZIP endpoints
+are also supported. Both formats create review candidates without changing local translation values, approvals,
+language files, or frontend artifacts.
+
+**Review remote changes** compares each environment, key, and locale independently:
+
+| State                      | Meaning                                                                                         |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| Incoming                   | The remote value changed since the last agreement/review, or there is no local value yet.       |
+| Conflict                   | Both sides changed, or the first comparison found different existing values without a baseline. |
+| Local value kept / changed | The local wording differs while the remote value is unchanged or was explicitly rejected.       |
+| Matching                   | Both sides currently contain the same wording.                                                  |
+| No longer on remote        | The latest snapshot omitted a previously seen value; no local deletion is inferred.             |
+
+Use **Accept remote**, **Keep local**, or **Edit merged value**. Accepting or editing changes only the local database
+and returns the translation to pending approval. Approve it in Manage, then Publish to update the language files.
+Keeping local wording acknowledges and rejects that remote version, so an unchanged pull does not reopen it.
+Repeated unresolved pulls do not advance the review baseline. A new remote edit can require review again.
+
+Filter by environment, change type, language, or wording. Bulk acceptance and rejection work on selected rows across
+pages or **all matching changes**, not just the visible page. Every batch is atomic and audited. If local values or
+remote candidates changed after loading the review, the entire stale decision is rejected; refresh before retrying.
+Bulk acceptance across environments that disagree on the same value is rejected. Filter to one environment first.
+Configure a remote language locally before accepting its values. Removals are retained for information rather than
+automatically deleting local keys. Changing an environment URL clears that environment's comparison history.
+
+Deployment scripts can pull and check an environment without an interactive prompt:
+
+```bash
+php artisan vox:sync-remote --environment=1 --check --no-interaction
+```
+
+This command exits unsuccessfully on a failed pull, incoming changes, conflicts, or local review values not yet
+reflected in language files. Resolve changes, approve and publish accepted values, then rerun the check before deployment. It only
+checks the selected environment's current snapshot; it does not deploy the application or push values to the remote.
 
 Remote archives reject absolute paths, traversal entries, and symbolic links. Secrets are never returned to the settings or environment UI.
 
@@ -424,7 +460,7 @@ The Sync page can also download a ZIP representing the exact files a Publish wou
 local language directory. Import validates an entire Vox ZIP before merging its PHP and JSON files over the language
 directory and deliberately does not start a database sync; run local sync when ready to review the imported values.
 
-Publish, ZIP download, remote pull, and ZIP import share a structural translation-file validator. PHP files must
+Publish, ZIP download, legacy remote ZIP pull, and ZIP import share a structural translation-file validator. PHP files must
 return one literal, optionally nested array with string keys and string values. Variables, interpolation,
 concatenation, function calls, includes, and other executable PHP are rejected before any validated archive is
 applied.

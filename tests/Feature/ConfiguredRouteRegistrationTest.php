@@ -39,6 +39,7 @@ class ConfiguredRouteRegistrationTest extends TestCase
                     '/translations/manage/translations/bulk-translate'
                 )
                 ->where('vox.routes.sync_locale_store', '/translations/sync/locales')
+                ->where('vox.routes.sync_reconcile', '/translations/sync/reconcile')
                 ->where('vox.routes.sync_archive_download', '/translations/sync/archive')
                 ->where('vox.routes.sync_archive_import', '/translations/sync/archive')
             );

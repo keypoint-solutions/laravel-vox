@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
+use KeypointSolutions\LaravelVox\Models\VoxRemoteTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxSetting;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Tests\Support\LocaleProvisionTranslationDriver;
@@ -218,7 +219,7 @@ it('manages remote environments without exposing saved secrets', function (): vo
         ->secret_key->toBe('secret-value');
 });
 
-it('pulls a remote archive and synchronizes it into the local database', function (): void {
+it('pulls a legacy remote archive into candidates without changing local translations or files', function (): void {
     $files = new TranslationFileRepository(new TranslationFileWriter);
     $files->saveGroup('en', 'vox_remote_demo', [
         'message' => 'Stale repository message',
@@ -256,14 +257,16 @@ it('pulls a remote archive and synchronizes it into the local database', functio
         ->assertRedirect('/vox/sync')
         ->assertInertiaFlash(
             'success',
-            'Pulled 2 translations from Demo remote. 1 approved translation was returned to review.'
+            'Pulled 2 remote values from Demo remote for review. Local translations and files were not changed.'
         );
 
     $mergedEnglish = require $this->syncLangPath.'/en/vox_remote_demo.php';
 
-    expect($mergedEnglish['message'])->toBe('Remote message')
+    expect($mergedEnglish['message'])->toBe('Stale repository message')
         ->and($mergedEnglish['local_only'])->toBe('New local key')
-        ->and($approvedTranslation->fresh()->status)->toBe('pending')
+        ->and($approvedTranslation->fresh()->status)->toBe('approved')
+        ->and($approvedTranslation->values()->where('locale', 'en')->first()->value)->toBe('Stale repository message')
+        ->and(VoxRemoteTranslation::query()->count())->toBe(2)
         ->and(VoxTranslation::query()
             ->where('group', 'vox_remote_demo')
             ->where('key', 'message')

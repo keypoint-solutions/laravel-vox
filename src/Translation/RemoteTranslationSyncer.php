@@ -7,33 +7,45 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Support\VoxArchive;
-use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use RuntimeException;
 
 class RemoteTranslationSyncer
 {
     public function __construct(
         private VoxArchive $archive,
-        private RemoteTranslationMerger $merger,
-        private TranslationDatabaseSynchronizer $databaseSynchronizer,
-        private VoxAuditLogger $auditLogger,
+        private RemoteTranslationSnapshot $snapshot,
+        private RemoteReconciliation $reconciliation,
     ) {}
 
-    public function sync(VoxEnvironment $environment): SyncResult
+    public function sync(VoxEnvironment $environment): int
     {
         if ($environment->secret_key === '') {
             throw new RuntimeException('The environment is missing a sync key.');
         }
 
-        $startedAt = now();
+        $environment->refresh();
         $endpoint = $this->endpoint($environment->url);
-        $response = Http::accept('application/zip')
+        $response = Http::accept('application/json')
             ->timeout(30)
             ->withHeaders(['X-Vox-Key' => $environment->secret_key])
             ->post($endpoint);
 
         if (! $response->successful()) {
             throw new RuntimeException("Remote sync failed with HTTP {$response->status()}.");
+        }
+
+        if (strlen($response->body()) > 50 * 1024 * 1024) {
+            throw new RuntimeException('Remote snapshot exceeds the allowed size.');
+        }
+
+        if (! str_starts_with($response->body(), 'PK')) {
+            $payload = $response->json();
+
+            if (! is_array($payload) || ($payload['format'] ?? null) !== RemoteTranslationSnapshot::FORMAT) {
+                throw new RuntimeException('The remote endpoint did not return a supported Vox snapshot.');
+            }
+
+            return $this->reconciliation->ingest($environment, $this->snapshot->validate($payload['values'] ?? null));
         }
 
         $directory = storage_path('vox');
@@ -48,24 +60,13 @@ class RemoteTranslationSyncer
 
         try {
             $this->archive->extractArchive($archivePath, $remoteLangPath);
-            $this->merger->merge($remoteLangPath);
+
+            return $this->reconciliation->ingest($environment, $this->snapshot->fromDirectory($remoteLangPath));
         } finally {
             File::delete($archivePath);
             File::deleteDirectory($remoteLangPath);
         }
 
-        $result = $this->databaseSynchronizer->sync();
-
-        $this->auditLogger->record('sync-remote', [
-            'started_at' => $startedAt->toIso8601String(),
-            'environment_id' => $environment->id,
-            'environment_name' => $environment->name,
-            'translations' => $result->translations(),
-            'changed_translations' => $result->changedTranslations(),
-            'reopened_translations' => $result->reopenedTranslations(),
-        ]);
-
-        return $result;
     }
 
     private function endpoint(string $url): string

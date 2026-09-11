@@ -35,6 +35,7 @@
         publish: 'Published translations',
         sync: 'Synchronized local files',
         'sync-remote': 'Pulled remote translations',
+        'remote-reconciliation': 'Reviewed remote changes',
         'translation-approved': 'Approved a translation',
         'translation-reopened': 'Returned a translation to review',
         'translations-bulk-approved': 'Bulk approved translations',

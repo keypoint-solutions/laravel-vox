@@ -3,9 +3,11 @@
 namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use RuntimeException;
 
@@ -55,6 +57,18 @@ class TranslationPublisher
                 ? $this->frontendArtifacts->publish($langPath)
                 : [];
 
+            DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($stagedResult): void {
+                foreach ($stagedResult->publishedValues() as $id => $value) {
+                    $current = VoxTranslationValue::query()->lockForUpdate()->find($id);
+
+                    if ($current !== null && $current->value === $value) {
+                        $current->timestamps = false;
+                        $current->is_pending_publish = false;
+                        $current->save();
+                    }
+                }
+            });
+
             return new PublishResult(
                 $stagedResult->values(),
                 $publishedFiles,
@@ -90,6 +104,7 @@ class TranslationPublisher
         $groupUpdates = [];
         $jsonUpdates = [];
         $valueCount = 0;
+        $publishedValues = [];
         $incompleteTranslations = 0;
         $orphanTranslations = 0;
 
@@ -125,6 +140,10 @@ class TranslationPublisher
 
                 if (! is_string($value)) {
                     continue;
+                }
+
+                if ($values->get($locale)->is_pending_publish) {
+                    $publishedValues[$values->get($locale)->id] = $value;
                 }
 
                 if ($translation->group === null || $translation->group === 'json') {
@@ -203,6 +222,7 @@ class TranslationPublisher
             $changedFiles,
             $incompleteTranslations,
             $orphanTranslations,
+            publishedValues: $publishedValues,
         );
     }
 

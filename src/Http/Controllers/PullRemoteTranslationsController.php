@@ -20,16 +20,9 @@ class PullRemoteTranslationsController
             return back()->withErrors(['sync' => $exception->getMessage()]);
         }
 
-        $noun = $result->translations() === 1 ? 'translation' : 'translations';
-        $reviewMessage = $result->reopenedTranslations() > 0
-            ? " {$result->reopenedTranslations()} approved "
-                .($result->reopenedTranslations() === 1 ? 'translation was' : 'translations were')
-                .' returned to review.'
-            : '';
-
         return Inertia::flash(
             'success',
-            "Pulled {$result->translations()} {$noun} from {$environment->name}.{$reviewMessage}"
+            "Pulled {$result} remote values from {$environment->name} for review. Local translations and files were not changed."
         )->back();
     }
 }
