@@ -23,6 +23,18 @@ class VoxDatabaseManager
                 'foreign_key_constraints' => true,
             ]);
         }
+    }
+
+    public function initializeDatabase(): void
+    {
+        $this->ensureConnection();
+        $connectionName = config('vox.database.connection', 'vox');
+        $connection = config("database.connections.{$connectionName}", []);
+        $databasePath = $connection['database'] ?? null;
+
+        if (($connection['driver'] ?? null) !== 'sqlite' || ! is_string($databasePath) || $databasePath === '') {
+            return;
+        }
 
         if ($databasePath !== ':memory:') {
             $directory = dirname($databasePath);

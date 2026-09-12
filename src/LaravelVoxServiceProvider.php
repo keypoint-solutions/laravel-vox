@@ -4,9 +4,10 @@ namespace KeypointSolutions\LaravelVox;
 
 use KeypointSolutions\LaravelVox\Commands\CleanupCommand;
 use KeypointSolutions\LaravelVox\Commands\GenerateSyncKeyCommand;
-use KeypointSolutions\LaravelVox\Commands\InstallCommand;
 use KeypointSolutions\LaravelVox\Commands\ParseTranslationsCommand;
+use KeypointSolutions\LaravelVox\Commands\ResetCommand;
 use KeypointSolutions\LaravelVox\Commands\SettingsCommand;
+use KeypointSolutions\LaravelVox\Commands\SetupCommand;
 use KeypointSolutions\LaravelVox\Commands\SyncRemoteTranslationsCommand;
 use KeypointSolutions\LaravelVox\Commands\SyncTranslationsCommand;
 use KeypointSolutions\LaravelVox\Commands\TranslateMissingTranslationsCommand;
@@ -59,7 +60,8 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 CleanupCommand::class,
-                InstallCommand::class,
+                ResetCommand::class,
+                SetupCommand::class,
                 ParseTranslationsCommand::class,
                 TranslateMissingTranslationsCommand::class,
                 SyncTranslationsCommand::class,

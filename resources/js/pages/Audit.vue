@@ -31,6 +31,7 @@
     const audits = computed(() => page.props.audits ?? { data: [], current_page: 1, last_page: 1, total: 0 });
 
     const actionLabels: Record<string, string> = {
+        'data-reset': 'Reset Vox data',
         parse: 'Parsed source translations',
         publish: 'Published translations',
         sync: 'Synchronized local files',

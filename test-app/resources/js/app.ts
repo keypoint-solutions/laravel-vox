@@ -1,21 +1,14 @@
 import '../css/app.css';
 
-import { createVoxI18n, fetchVoxLocales } from '@laravel-vox/runtime.js';
+import { createVox } from '@laravel-vox/runtime.js';
 import { createApp } from 'vue';
 
 import Welcome from './pages/Welcome.vue';
 
 async function bootstrap(): Promise<void> {
-    const catalog = await fetchVoxLocales();
+    const vox = await createVox();
 
-    createApp(Welcome)
-        .use(
-            createVoxI18n({
-                fallbackLocale: catalog.default_locale,
-                locales: catalog.locales.map((locale) => locale.code),
-            })
-        )
-        .mount('#app');
+    createApp(Welcome).use(vox).mount('#app');
 }
 
 void bootstrap();

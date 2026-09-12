@@ -133,6 +133,7 @@ class HandleInertiaRequests extends Middleware
             'publish_store' => route($routeNamePrefix.'publish.store', absolute: false),
             'audit' => route($routeNamePrefix.'audit', absolute: false),
             'settings' => route($routeNamePrefix.'settings', absolute: false),
+            'settings_reset' => route($routeNamePrefix.'settings.reset', absolute: false),
             'settings_update' => route($routeNamePrefix.'settings.update', absolute: false),
             'settings_ai_models_refresh' => route(
                 $routeNamePrefix.'settings.ai.models.refresh',

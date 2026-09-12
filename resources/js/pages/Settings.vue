@@ -3,7 +3,7 @@
     import { Braces, Check, KeyRound, Loader2, RefreshCw, ShieldCheck } from '@lucide/vue';
     import { computed, ref, watch } from 'vue';
 
-    import { Badge, Button, Checkbox, FormField, Select, Textarea } from '@/components/ui';
+    import { Badge, Button, Checkbox, FormField, Input, Select, Textarea } from '@/components/ui';
     import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
 
@@ -70,6 +70,51 @@
         section: 'dynamic_keys',
         dynamic_key_patterns: settings.value.dynamic_key_patterns.join('\n'),
     });
+
+    const resetOpen = ref(false);
+    const resetComplete = ref(false);
+    const resetForm = useForm({ scope: 'translations', confirmation: '' });
+    const resetPhrase = computed(() => (resetForm.scope === 'all' ? 'RESET ALL VOX DATA' : 'RESET TRANSLATIONS'));
+    const resetOptions = [
+        { value: 'translations', label: 'Reset translations' },
+        { value: 'all', label: 'Reset all Vox data' },
+    ];
+
+    watch(
+        () => resetForm.scope,
+        () => {
+            resetForm.confirmation = '';
+            resetForm.clearErrors();
+        }
+    );
+
+    function cancelReset(): void {
+        resetOpen.value = false;
+        resetForm.reset();
+        resetForm.clearErrors();
+    }
+
+    function resetData(): void {
+        if (resetForm.processing || resetForm.confirmation !== resetPhrase.value) {
+            return;
+        }
+
+        resetComplete.value = false;
+        resetForm.post(page.props.vox?.routes?.settings_reset ?? `${page.url.split('?')[0]}/reset`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                cancelReset();
+                resetComplete.value = true;
+                aiForm.model = ai.value.model;
+                aiForm.translate_guidance = settings.value.translate_guidance;
+                aiForm.defaults();
+                syncForm.sync_enabled = settings.value.sync_enabled;
+                syncForm.defaults();
+                dynamicKeysForm.dynamic_key_patterns = settings.value.dynamic_key_patterns.join('\n');
+                dynamicKeysForm.defaults();
+            },
+        });
+    }
 
     const aiSaved = ref(false);
     const dynamicKeysSaved = ref(false);
@@ -525,6 +570,115 @@
                         <Check class="size-4" />
                         Sync setting saved
                     </span>
+                </div>
+            </form>
+        </section>
+        <section
+            aria-labelledby="reset-heading"
+            class="border-destructive/40 bg-card rounded-xl border"
+        >
+            <div class="space-y-3 p-6">
+                <h2
+                    id="reset-heading"
+                    class="text-destructive text-lg font-semibold"
+                >
+                    Danger zone
+                </h2>
+                <h3 class="font-medium">Reset Vox data</h3>
+                <p class="text-muted-foreground text-sm">
+                    Permanently delete translation data to start fresh. This cannot be undone. Unpublished translations
+                    will be lost. Back up your Vox database before continuing.
+                </p>
+                <p class="text-sm font-medium">Published language files will not be changed or deleted.</p>
+                <p class="text-muted-foreground text-sm">
+                    Runtime translation files, application configuration, and application credentials also stay
+                    unchanged. A later local sync can reimport published translations, but cannot recover unpublished
+                    work.
+                </p>
+                <p
+                    v-if="resetComplete"
+                    role="status"
+                    class="text-sm text-emerald-600"
+                >
+                    Vox reset complete. Published language files were not changed.
+                </p>
+                <Button
+                    v-if="!resetOpen"
+                    variant="destructive"
+                    @click="
+                        resetOpen = true;
+                        resetComplete = false;
+                    "
+                >
+                    Reset Vox data…
+                </Button>
+            </div>
+
+            <form
+                v-if="resetOpen"
+                class="border-destructive/30 space-y-5 border-t p-6"
+                @submit.prevent="resetData"
+            >
+                <FormField
+                    id="reset_scope"
+                    label="What should be reset?"
+                    :error="resetForm.errors.scope"
+                >
+                    <Select
+                        id="reset_scope"
+                        v-model="resetForm.scope"
+                        :options="resetOptions"
+                        :disabled="resetForm.processing"
+                    />
+                </FormField>
+                <div
+                    role="alert"
+                    class="border-destructive/40 bg-destructive/10 space-y-2 rounded-lg border p-4 text-sm"
+                >
+                    <p>
+                        All translation keys, values, source occurrences, and remote reconciliation records will be
+                        permanently deleted.
+                    </p>
+                    <p
+                        v-if="resetForm.scope === 'all'"
+                        class="font-semibold"
+                    >
+                        Saved settings, environments (including their connection credentials), and audit history will
+                        also be deleted. Settings will revert to application defaults. A new audit event will record
+                        this reset.
+                    </p>
+                    <p v-else>
+                        Saved settings, environments, and audit history will be kept. Environment pull status will be
+                        cleared.
+                    </p>
+                    <p class="font-semibold">Published language files will remain untouched.</p>
+                </div>
+                <FormField
+                    id="reset_confirmation"
+                    :label="`Type ${resetPhrase} to confirm`"
+                    :error="resetForm.errors.confirmation"
+                >
+                    <Input
+                        id="reset_confirmation"
+                        v-model="resetForm.confirmation"
+                        autocomplete="off"
+                        :disabled="resetForm.processing"
+                    />
+                </FormField>
+                <div class="flex flex-wrap gap-3">
+                    <Button
+                        variant="outline"
+                        :disabled="resetForm.processing"
+                        @click="cancelReset"
+                        >Cancel</Button
+                    >
+                    <Button
+                        type="submit"
+                        variant="destructive"
+                        :disabled="resetForm.processing || resetForm.confirmation !== resetPhrase"
+                    >
+                        {{ resetForm.processing ? 'Resetting…' : 'Permanently delete selected data' }}
+                    </Button>
                 </div>
             </form>
         </section>
