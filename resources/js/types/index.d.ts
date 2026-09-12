@@ -27,6 +27,7 @@ export interface AppPageProps {
             audit: string;
             settings: string;
             settings_update: string;
+            settings_reset: string;
             settings_ai_models_refresh: string;
         };
         sync_enabled?: boolean;

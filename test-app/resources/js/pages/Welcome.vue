@@ -1,6 +1,6 @@
 <script setup lang="ts">
     import {
-        availableVoxLocales,
+        useVox,
         trans,
         trans_choice,
         transChoice,
@@ -8,10 +8,11 @@
     } from '@laravel-vox/runtime.js';
     import { computed } from 'vue';
 
+    const { locales } = useVox();
     const requestedLocale = document.documentElement.dataset.requestedLocale ?? document.documentElement.lang;
     const fallbackDemoLocale = document.documentElement.dataset.fallbackDemoLocale ?? 'und';
     const fallbackLocale = document.documentElement.dataset.fallbackLocale ?? 'en';
-    const demoLocales = computed(() => [...new Set([...availableVoxLocales, fallbackDemoLocale])]);
+    const demoLocales = computed(() => [...new Set([...locales.value, fallbackDemoLocale])]);
     const isFallbackDemo = computed(() => requestedLocale === fallbackDemoLocale);
     const dynamicValueKey = 'label1';
     const backendOnlyKey = ['validation', 'accepted'].join('.');

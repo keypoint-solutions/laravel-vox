@@ -11,6 +11,7 @@ use KeypointSolutions\LaravelVox\Http\Controllers\ProvisionLocaleController;
 use KeypointSolutions\LaravelVox\Http\Controllers\PublishController;
 use KeypointSolutions\LaravelVox\Http\Controllers\PullRemoteTranslationsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ReconcileRemoteTranslationsController;
+use KeypointSolutions\LaravelVox\Http\Controllers\ResetController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SettingsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncEnvironmentController;
@@ -69,6 +70,7 @@ Route::middleware($configMiddleware)
         Route::get('/audit', AuditController::class)->name('audit');
 
         Route::middleware(Authorize::class.':manageVoxSettings')->group(function (): void {
+            Route::post('/settings/reset', ResetController::class)->name('settings.reset');
             Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
             Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
             Route::post('/settings/ai/models', [SettingsController::class, 'refreshModels'])

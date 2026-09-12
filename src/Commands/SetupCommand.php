@@ -10,24 +10,27 @@ use function Laravel\Prompts\spin;
 use function Laravel\Prompts\table;
 use function Laravel\Prompts\warning;
 
-class InstallCommand extends Command
+class SetupCommand extends Command
 {
-    public $signature = 'vox:install {--force : Run the installation in production}';
+    public $signature = 'vox:setup {--force : Run setup in production}';
 
-    public $description = 'Create the Vox database and run package migrations.';
+    protected $aliases = ['vox:install'];
+
+    public $description = 'Prepare the Vox database, run migrations, and publish dashboard assets.';
 
     public function handle(): int
     {
         $connection = (string) config('vox.database.connection', 'vox');
-        $databasePath = config('vox.database.path');
+        app(VoxDatabaseManager::class)->ensureConnection();
+        $databasePath = config("database.connections.{$connection}.database");
 
-        if (! is_string($databasePath) || $databasePath === '') {
-            warning('Vox database path is not configured. Did you publish the config file?');
+        if (config("database.connections.{$connection}") === null) {
+            warning('Vox database connection is not configured. Check vox.database settings.');
 
             return self::FAILURE;
         }
 
-        app(VoxDatabaseManager::class)->ensureConnection();
+        app(VoxDatabaseManager::class)->initializeDatabase();
 
         $migrationPath = realpath(__DIR__.'/../../database/migrations');
 
@@ -48,7 +51,7 @@ class InstallCommand extends Command
         );
 
         if ($exitCode !== self::SUCCESS) {
-            warning('Vox installation failed.');
+            warning('Vox setup failed.');
 
             return $exitCode;
         }
@@ -67,7 +70,7 @@ class InstallCommand extends Command
             return $assetExitCode;
         }
 
-        info('Vox installation complete.');
+        info('Vox setup complete.');
         table(['Setting', 'Value'], [
             ['Database connection', $connection],
             ['Database path', $databasePath],

@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 import laravelVueI18n from 'laravel-vue-i18n/vite';
 import { normalizePath } from 'vite';
@@ -97,7 +98,7 @@ function filterPhpTranslations(langPath, groups) {
  * Make a Laravel application's PHP and JSON translations available to the
  * Laravel Vox Vue integration.
  *
- * @param {{ langPath?: string, frontendGroups?: string[], manifestPath?: string }} options
+ * @param {{ langPath?: string, frontendGroups?: string[], manifestPath?: string, runtime?: boolean }} options
  * @returns {import('vite').PluginOption[]}
  */
 export default function laravelVox(options = {}) {
@@ -105,7 +106,26 @@ export default function laravelVox(options = {}) {
     let langPath = resolve(root, options.langPath ?? 'lang');
     let frontendGroups = [];
 
+    const aliases = {
+        name: 'laravel-vox-alias',
+        config() {
+            return {
+                resolve: {
+                    alias: {
+                        '@laravel-vox': fileURLToPath(new URL('.', import.meta.url)),
+                    },
+                    dedupe: ['vue', 'laravel-vue-i18n'],
+                },
+            };
+        },
+    };
+
+    if (options.runtime) {
+        return [aliases];
+    }
+
     return [
+        aliases,
         laravelVueI18n(options.langPath),
         {
             name: 'laravel-vox-translations',

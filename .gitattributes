@@ -18,3 +18,17 @@
 /UPGRADING.md       export-ignore
 /phpstan.neon.dist  export-ignore
 /phpstan-baseline.neon  export-ignore
+/test-app          export-ignore
+/.github-disabled  export-ignore
+/.ai               export-ignore
+/.agents           export-ignore
+/.codex            export-ignore
+/.husky            export-ignore
+/AGENTS.md         export-ignore
+/SPEC.md           export-ignore
+/package-lock.json export-ignore
+/eslint.config.mjs export-ignore
+/vite.config.ts    export-ignore
+/tsconfig.json     export-ignore
+/.prettierignore   export-ignore
+/.bladeformatterrc.json export-ignore

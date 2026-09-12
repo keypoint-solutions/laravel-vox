@@ -1,0 +1,69 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        stability: [prefer-lowest, prefer-stable]
+        target:
+          - { php: '8.2', laravel: '11.*', testbench: '9.*', pest: '3.*', inertia: '2.*' }
+          - { php: '8.3', laravel: '11.*', testbench: '9.*', pest: '3.*', inertia: '2.*' }
+          - { php: '8.4', laravel: '11.*', testbench: '9.*', pest: '3.*', inertia: '2.*' }
+          - { php: '8.5', laravel: '11.*', testbench: '9.*', pest: '3.*', inertia: '2.*' }
+          - { php: '8.2', laravel: '12.*', testbench: '10.*', pest: '3.*', inertia: '2.*' }
+          - { php: '8.3', laravel: '12.*', testbench: '10.*', pest: '3.*', inertia: '2.*' }
+          - { php: '8.4', laravel: '12.*', testbench: '10.*', pest: '4.*', inertia: '3.*' }
+          - { php: '8.5', laravel: '12.*', testbench: '10.*', pest: '4.*', inertia: '3.*' }
+          - { php: '8.3', laravel: '13.*', testbench: '11.*', pest: '4.*', inertia: '3.*' }
+          - { php: '8.4', laravel: '13.*', testbench: '11.*', pest: '4.*', inertia: '3.*' }
+          - { php: '8.5', laravel: '13.*', testbench: '11.*', pest: '4.*', inertia: '3.*' }
+    name: PHP ${{ matrix.target.php }} / Laravel ${{ matrix.target.laravel }} / ${{ matrix.stability }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.target.php }}
+          extensions: mbstring, zip, pdo_sqlite
+          coverage: none
+      - name: Select compatible dependencies
+        env:
+          LARAVEL_VERSION: ${{ matrix.target.laravel }}
+          TESTBENCH_VERSION: ${{ matrix.target.testbench }}
+          PEST_VERSION: ${{ matrix.target.pest }}
+          INERTIA_VERSION: ${{ matrix.target.inertia }}
+        run: |
+          composer require --dev "laravel/framework:$LARAVEL_VERSION" "orchestra/testbench:$TESTBENCH_VERSION" "pestphp/pest:$PEST_VERSION" "pestphp/pest-plugin-arch:$PEST_VERSION" "pestphp/pest-plugin-laravel:$PEST_VERSION" --no-interaction --no-update
+          composer require "inertiajs/inertia-laravel:$INERTIA_VERSION" --no-interaction --no-update
+      - run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction
+      - run: vendor/bin/pest --ci
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:consumer
+      - run: npx eslint resources/js/consumer
+      - run: npx tsc --ignoreConfig --noEmit --skipLibCheck --moduleResolution bundler --module esnext --target es2022 resources/js/consumer/vue.d.ts resources/js/consumer/runtime.d.ts resources/js/consumer/vite.d.ts
+      - run: npm run build
+      - run: npm pack --dry-run

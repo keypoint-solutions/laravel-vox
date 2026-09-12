@@ -23,12 +23,16 @@ Install the Composer package, publish its configuration, and initialize its data
 ```bash
 composer require keypoint-solutions/laravel-vox
 php artisan vendor:publish --tag=vox-config
-php artisan vox:install
+php artisan vox:setup
 ```
 
 The package uses a dedicated SQLite database at `storage/vox/vox.sqlite` by default. Configure `vox.database` if the application should use another connection or path.
 
-After upgrading Laravel Vox, rerun `php artisan vox:install --force` to apply migrations and refresh the compiled dashboard assets.
+After upgrading Laravel Vox, rerun `php artisan vox:setup --force` to apply migrations and refresh the compiled dashboard assets.
+
+`vox:setup` creates the SQLite database when needed, runs package migrations, and publishes dashboard assets.
+Service-provider boot only registers the connection; it does not create files. The previous `vox:install` name
+remains available as an alias. Existing configured database connections are respected.
 
 ## Authorization
 
@@ -216,15 +220,38 @@ mirroring. The driver masks and restores Laravel parameters such as `:name`, `%c
 while preserving markup and line breaks. A future provider can implement the package's small translation-driver
 contract without changing the settings UI.
 
+## Destructive reset
+
+Settings → **Danger zone** offers two reset scopes, protected by the `manageVoxSettings` permission:
+
+- **Reset translations** deletes all translation keys, values (including unpublished work), source occurrences, and remote reconciliation records. Saved settings, environments, and audit history remain. Environment pull status is cleared.
+- **Reset all Vox data** additionally deletes saved settings, environments, and audit history. Settings revert to application configuration defaults. One new audit event records the reset.
+
+**Both actions are irreversible. Back up the Vox database first. Published language files are never changed or deleted.**
+Runtime translation files, generated manifests, application configuration, and application credentials also remain untouched.
+A subsequent local sync can import published translations again; it cannot recover unpublished work. Saved remote-environment
+credentials are removed with the environment records in a full reset.
+
+The UI requires the exact phrase `RESET TRANSLATIONS` or `RESET ALL VOX DATA` for the selected scope. The same
+scopes are available from the command line:
+
+```bash
+php artisan vox:reset
+php artisan vox:reset --scope=all
+```
+
+Both commands show destructive-action warnings and require the corresponding typed phrase. Non-interactive runs
+refuse to reset unless `--force` is explicitly supplied. **`--force` skips confirmation and permanently deletes the
+selected data**, so use it only for intentional automation.
+
+The reset deletes rows within one transaction on the configured Vox connection. It preserves the schema and migration
+history and does not reset auto-increment counters. The audit event is part of the same transaction.
+
 ## Vue frontend translations
 
-Vox integrates with [`laravel-vue-i18n`](https://github.com/xiCO2k/laravel-vue-i18n) so the frontend uses the same Laravel PHP and JSON language files, including parameter replacement and pluralization.
+Vox integrates with `laravel-vue-i18n` so the frontend uses the same Laravel PHP and JSON language files, including parameter replacement and pluralization.
 
-You can use either the published npm package or the JavaScript sources already installed by Composer.
-
-### npm package
-
-Install the JavaScript package:
+### npm setup with bundled translations
 
 ```bash
 npm install @keypoint-solutions/laravel-vox
@@ -243,77 +270,133 @@ export default defineConfig({
 });
 ```
 
-Install the Vue plugin:
+Prepare translations before mounting:
 
 ```ts
-import { createVoxI18n } from '@keypoint-solutions/laravel-vox/vue';
+import { createVox } from '@keypoint-solutions/laravel-vox/vue';
 import { createApp } from 'vue';
-
 import App from './App.vue';
 
-createApp(App).use(createVoxI18n()).mount('#app');
+async function bootstrap() {
+    const vox = await createVox();
+
+    createApp(App).use(vox).mount('#app');
+}
+
+void bootstrap();
 ```
 
-`createVoxI18n()` boots `laravel-vue-i18n` for the application. Installing it with Vue makes `$t` available
-in components and initializes the helpers re-exported from the same Vox entry point:
+### Translating in components
+
+Use `$t()` in templates and `trans()` / `transChoice()` in scripts:
+
+```vue
+<script setup>
+    import { trans, transChoice } from '@keypoint-solutions/laravel-vox/vue';
+
+    function confirmationMessage() {
+        return trans('frontend.Saved');
+    }
+</script>
+
+<template>
+    <h1>{{ $t('frontend.Welcome, :name', { name: 'Ana' }) }}</h1>
+    <p>{{ transChoice('frontend.Items selected', 2) }}</p>
+</template>
+```
+
+For runtime loading, import helpers from `/vue/runtime` instead. Always import the plugin and helpers from the same
+entry point so they share the initialized runtime. Installing Vox registers `$t` and `$tChoice` on the Vue app,
+replacing any previous globals with those names. `trans` is an imported function, not a global override.
+
+Existing `createVoxI18n()`, `trans_choice()`, `wTrans()`, and `wTransChoice()` remain supported.
+A `trans()` call returns a string; use it inside `computed()` when a value defined in script setup must react to locale changes.
+
+### Selecting and switching locales
+
+Pass a locale from your application or an ordered list of browser preferences:
 
 ```ts
-import { createVoxI18n, trans, transChoice } from '@keypoint-solutions/laravel-vox/vue';
+const vox = await createVox({ locale: 'ro' });
+// Or opt into browser language preferences:
+const vox = await createVox({ locale: navigator.languages });
 ```
 
-Importing both the plugin and helpers from Vox guarantees that they share one initialized runtime. Do not omit the
-`.use(createVoxI18n())` call.
+Vox tries each preference in order, matching the full locale first, then progressively less specific forms
+(`fr-CA` → `fr`). Matching ignores case and accepts hyphens or underscores. If none match, it tries `<html lang>`,
+then the fallback locale, then the first available locale. Without `locale`, the page language is used first.
+Browser detection is opt-in. Runtime loading uses the catalogue default as its fallback; bundled loading defaults
+to `en`. Set `fallbackLocale` to override this selection fallback.
+
+Use the composable to read reactive state and switch the current locale:
+
+```ts
+import { useVox } from '@keypoint-solutions/laravel-vox/vue';
+
+const { locale, locales, setLocale } = useVox();
+
+await setLocale('ro');
+// Ordered preferences work when switching too:
+await setLocale(navigator.languages);
+```
+
+`locale` is a readonly ref and `locales` is a readonly computed array of supported locale codes.
+Switching loads translations and updates `<html lang>`. Persistence is opt-in (see below). It does not navigate or change
+Laravel's request locale. The consuming application handles those decisions. Vox uses `laravel-vue-i18n`'s shared
+runtime; configure one translation runtime per application. Initialization and switching reject failed loads so
+applications can handle errors with their normal bootstrap or notification flow.
+
+### Remembering a locale
+
+Enable persistence to remember deliberate language switches:
+
+```ts
+const vox = await createVox({
+    locale: navigator.languages,
+    persist: 'local',
+});
+```
+
+`persist` defaults to `false`. Use `'local'` to remember the choice across visits, or `'session'` to remember it for
+the tab's session. Both use `laravel-vox.locale` as the default storage key; override `storageKey` for applications
+sharing an origin.
+
+An explicit `locale` string overrides storage. Otherwise, a saved locale is matched against supported locales before
+the ordered preferences, page language, and fallback. Unsupported saved values are skipped. Only a successful
+`setLocale()` or `setVoxLocale()` saves the resulting active locale; initialization does not save an automatically
+selected language. Unavailable, blocked, or full storage does not prevent initialization or switching.
+These options work with both bundled and runtime translations.
 
 ### Composer vendor integration
 
-For a Ziggy-style setup without a second Laravel Vox installation, install the frontend runtime:
+For a Ziggy-style setup using the sources already installed by Composer:
 
 ```bash
 npm install laravel-vue-i18n
 ```
 
-Then import the Vite plugin from Composer's `vendor` directory and define a short alias for application code:
+Import the Vite plugin from Composer's `vendor` directory:
 
 ```js
-// vite.config.js
-import { fileURLToPath, URL } from 'node:url';
-
-import vue from '@vitejs/plugin-vue';
 import vox from './vendor/keypoint-solutions/laravel-vox/resources/js/consumer/vite.js';
-import { defineConfig } from 'vite';
-import laravel from 'laravel-vite-plugin';
 
-export default defineConfig({
-    resolve: {
-        alias: {
-            '@laravel-vox': fileURLToPath(
-                new URL('./vendor/keypoint-solutions/laravel-vox/resources/js/consumer', import.meta.url)
-            ),
-        },
-    },
-    plugins: [laravel({ input: ['resources/js/app.ts'] }), vue(), vox()],
-});
+// Include alongside your existing Laravel and Vue plugins:
+plugins: [laravel({ input: ['resources/js/app.ts'] }), vue(), vox()];
 ```
 
-Install the Vue plugin from that alias:
+The plugin registers the `@laravel-vox` alias automatically and deduplicates Vue and `laravel-vue-i18n`.
+Application imports become:
 
 ```ts
-// resources/js/app.ts
-import { createVoxI18n, trans } from '@laravel-vox/vue.js';
-import { createApp } from 'vue';
-
-import App from './App.vue';
-
-createApp(App).use(createVoxI18n()).mount('#app');
+import { createVox, trans, useVox } from '@laravel-vox/vue.js';
 ```
 
-No files need to be copied or linked into `node_modules`. The package repository's test application uses Composer's
-local path repository, so its `vendor/keypoint-solutions/laravel-vox` entry is a development symlink; a normal
-Composer installation contains the same importable files as regular vendor files.
+No manual Vite alias, copied files, or links into `node_modules` are needed. TypeScript projects using Composer
+sources may still need a matching `paths` entry for their editor; Vite aliases only configure the bundler.
 
-The current locale is read from `<html lang>`. Laravel JSON translations remain available, while PHP groups are allow-listed by `storage/vox/frontend.json`. The manifest is generated from frontend occurrences found by `vox:parse` and refreshed by `vox:sync`.
-
-Applications that prefer a fixed list can use `vox({ frontendGroups: ['frontend', 'checkout'] })` or configure:
+Laravel JSON translations remain available. PHP groups are allow-listed by `storage/vox/frontend.json`, generated
+from frontend occurrences found by `vox:parse` and refreshed by `vox:sync`. For a fixed list, use
+`vox({ frontendGroups: ['frontend', 'checkout'] })` or configure:
 
 ```php
 'frontend' => [
@@ -333,53 +416,47 @@ them with Vite. Enable the endpoint:
 VOX_FRONTEND_RUNTIME_ENABLED=true
 ```
 
-Use the runtime Vue entry point. The package exposes `/vox/locales`, so the application does not need to duplicate
-its configured locale list:
+Use the runtime entry point with the same initialization API:
 
 ```ts
-import { createVoxI18n, fetchVoxLocales } from '@keypoint-solutions/laravel-vox/vue/runtime';
+import { createVox } from '@keypoint-solutions/laravel-vox/vue/runtime';
 
 async function bootstrap() {
-    const catalog = await fetchVoxLocales();
+    const vox = await createVox({ locale: navigator.languages });
 
-    createApp(App)
-        .use(
-            createVoxI18n({
-                fallbackLocale: catalog.default_locale,
-                locales: catalog.locales.map((locale) => locale.code),
-            })
-        )
-        .mount('#app');
+    createApp(App).use(vox).mount('#app');
 }
 
 void bootstrap();
 ```
 
-Composer-vendor consumers import `@laravel-vox/runtime.js` from the same alias shown above. No Vox Vite plugin is
-needed for this mode. Publish prepares validated JSON at `storage/vox/frontend-translations`; requests to
-`/vox/translations/{locale}` only read those artifacts and support ETag revalidation. JSON translations and the PHP
-groups in the frontend manifest are included, while backend-only PHP groups remain private. The locale catalogue
-also reports `has_runtime_translations`, allowing a picker to distinguish defined locales whose artifacts have not
-yet been prepared. Local `vox:sync` also refreshes these artifacts when runtime delivery is enabled, keeping the
-cache aligned with language files imported into Vox.
+This awaits the locale catalogue, resolves the preferred locale, and prepares translations before mounting.
+Omit `locale` to use the server-rendered page language. Pass `locales: ['en', 'fr']` to skip catalogue discovery;
+in that case `fallbackLocale` defaults to `en`. `fetchVoxLocales()` remains available for applications needing the
+full catalogue, including locale names and `has_runtime_translations`.
 
-If package routes use a custom prefix, pass both matching endpoints:
+npm consumers do not need the Vox Vite plugin in runtime mode. Composer consumers can use
+`vox({ runtime: true })` for automatic alias registration without translation bundling, then import
+`createVox`, `trans`, and `useVox` from `@laravel-vox/runtime.js`.
+
+For a custom route prefix, configure one base URL:
 
 ```ts
-const catalog = await fetchVoxLocales({
-    endpoint: '/admin/translations/locales',
-});
-
-createVoxI18n({
-    locales: catalog.locales.map((locale) => locale.code),
-    endpoint: '/admin/translations/translations/{locale}',
-    localesEndpoint: '/admin/translations/locales',
-});
+const vox = await createVox({ baseUrl: '/admin/translations' });
 ```
 
-Build-time bundling remains the safer default for isolated, offline, or static SPAs. A cross-origin SPA may opt into
-runtime loading with an absolute endpoint or endpoint callback, but authentication and CORS remain the consuming
-application's responsibility.
+This loads `/admin/translations/locales` and `/admin/translations/translations/{locale}`.
+Advanced integrations may override `localesEndpoint`, `endpoint` (a string or locale callback), and `fetcher`.
+Explicit endpoint overrides take precedence over `baseUrl`.
+
+Publish prepares validated JSON at `storage/vox/frontend-translations`; translation requests only read these
+artifacts and support ETag revalidation. JSON translations and PHP groups in the frontend manifest are included,
+while backend-only PHP groups remain private. Local `vox:sync` also refreshes these artifacts when runtime delivery
+is enabled. A locale listed in the catalogue may not yet have prepared artifacts; publish or sync it before use.
+
+Build-time bundling remains suitable for isolated, offline, or static SPAs. A cross-origin SPA may opt into runtime
+loading with an absolute base URL or endpoint, but authentication and CORS remain the consuming application's
+responsibility.
 
 ## Local and remote synchronization
 
