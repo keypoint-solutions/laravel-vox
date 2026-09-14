@@ -3,6 +3,7 @@
 namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -22,6 +23,15 @@ class TranslationPublisher
 
     public function publish(): PublishResult
     {
+        return DB::connection(config('vox.database.connection', 'vox'))->transaction(function (): PublishResult {
+            $pending = VoxTranslation::query()->where('is_pending_delete', true)->lockForUpdate()->get();
+
+            return $this->publishPending($pending);
+        });
+    }
+
+    private function publishPending(Collection $pending): PublishResult
+    {
         $langPath = $this->files->langPath();
         $stagingPath = storage_path('vox/publish-'.Str::uuid());
         $this->validator->validateDirectory($langPath);
@@ -33,9 +43,14 @@ class TranslationPublisher
             }
 
             $stagedResult = $this->publishTo($stagingPath);
+            $deletion = new TranslationFileDeletion($this->files->forPath($stagingPath), app(TranslationFileWriter::class), $this->validator);
+            $deletedFiles = $deletion->prepare($pending, false);
+            foreach ($deletedFiles as $path => $change) {
+                File::replace($path, $change['after']);
+            }
             $publishedFiles = [];
 
-            foreach ($stagedResult->files() as $stagedFile) {
+            foreach (array_unique([...$stagedResult->files(), ...array_keys($deletedFiles)]) as $stagedFile) {
                 $prefix = rtrim($stagingPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
 
                 if (! str_starts_with($stagedFile, $prefix)) {
@@ -57,7 +72,19 @@ class TranslationPublisher
                 ? $this->frontendArtifacts->publish($langPath)
                 : [];
 
-            DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($stagedResult): void {
+            $runtimeChanges = app(TranslationFileDeletion::class)->prepare($pending);
+            foreach ($runtimeChanges as $path => $change) {
+                File::replace($path, $change['after']);
+                $frontendFiles[] = $path;
+            }
+
+            DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($stagedResult, $pending): void {
+                foreach ($pending as $row) {
+                    DB::connection($row->getConnectionName())->table('vox_remote_translations')->where('group', $row->group ?? 'json')->where('key', $row->key)->delete();
+                    $row->occurrences()->delete();
+                    $row->values()->delete();
+                    $row->delete();
+                }
                 foreach ($stagedResult->publishedValues() as $id => $value) {
                     $current = VoxTranslationValue::query()->lockForUpdate()->find($id);
 
@@ -75,6 +102,7 @@ class TranslationPublisher
                 $stagedResult->incompleteTranslations(),
                 $stagedResult->orphanTranslations(),
                 $frontendFiles,
+                deletedKeys: $pending->map(fn ($row): array => ['group' => $row->group, 'key' => $row->key])->all(),
             );
         } finally {
             File::deleteDirectory($stagingPath);
@@ -110,6 +138,7 @@ class TranslationPublisher
 
         $translations = VoxTranslation::query()
             ->where('status', 'approved')
+            ->where('is_ignored', false)
             ->with('values')
             ->orderBy('group')
             ->orderBy('key')

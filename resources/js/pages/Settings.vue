@@ -425,8 +425,8 @@
                 <FormField
                     id="dynamic_key_patterns"
                     :error="dynamicKeysForm.errors.dynamic_key_patterns"
-                    description="Enter one wildcard pattern per line. * matches any remaining characters, including dots."
-                    label="Additional application patterns"
+                    description="Enter one exact key or wildcard pattern per line. * matches any remaining characters, including dots."
+                    label="Additional retention rules"
                 >
                     <Textarea
                         id="dynamic_key_patterns"
@@ -440,7 +440,7 @@
                     v-if="page.props.dynamicPatterns?.length"
                     class="bg-muted/30 rounded-lg border p-4"
                 >
-                    <p class="text-sm font-medium">Effective patterns</p>
+                    <p class="text-sm font-medium">Retention rules and dynamic usage</p>
                     <p class="text-muted-foreground mt-1 text-xs">
                         Package/config patterns are read-only here. Automatically detected patterns are refreshed by
                         Parse and Sync.
@@ -453,16 +453,16 @@
                         >
                             {{ entry.pattern }}
                             <Badge
-                                v-if="entry.sources.includes('config')"
+                                v-if="entry.sources.includes('config') || entry.sources.includes('retained-config')"
                                 variant="secondary"
                             >
-                                Config
+                                Retained by config
                             </Badge>
                             <Badge
                                 v-if="entry.sources.includes('detected')"
                                 variant="outline"
                             >
-                                Detected
+                                Dynamic usage
                             </Badge>
                             <Badge
                                 v-if="entry.sources.includes('binding')"
@@ -650,6 +650,10 @@
                     <p v-else>
                         Saved settings, environments, and audit history will be kept. Environment pull status will be
                         cleared.
+                    </p>
+                    <p>
+                        Generated discovery manifests will also be cleared. Parse or Sync will recreate them.
+                        Configuration rules remain in effect.
                     </p>
                     <p class="font-semibold">Published language files will remain untouched.</p>
                 </div>

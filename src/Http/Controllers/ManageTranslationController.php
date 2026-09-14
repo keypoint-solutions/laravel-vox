@@ -186,6 +186,7 @@ class ManageTranslationController
         VoxTranslation $translation,
         VoxAuditLogger $auditLogger,
     ): RedirectResponse {
+        abort_if($translation->is_ignored, 422, 'Restore this ignored key before editing it.');
         $validated = $request->validate([
             'values' => ['required', 'array'],
             'values.*' => ['nullable', 'string'],
@@ -239,6 +240,7 @@ class ManageTranslationController
 
     public function toggleApproval(VoxTranslation $translation, VoxAuditLogger $auditLogger): RedirectResponse
     {
+        abort_if($translation->is_ignored, 422, 'Restore this ignored key before editing it.');
         $status = $translation->status === 'approved' ? 'pending' : 'approved';
 
         $translation->timestamps = false;
@@ -265,6 +267,7 @@ class ManageTranslationController
         ]);
         $status = $validated['status'];
         $ids = VoxTranslation::query()
+            ->where('is_ignored', false)
             ->whereIn('id', $validated['ids'])
             ->pluck('id')
             ->all();
@@ -307,6 +310,7 @@ class ManageTranslationController
         ));
         $translations = VoxTranslation::query()
             ->with(['values', 'occurrences'])
+            ->where('is_ignored', false)
             ->whereIn('id', $validated['ids'])
             ->get();
         $driver = $driverFactory->make();
@@ -317,7 +321,7 @@ class ManageTranslationController
 
         try {
             foreach ($translations as $translation) {
-                if ($translation->is_orphan) {
+                if ($translation->is_orphan || $translation->is_ignored) {
                     continue;
                 }
 
@@ -413,6 +417,7 @@ class ManageTranslationController
         VoxTranslation $translation,
         TranslationDriverFactory $driverFactory
     ): RedirectResponse {
+        abort_if($translation->is_ignored, 422, 'Restore this ignored key before editing it.');
         $validated = $request->validate([
             'locales' => ['nullable', 'array'],
             'locales.*' => ['string'],

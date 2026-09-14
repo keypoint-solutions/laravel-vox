@@ -18,6 +18,8 @@ class VoxTranslation extends VoxModel
         'group',
         'is_frontend',
         'is_orphan',
+        'is_ignored',
+        'is_pending_delete',
         'source',
         'status',
     ];
@@ -25,6 +27,8 @@ class VoxTranslation extends VoxModel
     protected $casts = [
         'is_frontend' => 'bool',
         'is_orphan' => 'bool',
+        'is_ignored' => 'bool',
+        'is_pending_delete' => 'bool',
     ];
 
     public function values(): HasMany

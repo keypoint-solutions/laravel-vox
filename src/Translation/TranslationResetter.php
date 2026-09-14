@@ -3,14 +3,22 @@
 namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use InvalidArgumentException;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
+use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
+use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
+use RuntimeException;
 
 class TranslationResetter
 {
     public const SCOPES = ['translations', 'all'];
 
-    public function __construct(private VoxAuditLogger $audit) {}
+    public function __construct(
+        private VoxAuditLogger $audit,
+        private VoxDynamicKeyRegistry $dynamicKeys,
+        private VoxFrontendManifest $frontendManifest,
+    ) {}
 
     public static function confirmation(string $scope): string
     {
@@ -29,7 +37,7 @@ class TranslationResetter
         self::confirmation($scope);
         $connection = DB::connection(config('vox.database.connection', 'vox'));
 
-        return $connection->transaction(function () use ($connection, $scope): array {
+        $deleted = $connection->transaction(function () use ($connection, $scope): array {
             $connection->table('vox_environments')->orderBy('id')->lockForUpdate()->get();
 
             $tables = [
@@ -62,5 +70,13 @@ class TranslationResetter
 
             return $deleted;
         });
+
+        foreach (array_unique([$this->dynamicKeys->manifestPath(), $this->frontendManifest->path()]) as $path) {
+            if (File::exists($path) && ! File::delete($path)) {
+                throw new RuntimeException('Vox database reset completed, but the discovery manifest could not be deleted: '.$path);
+            }
+        }
+
+        return $deleted;
     }
 }

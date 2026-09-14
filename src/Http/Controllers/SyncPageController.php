@@ -25,7 +25,7 @@ class SyncPageController
                 'state' => $request->string('state')->toString(),
                 'locale' => $request->string('locale')->toString(),
                 'search' => $request->string('search')->toString(),
-            ], $request->integer('review_page', 1)),
+            ], $request->integer('review_page', 1), $request->integer('per_page', 25)),
             'environments' => VoxEnvironment::query()
                 ->orderBy('name')
                 ->get()

@@ -46,13 +46,11 @@ return [
     'paths' => [
         'lang' => lang_path(),
     ],
+    'retained_keys' => ['auth.*', 'pagination.*', 'passwords.*', 'validation.*'],
     'dynamic_keys' => [
         'manifest' => storage_path('vox/dynamic.json'),
         'patterns' => [
-            'auth.*',
-            'pagination.*',
-            'passwords.*',
-            'validation.*',
+            // Legacy retention patterns remain supported here; prefer retained_keys.
         ],
         'bindings' => [
             // 'enums.user_roles.*' => App\Enums\UserRole::class,
@@ -90,7 +88,7 @@ return [
     ],
     'translate' => [
         'driver' => env('VOX_TRANSLATE_DRIVER', 'openai'),
-        'model' => env('VOX_TRANSLATE_MODEL', env('VOX_OPENAI_MODEL', 'gpt-5.4-mini')),
+        'model' => env('VOX_TRANSLATE_MODEL', env('VOX_OPENAI_MODEL', 'gpt-5.6-luna')),
         'prompt' => env('VOX_TRANSLATE_PROMPT',
             'Translate the user message from :source to :target naturally and idiomatically, as a native speaker would express the same meaning and register in context; do not mirror the source wording. Return only the translation. Preserve Laravel placeholders, tokens, whitespace, line breaks, and all HTML or Markdown markup exactly.'),
         'guidance' => env('VOX_TRANSLATE_GUIDANCE', ''),
@@ -104,6 +102,7 @@ return [
             'mode' => env('VOX_TRANSLATE_LOCALES_MODE', 'auto'),
             'values' => env('VOX_TRANSLATE_LOCALES', ''),
         ],
+        // Auto uses app.locale; locale lists put the base first, then sort by code.
         'base_locale' => env('VOX_TRANSLATE_BASE_LOCALE', 'auto'),
         'providers' => [
             'openai' => [

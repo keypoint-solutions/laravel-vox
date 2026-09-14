@@ -13,7 +13,7 @@ it('scans Laravel and optional Cashier sources by default', function () {
 it('retains Laravel runtime-generated translation families by default', function (): void {
     $defaultConfig = require __DIR__.'/../config/vox.php';
 
-    expect($defaultConfig['dynamic_keys']['patterns'])->toBe([
+    expect($defaultConfig['retained_keys'])->toBe([
         'auth.*',
         'pagination.*',
         'passwords.*',

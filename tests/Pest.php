@@ -5,6 +5,9 @@ use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Tests\TestCase;
 
 uses(TestCase::class)
+    ->beforeEach(function (): void {
+        config()->set('vox.retained_keys', []);
+    })
     ->afterEach(function (): void {
         if (isset($this->fixtureRoot) && File::isDirectory($this->fixtureRoot)) {
             File::deleteDirectory($this->fixtureRoot);

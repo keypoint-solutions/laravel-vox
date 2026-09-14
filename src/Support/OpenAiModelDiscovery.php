@@ -27,7 +27,7 @@ class OpenAiModelDiscovery implements AiModelDiscovery
     {
         $configuredModel = (string) $this->settings->get(
             'translate_model',
-            config('vox.translate.model', 'gpt-5.4-mini')
+            config('vox.translate.model', 'gpt-5.6-luna')
         );
         $apiKey = config('vox.translate.providers.openai.api_key');
         $provider = [

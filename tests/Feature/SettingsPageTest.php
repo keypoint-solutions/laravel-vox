@@ -42,9 +42,10 @@ it('shows environment-owned credentials as status and only supported available m
             ->where('ai.provider.credentials_set', true)
             ->where('ai.status', 'connected')
             ->has('ai.models', 4)
-            ->where('ai.models.0.value', 'gpt-5.4-mini')
-            ->where('ai.models.1.value', 'gpt-5.4-nano')
-            ->where('ai.models.2.value', 'gpt-5.6-luna')
+            ->where('ai.models.0.value', 'gpt-5.6-luna'
+            )->where('ai.models.0.label', 'GPT-5.6 Luna · Recommended')
+            ->where('ai.models.1.value', 'gpt-5.4-mini')
+            ->where('ai.models.2.value', 'gpt-5.4-nano')
             ->where('ai.models.3.value', 'gpt-5.6-terra')
         );
 });

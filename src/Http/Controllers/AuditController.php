@@ -11,7 +11,8 @@ class AuditController
 {
     public function __invoke(Request $request): Response
     {
-        $perPage = min(max((int) $request->input('per_page', 25), 1), 100);
+        $perPage = $request->integer('per_page', 25);
+        $perPage = in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
 
         return Inertia::render('Audit', [
             'audits' => VoxAudit::query()

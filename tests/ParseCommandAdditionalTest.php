@@ -383,3 +383,26 @@ BLADE
 
     File::deleteDirectory($targetRoot);
 });
+
+it('ignores generated PHP strings and interpolated keys while scanning their generated JavaScript', function (): void {
+    $targetRoot = prepareVoxFixtures();
+    File::put($targetRoot.'/example.php', <<<'SOURCE'
+<?php
+$generated = "trans('{$key}')";
+$other = 'trans("generated.fake")';
+// __('comments.fake');
+__('articles.templates.'.$template);
+__("articles.templates.{$template}.label");
+__('real.message');
+SOURCE);
+    File::put($targetRoot.'/generated.js', "trans('generated.real');");
+
+    $scanner = new TranslationScanner($targetRoot, ['/example.php', '/generated.js'], [], ['php', 'js'], 1);
+    $results = $scanner->scan();
+
+    expect(array_keys($results))->toContain('real.message', 'generated.real')
+        ->not->toContain('{$key}', 'generated.fake', 'comments.fake', 'articles.templates.{$template}.label');
+    expect(array_column($scanner->dynamicKeys(), 'pattern'))->toContain('articles.templates.*');
+
+    File::deleteDirectory($targetRoot);
+});

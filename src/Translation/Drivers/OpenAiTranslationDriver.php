@@ -37,7 +37,7 @@ class OpenAiTranslationDriver implements TranslationDriver
         $payload = $this->client->createResponse(
             (string) $this->settings->get(
                 'translate_model',
-                config('vox.translate.model', 'gpt-5.4-mini')
+                config('vox.translate.model', 'gpt-5.6-luna')
             ),
             $systemPrompt,
             $protectedText,

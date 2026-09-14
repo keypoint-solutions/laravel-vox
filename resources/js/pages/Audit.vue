@@ -1,9 +1,10 @@
 <script setup lang="ts">
     import { Head, router, usePage } from '@inertiajs/vue3';
     import { ChevronLeft, ChevronRight, ClipboardList, UserRound } from '@lucide/vue';
-    import { computed } from 'vue';
+    import { computed, ref } from 'vue';
 
     import { Badge, Button, Tooltip } from '@/components/ui';
+    import PageSizeSelect from '@/components/ui/PageSizeSelect.vue';
     import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
 
@@ -23,12 +24,17 @@
         data: AuditItem[];
         current_page: number;
         last_page: number;
+        per_page: number;
         total: number;
     }
 
     const page = usePage<{ audits: AuditPayload }>();
     const { formatDateTime } = useDateTime();
-    const audits = computed(() => page.props.audits ?? { data: [], current_page: 1, last_page: 1, total: 0 });
+    const audits = computed(
+        () => page.props.audits ?? { data: [], current_page: 1, last_page: 1, per_page: 25, total: 0 }
+    );
+
+    const perPage = ref(audits.value.per_page ?? 25);
 
     const actionLabels: Record<string, string> = {
         'data-reset': 'Reset Vox data',
@@ -67,7 +73,11 @@
     function goToPage(pageNumber: number): void {
         router.get(
             page.url.split('?')[0],
-            { page: pageNumber },
+            {
+                ...Object.fromEntries(new URLSearchParams(page.url.split('?')[1])),
+                page: pageNumber,
+                per_page: perPage.value,
+            },
             {
                 preserveScroll: true,
                 preserveState: true,
@@ -138,13 +148,14 @@
                 </li>
             </ol>
 
-            <div
-                v-if="audits.last_page > 1"
-                class="bg-muted/20 flex items-center justify-between border-t px-4 py-3"
-            >
+            <div class="bg-muted/20 flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
                 <p class="text-muted-foreground text-xs">
                     Page {{ audits.current_page }} of {{ audits.last_page }} · {{ audits.total }} events
                 </p>
+                <PageSizeSelect
+                    v-model="perPage"
+                    @update:model-value="goToPage(1)"
+                />
                 <div class="flex items-center gap-1">
                     <Tooltip text="Previous page">
                         <Button

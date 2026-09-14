@@ -3,6 +3,7 @@
     import { computed, ref, watch } from 'vue';
 
     import { Badge, Button, Checkbox, Input, Label, Select, SlidePanel, Textarea } from '@/components/ui';
+    import PageSizeSelect from '@/components/ui/PageSizeSelect.vue';
 
     interface Candidate {
         id: number;
@@ -28,6 +29,7 @@
         total: number;
         current_page: number;
         last_page: number;
+        per_page: number;
         filters: { environment_id: number | null; state: string; locale: string; search: string };
         counts: Record<string, number>;
         locales: string[];
@@ -131,6 +133,8 @@
         }
     }
 
+    const perPage = ref(props.review.per_page ?? 25);
+
     function filter(reviewPage = 1): void {
         router.get(
             page.props.vox?.routes?.sync ?? '',
@@ -140,6 +144,7 @@
                 locale: locale.value || undefined,
                 search: search.value || undefined,
                 review_page: reviewPage,
+                per_page: perPage.value,
             },
             { preserveState: true, preserveScroll: true }
         );
@@ -461,6 +466,10 @@
             <p class="text-muted-foreground">
                 {{ review.total }} values · Page {{ review.current_page }} of {{ review.last_page }}
             </p>
+            <PageSizeSelect
+                v-model="perPage"
+                @update:model-value="filter(1)"
+            />
             <div class="flex gap-2">
                 <Button
                     size="sm"

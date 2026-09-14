@@ -15,7 +15,14 @@ class PublishResult
         private int $orphanTranslations,
         private array $frontendFiles = [],
         private array $publishedValues = [],
+        private array $deletedKeys = [],
     ) {}
+
+    /** @return array<int, array{group: string|null, key: string}> */
+    public function deletedKeys(): array
+    {
+        return $this->deletedKeys;
+    }
 
     public function values(): int
     {

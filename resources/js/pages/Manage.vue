@@ -10,12 +10,12 @@
         Code,
         Copy,
         FileText,
-        GripVertical,
         Laptop,
         Plus,
         RotateCcw,
         Server,
         Sparkles,
+        Trash2,
         X,
     } from '@lucide/vue';
     import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -34,13 +34,11 @@
         ToggleGroup,
         Tooltip,
     } from '@/components/ui';
+    import PageSizeSelect from '@/components/ui/PageSizeSelect.vue';
     import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
     import { copyTextToClipboard } from '@/lib/clipboard';
     import { cn } from '@/lib/utils';
-
-    const LOCALE_ORDER_STORAGE_KEY = 'vox-locale-order';
-    const LOCALE_LIST_HASH_KEY = 'vox-locale-list-hash';
 
     defineOptions({
         layout: Layout,
@@ -73,9 +71,17 @@
         is_frontend: boolean;
         is_orphan: boolean;
         is_dynamic: boolean;
+        is_retained: boolean;
+        is_ignored: boolean;
+        is_pending_delete: boolean;
+        deletion_unavailable_reason: string | null;
+        matching_patterns: string[];
+        retention_sources: string[];
+        dynamic_occurrences: { file: string; line: number | null; context: string | null }[];
         dynamic_pattern: string | null;
         source: string | null;
         updated_at: string | null;
+        values_count: number;
         values: Record<string, string>;
         occurrences: OccurrenceItem[];
     }
@@ -146,11 +152,15 @@
         { value: 'updated', label: 'Updated' },
         { value: 'missing', label: 'Missing' },
         { value: 'orphan', label: 'Orphan' },
-        { value: 'dynamic', label: 'Dynamic' },
+        { value: 'dynamic', label: 'Dynamic usage' },
+        { value: 'retained', label: 'Retained by rule' },
+        { value: 'ignored', label: 'Ignored' },
+        { value: 'pending-deletion', label: 'Pending deletion' },
         { value: 'pending', label: 'Pending' },
         { value: 'approved', label: 'Approved' },
     ]);
 
+    const perPage = ref(translations.value.per_page ?? 25);
     const groupSearch = ref('');
     const selectedGroup = ref<string | null>(page.props.filters?.group ?? null);
     const search = ref(page.props.filters?.search ?? '');
@@ -208,88 +218,12 @@
         }
     }
 
-    // Locale ordering state
-    const localeOrder = ref<string[]>([]);
-    const draggedLocale = ref<string | null>(null);
-    const showLocaleOrder = ref(false);
-
-    function computeLocaleListHash(localeList: string[]): string {
-        return localeList.slice().sort().join(',');
-    }
-
-    function loadLocaleOrder(): void {
-        const serverLocales = locales.value.filter((l) => l !== baseLocale.value);
-        const currentHash = computeLocaleListHash(serverLocales);
-        const storedHash = localStorage.getItem(LOCALE_LIST_HASH_KEY);
-
-        if (storedHash !== currentHash) {
-            // Server locales changed, reset order
-            localeOrder.value = [...serverLocales];
-            saveLocaleOrder();
-            return;
-        }
-
-        const stored = localStorage.getItem(LOCALE_ORDER_STORAGE_KEY);
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored) as string[];
-                // Filter to only include locales that still exist (excluding base)
-                const validOrder = parsed.filter((l) => serverLocales.includes(l));
-                // Add any new locales that weren't in the stored order
-                const newLocales = serverLocales.filter((l) => !validOrder.includes(l));
-                localeOrder.value = [...validOrder, ...newLocales];
-            } catch {
-                localeOrder.value = [...serverLocales];
-            }
-        } else {
-            localeOrder.value = [...serverLocales];
-        }
-    }
-
-    function saveLocaleOrder(): void {
-        const serverLocales = locales.value.filter((l) => l !== baseLocale.value);
-        const hash = computeLocaleListHash(serverLocales);
-        localStorage.setItem(LOCALE_ORDER_STORAGE_KEY, JSON.stringify(localeOrder.value));
-        localStorage.setItem(LOCALE_LIST_HASH_KEY, hash);
-    }
-
-    function handleLocaleDragStart(locale: string): void {
-        draggedLocale.value = locale;
-    }
-
-    function handleLocaleDragOver(event: DragEvent, targetLocale: string): void {
-        event.preventDefault();
-        if (!draggedLocale.value || draggedLocale.value === targetLocale) {
-            return;
-        }
-
-        const fromIndex = localeOrder.value.indexOf(draggedLocale.value);
-        const toIndex = localeOrder.value.indexOf(targetLocale);
-
-        if (fromIndex === -1 || toIndex === -1) {
-            return;
-        }
-
-        const newOrder = [...localeOrder.value];
-        newOrder.splice(fromIndex, 1);
-        newOrder.splice(toIndex, 0, draggedLocale.value);
-        localeOrder.value = newOrder;
-    }
-
-    function handleLocaleDragEnd(): void {
-        draggedLocale.value = null;
-        saveLocaleOrder();
-    }
-
-    // Computed for ordered locales in the edit panel
-    const orderedLocales = computed(() => {
-        const base = baseLocale.value;
-        const ordered = localeOrder.value.filter((l) => l !== base);
-        return [base, ...ordered];
-    });
+    const orderedLocales = computed(() => [
+        baseLocale.value,
+        ...locales.value.filter((locale) => locale !== baseLocale.value).sort(),
+    ]);
 
     onMounted(() => {
-        loadLocaleOrder();
         window.addEventListener('scroll', handleScroll, { passive: true });
     });
 
@@ -304,14 +238,6 @@
             clearTimeout(toastTimer.value);
         }
     });
-
-    // Watch for locale changes from server
-    watch(
-        () => locales.value,
-        () => {
-            loadLocaleOrder();
-        }
-    );
 
     const filteredGroups = computed(() => {
         const term = groupSearch.value.trim().toLowerCase();
@@ -419,7 +345,7 @@
     }
 
     function buildQuery(pageOverride?: number): Record<string, string | number> {
-        const query: Record<string, string | number> = {};
+        const query: Record<string, string | number> = { per_page: perPage.value };
 
         if (scope.value === 'group' && selectedGroup.value !== null) {
             query.group = selectedGroup.value;
@@ -651,6 +577,10 @@
         return 'Automatically included from frontend source usage';
     }
 
+    function canDelete(translation: TranslationItem): boolean {
+        return translation.deletion_unavailable_reason === null;
+    }
+
     function approvalActionLabel(translation: TranslationItem): string {
         return translation.status === 'approved' ? 'Return to review' : 'Approve translation';
     }
@@ -671,6 +601,47 @@
         }
 
         selectedIds.value = selectedIds.value.filter((id) => !visibleIds.includes(id));
+    }
+
+    const cleanupRows = ref<TranslationItem[]>([]);
+    const cleanupAction = ref<'delete' | 'ignore' | 'restore'>('delete');
+    const cleanupConfirmation = ref('');
+    const cleanupError = ref('');
+    const isCleaning = ref(false);
+    const cleanupTitle = computed(
+        () => ({ delete: 'Delete keys', ignore: 'Ignore in Vox', restore: 'Restore keys' })[cleanupAction.value]
+    );
+    function reviewCleanup(action: 'delete' | 'ignore' | 'restore', rows?: TranslationItem[]): void {
+        cleanupAction.value = action;
+        cleanupRows.value = rows ?? translations.value.data.filter((row) => selectedIds.value.includes(row.id));
+        cleanupConfirmation.value = '';
+        cleanupError.value = '';
+    }
+    function submitCleanup(): void {
+        isCleaning.value = true;
+        router.post(
+            voxRoutes.value?.manage_translation_cleanup ?? '',
+            {
+                ids: cleanupRows.value.map((row) => row.id),
+                action: cleanupAction.value,
+                confirmation: cleanupAction.value === 'delete' ? 'CONFIRM' : cleanupConfirmation.value,
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    cleanupRows.value = [];
+                    selectedIds.value = [];
+                    closeEdit();
+                    showToast('Translation selection updated.');
+                },
+                onError: (errors) => {
+                    cleanupError.value = Object.values(errors)[0] ?? 'Unable to update the selection.';
+                },
+                onFinish: () => {
+                    isCleaning.value = false;
+                },
+            }
+        );
     }
 
     function bulkApproval(targetStatus: 'pending' | 'approved'): void {
@@ -1071,6 +1042,7 @@
                             <span class="flex min-w-0 items-center gap-1.5">
                                 <Tooltip
                                     v-if="group.is_frontend_exported"
+                                    data-test="group-frontend-tooltip"
                                     :text="frontendGroupTooltip(group)"
                                 >
                                     <Laptop class="size-3.5 shrink-0 text-emerald-500" />
@@ -1170,6 +1142,21 @@
                             v-if="selectedIds.length > 0"
                             class="flex flex-wrap items-center gap-2"
                         >
+                            <Button
+                                variant="outline"
+                                @click="reviewCleanup('delete')"
+                                >Delete keys</Button
+                            >
+                            <Button
+                                variant="outline"
+                                @click="reviewCleanup('ignore')"
+                                >Ignore in Vox</Button
+                            >
+                            <Button
+                                variant="outline"
+                                @click="reviewCleanup('restore')"
+                                >Restore</Button
+                            >
                             <Button
                                 data-test="bulk-translate-missing"
                                 :disabled="isBulkUpdating || isBulkTranslating || !aiStatus.available"
@@ -1306,9 +1293,24 @@
                                             />
                                         </span>
                                     </Tooltip>
+                                    <Badge
+                                        v-if="translation.is_retained"
+                                        variant="secondary"
+                                        >Retained</Badge
+                                    >
+                                    <Badge
+                                        v-if="translation.is_ignored && !translation.is_pending_delete"
+                                        variant="warning"
+                                        >Ignored</Badge
+                                    >
+                                    <Badge
+                                        v-if="translation.is_pending_delete"
+                                        variant="warning"
+                                        >Pending deletion</Badge
+                                    >
                                     <Tooltip
                                         v-if="translation.is_dynamic"
-                                        :text="`Dynamic: retained because runtime usage matches ${translation.dynamic_pattern}`"
+                                        :text="`Possible dynamic usage: ${translation.dynamic_pattern}`"
                                     >
                                         <Braces
                                             aria-label="Dynamic translation key"
@@ -1337,6 +1339,22 @@
 
                                 <!-- Actions -->
                                 <div class="flex shrink-0 items-center gap-1">
+                                    <Tooltip
+                                        v-if="canDelete(translation)"
+                                        text="Delete key"
+                                    >
+                                        <Button
+                                            aria-label="Delete key"
+                                            data-test="delete-translation"
+                                            class="text-destructive size-8"
+                                            size="icon"
+                                            variant="ghost"
+                                            :disabled="isCleaning || !canDelete(translation)"
+                                            @click.stop="reviewCleanup('delete', [translation])"
+                                        >
+                                            <Trash2 class="size-4" />
+                                        </Button>
+                                    </Tooltip>
                                     <Tooltip :text="approvalActionLabel(translation)">
                                         <Button
                                             :aria-label="approvalActionLabel(translation)"
@@ -1358,12 +1376,16 @@
                     <!-- Pagination -->
                     <div
                         v-if="translations.data.length > 0"
-                        class="bg-muted/30 flex items-center justify-between border-t px-4 py-3"
+                        class="bg-muted/30 flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3"
                     >
                         <p class="text-muted-foreground text-xs">
                             Page {{ pagination.current_page }} of {{ pagination.last_page }}
                             <span class="hidden sm:inline">• {{ pagination.total }} items</span>
                         </p>
+                        <PageSizeSelect
+                            v-model="perPage"
+                            @update:model-value="applyFilters(1)"
+                        />
                         <div class="flex items-center gap-1">
                             <Tooltip text="Previous page">
                                 <Button
@@ -1561,8 +1583,23 @@
                         v-if="editTranslation?.is_dynamic"
                         variant="secondary"
                     >
-                        Dynamic · {{ editTranslation.dynamic_pattern }}
+                        Dynamic usage · {{ editTranslation.dynamic_pattern }}
                     </Badge>
+                    <Badge
+                        v-if="editTranslation?.is_retained"
+                        variant="secondary"
+                        >Retained by rule</Badge
+                    >
+                    <Badge
+                        v-if="editTranslation?.is_ignored"
+                        variant="warning"
+                        >{{ editTranslation?.is_pending_delete ? 'Pending deletion' : 'Ignored' }}</Badge
+                    >
+                    <Badge
+                        v-if="editTranslation?.occurrences.length"
+                        variant="secondary"
+                        >Static usage</Badge
+                    >
                     <span class="text-muted-foreground">Updated {{ formatDateTime(editTranslation?.updated_at) }}</span>
                 </div>
             </div>
@@ -1575,44 +1612,6 @@
             class="text-destructive border-destructive/40 bg-destructive/10 mb-4 rounded-lg border p-3 text-sm"
         >
             {{ actionError }}
-        </div>
-
-        <!-- Locale Order Control -->
-        <div
-            v-if="localeOrder.length > 1"
-            class="mb-4"
-        >
-            <button
-                class="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs transition-colors"
-                type="button"
-                @click="showLocaleOrder = !showLocaleOrder"
-            >
-                <GripVertical class="size-3" />
-                {{ showLocaleOrder ? 'Hide' : 'Reorder locales' }}
-            </button>
-            <div
-                v-if="showLocaleOrder"
-                class="bg-muted/30 mt-2 rounded-lg border p-2"
-            >
-                <p class="text-muted-foreground mb-2 text-xs">Drag to reorder (base locale always first):</p>
-                <div class="space-y-1">
-                    <div
-                        v-for="locale in localeOrder"
-                        :key="locale"
-                        :class="[
-                            'flex cursor-grab items-center gap-2 rounded px-2 py-1.5 text-xs transition-colors',
-                            draggedLocale === locale ? 'bg-primary/20' : 'hover:bg-muted',
-                        ]"
-                        draggable="true"
-                        @dragend="handleLocaleDragEnd"
-                        @dragover="handleLocaleDragOver($event, locale)"
-                        @dragstart="handleLocaleDragStart(locale)"
-                    >
-                        <GripVertical class="text-muted-foreground size-3" />
-                        <span class="font-medium uppercase">{{ locale }}</span>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- Locale Values -->
@@ -1670,6 +1669,67 @@
             </div>
         </div>
 
+        <div
+            v-if="editTranslation?.matching_patterns.length"
+            class="mt-4 space-y-2 border-t pt-4 text-sm"
+        >
+            <p class="font-semibold">Matching rules</p>
+            <p
+                v-for="pattern in editTranslation.matching_patterns"
+                :key="pattern"
+                class="font-mono"
+            >
+                {{ pattern }}
+            </p>
+            <p class="text-muted-foreground">Sources: {{ editTranslation.retention_sources.join(', ') }}</p>
+        </div>
+        <div
+            v-if="editTranslation?.dynamic_occurrences.length"
+            class="mt-4 space-y-2 border-t pt-4 text-sm"
+        >
+            <p class="font-semibold">Possible dynamic matches ({{ editTranslation.dynamic_occurrences.length }})</p>
+            <p class="text-muted-foreground">
+                These expressions match a pattern; they do not prove this exact key is used.
+            </p>
+            <div
+                v-for="(occurrence, index) in editTranslation.dynamic_occurrences"
+                :key="index"
+                class="bg-muted/40 rounded-lg border p-3"
+            >
+                <p>{{ occurrence.file }}:{{ occurrence.line }}</p>
+                <code>{{ occurrence.context }}</code>
+            </div>
+        </div>
+        <div
+            v-if="editTranslation"
+            class="mt-4 flex flex-wrap gap-2 border-t pt-4"
+        >
+            <p
+                v-if="editTranslation.deletion_unavailable_reason"
+                class="text-muted-foreground w-full text-sm"
+            >
+                {{ editTranslation.deletion_unavailable_reason }}
+            </p>
+            <Button
+                v-if="canDelete(editTranslation)"
+                variant="outline"
+                @click="reviewCleanup('delete', [editTranslation])"
+                >Delete key</Button
+            >
+            <Button
+                v-if="!editTranslation.is_ignored"
+                variant="outline"
+                @click="reviewCleanup('ignore', [editTranslation])"
+                >Ignore in Vox</Button
+            >
+            <Button
+                v-else
+                variant="outline"
+                @click="reviewCleanup('restore', [editTranslation])"
+                >Restore key</Button
+            >
+        </div>
+
         <!-- Occurrences Section -->
         <div
             v-if="editTranslation?.occurrences?.length"
@@ -1682,7 +1742,7 @@
             >
                 <span class="flex items-center gap-2">
                     <FileText class="size-4" />
-                    Occurrences ({{ editTranslation.occurrences.length }})
+                    Exact occurrences ({{ editTranslation.occurrences.length }})
                 </span>
                 <ChevronRight :class="['size-4 transition-transform', showOccurrences && 'rotate-90']" />
             </button>
@@ -1723,13 +1783,83 @@
                     Cancel
                 </Button>
                 <Button
-                    :disabled="isSaving"
+                    :disabled="isSaving || editTranslation?.is_ignored"
                     @click="saveEdit"
                 >
                     {{ isSaving ? 'Saving…' : 'Save changes' }}
                 </Button>
             </div>
         </template>
+    </SlidePanel>
+
+    <SlidePanel
+        :open="cleanupRows.length > 0"
+        :title="cleanupTitle"
+        @close="!isCleaning && (cleanupRows = [])"
+    >
+        <p>
+            {{ cleanupRows.length }} keys and
+            {{ cleanupRows.reduce((count, row) => count + row.values_count, 0) }} locale values selected.
+        </p>
+        <p class="mt-3 font-semibold">
+            {{
+                cleanupAction === 'delete'
+                    ? 'Keys will be marked for deletion in Vox. Language files remain unchanged until Publish.'
+                    : 'Published language files will not be changed.'
+            }}
+        </p>
+        <p
+            v-if="cleanupAction === 'delete'"
+            class="mt-3"
+        >
+            Publish will permanently remove the selected keys, their values, and related reconciliation records. Only
+            current orphans and dynamic keys without direct static references qualify. Dynamic usage cannot be
+            conclusively checked. A future discovery or binding may recreate a deleted key.
+        </p>
+        <p
+            v-else-if="cleanupAction === 'ignore'"
+            class="mt-3"
+        >
+            Ignored keys remain available to restore. Vox will skip their sync updates and publishing. Existing
+            application translations remain in use.
+        </p>
+        <p
+            v-else
+            class="mt-3"
+        >
+            These keys will return to normal management. Run Sync to refresh their values and usage.
+        </p>
+        <ul class="my-4 space-y-1">
+            <li
+                v-for="row in cleanupRows"
+                :key="row.id"
+                class="font-mono text-xs break-all"
+            >
+                {{ row.display_key }}
+            </li>
+        </ul>
+        <FormField
+            v-if="cleanupAction !== 'delete'"
+            label="Type CONFIRM to continue"
+            ><Input
+                id="cleanup-confirmation"
+                v-model="cleanupConfirmation"
+        /></FormField>
+        <p
+            v-if="cleanupError"
+            role="alert"
+            class="text-destructive mt-3"
+        >
+            {{ cleanupError }}
+        </p>
+        <template #footer
+            ><Button
+                :disabled="isCleaning || (cleanupAction !== 'delete' && cleanupConfirmation !== 'CONFIRM')"
+                data-test="confirm-cleanup"
+                @click="submitCleanup"
+                >{{ isCleaning ? 'Working…' : cleanupTitle }}</Button
+            ></template
+        >
     </SlidePanel>
 
     <Transition

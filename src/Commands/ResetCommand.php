@@ -25,6 +25,7 @@ class ResetCommand extends Command
         $this->warn($scope === 'all'
             ? 'Saved settings, environments (including their connection credentials), and audit history will also be deleted. A new reset audit event will be recorded.'
             : 'Saved settings, environments, and audit history will be kept. Environment pull status will be cleared.');
+        $this->line('Generated dynamic-key and frontend discovery manifests will be cleared. Parse or Sync will recreate them.');
         $this->line('Published language files, runtime translation files, application configuration, and application credentials will not be changed.');
         $this->line('Unpublished translations cannot be recovered from language files. Back up the Vox database before continuing.');
 

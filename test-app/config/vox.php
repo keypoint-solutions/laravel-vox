@@ -91,7 +91,7 @@ return [
     ],
     'translate' => [
         'driver' => env('VOX_TRANSLATE_DRIVER', 'openai'),
-        'model' => env('VOX_TRANSLATE_MODEL', env('VOX_OPENAI_MODEL', 'gpt-5.4-mini')),
+        'model' => env('VOX_TRANSLATE_MODEL', env('VOX_OPENAI_MODEL', 'gpt-5.6-luna')),
         'prompt' => env('VOX_TRANSLATE_PROMPT',
             'Translate the user message from :source to :target. Return only the translation. Preserve Laravel placeholders, tokens, whitespace, line breaks, and all HTML or Markdown markup exactly.'),
         'guidance' => env('VOX_TRANSLATE_GUIDANCE', ''),

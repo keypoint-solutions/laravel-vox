@@ -8,9 +8,9 @@ class OpenAiModelCatalog
      * @var array<string, string>
      */
     private const LABELS = [
-        'gpt-5.4-mini' => 'GPT-5.4 mini · Recommended',
+        'gpt-5.6-luna' => 'GPT-5.6 Luna · Recommended',
+        'gpt-5.4-mini' => 'GPT-5.4 mini',
         'gpt-5.4-nano' => 'GPT-5.4 nano · Lowest cost',
-        'gpt-5.6-luna' => 'GPT-5.6 Luna · Newest small model',
         'gpt-5.6-terra' => 'GPT-5.6 Terra · More capable',
         'gpt-5.6-sol' => 'GPT-5.6 Sol · Highest quality',
     ];

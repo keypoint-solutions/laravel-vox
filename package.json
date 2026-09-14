@@ -38,7 +38,7 @@
         }
     },
     "scripts": {
-        "test:consumer": "node --test tests/consumer.test.mjs",
+        "test:consumer": "node --test tests/consumer.test.mjs tests/vite.test.mjs",
         "build": "vite build",
         "dev": "vite",
         "format": "prettier --write resources/",

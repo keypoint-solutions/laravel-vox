@@ -2,7 +2,6 @@
 
 namespace KeypointSolutions\LaravelVox\Support;
 
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -23,7 +22,27 @@ class VoxLocaleResolver
             ? $this->discoverLocales()
             : $this->normalizeLocales($configured);
 
-        return $this->normalizeLocales(array_merge($locales, $this->settings->provisionedLocales()));
+        $locales = $this->normalizeLocales(array_merge($locales, $this->settings->provisionedLocales()));
+        $baseLocale = $this->resolveBaseLocale($locales);
+
+        return $this->sortLocales(array_merge([$baseLocale], $locales));
+    }
+
+    /**
+     * @param  array<int, string>  $locales
+     * @return array<int, string>
+     */
+    public function sortLocales(array $locales): array
+    {
+        $locales = $this->normalizeLocales($locales);
+        $baseLocale = $this->resolveBaseLocale($locales);
+        sort($locales, SORT_STRING | SORT_FLAG_CASE);
+
+        if (in_array($baseLocale, $locales, true)) {
+            return array_values(array_unique(array_merge([$baseLocale], $locales)));
+        }
+
+        return $locales;
     }
 
     /**
@@ -119,7 +138,7 @@ class VoxLocaleResolver
             return $configured;
         }
 
-        return Arr::first($locales) ?? config('app.locale', 'en');
+        return config('app.locale', 'en');
     }
 
     /**

@@ -49,6 +49,11 @@ class TranslationSyncer
                 'key' => $payload['key'],
                 'group' => $payload['group'],
             ]);
+            if ($translation->exists && $translation->is_ignored) {
+                $seenTranslationIds[] = $translation->id;
+
+                continue;
+            }
             $isNew = ! $translation->exists;
 
             if ($isNew) {
@@ -139,7 +144,7 @@ class TranslationSyncer
             $result->incrementTranslations();
         }
 
-        $orphanQuery = VoxTranslation::query();
+        $orphanQuery = VoxTranslation::query()->where('is_ignored', false);
 
         if ($seenTranslationIds !== []) {
             $orphanQuery->whereNotIn('id', $seenTranslationIds);

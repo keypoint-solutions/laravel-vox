@@ -3,10 +3,14 @@
 namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Schema;
+use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 
 class TranslationFileUpdater
 {
+    private array $ignoredKeys = [];
+
     public function __construct(
         private TranslationFileRepository $files,
         private VoxDynamicKeyRegistry $dynamicKeys
@@ -18,11 +22,21 @@ class TranslationFileUpdater
      */
     public function updateFromScan(array $scanResults, array $locales, string $baseLocale): TranslationUpdateResult
     {
+        $this->ignoredKeys = [];
+        $connection = config('vox.database.connection', 'vox');
+        if (Schema::connection($connection)->hasTable('vox_translations') && Schema::connection($connection)->hasColumn('vox_translations', 'is_ignored')) {
+            foreach (VoxTranslation::query()->where('is_ignored', true)->get() as $ignored) {
+                $this->ignoredKeys[$this->dynamicKeys->fullKey($ignored->key, $ignored->group)] = true;
+            }
+        }
         $groupedKeys = [];
         $jsonKeys = [];
         $namespacedJsonKeys = [];
 
         foreach ($scanResults as $entry) {
+            if (isset($this->ignoredKeys[$this->dynamicKeys->fullKey($entry['key'], $entry['group'])])) {
+                continue;
+            }
             $group = $entry['group'];
 
             if ($group === null) {
@@ -87,7 +101,7 @@ class TranslationFileUpdater
                         continue;
                     }
 
-                    if ($this->dynamicKeys->matches($obsoleteKey, $group)) {
+                    if (isset($this->ignoredKeys[$this->dynamicKeys->fullKey($obsoleteKey, $group)]) || $this->dynamicKeys->matches($obsoleteKey, $group)) {
                         continue;
                     }
 
@@ -152,7 +166,7 @@ class TranslationFileUpdater
                     continue;
                 }
 
-                if ($this->dynamicKeys->matches($obsoleteKey, null)) {
+                if (isset($this->ignoredKeys[$obsoleteKey]) || $this->dynamicKeys->matches($obsoleteKey, null)) {
                     continue;
                 }
 
@@ -191,7 +205,7 @@ class TranslationFileUpdater
                         continue;
                     }
 
-                    if ($this->dynamicKeys->matches($namespace.'::'.$obsoleteKey, null)) {
+                    if (isset($this->ignoredKeys[$namespace.'::'.$obsoleteKey]) || $this->dynamicKeys->matches($namespace.'::'.$obsoleteKey, null)) {
                         continue;
                     }
 
@@ -357,7 +371,7 @@ class TranslationFileUpdater
         $keys = [];
 
         foreach (array_keys($baseFlat) as $key) {
-            if ($this->dynamicKeys->matches($key, $group)) {
+            if (! isset($this->ignoredKeys[$this->dynamicKeys->fullKey($key, $group)]) && $this->dynamicKeys->matches($key, $group)) {
                 $keys[] = $key;
             }
         }

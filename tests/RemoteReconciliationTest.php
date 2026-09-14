@@ -125,7 +125,7 @@ it('resolves every matching value across pages in one audited bulk operation', f
     }
     pullVoxValues($this, $values);
     $review = $this->reconciliation->page(['environment_id' => $this->environment->id, 'state' => 'incoming']);
-    expect($review['data'])->toHaveCount(50)->and($review['total'])->toBe(1205);
+    expect($review['data'])->toHaveCount(25)->and($review['total'])->toBe(1205);
 
     expect($this->reconciliation->resolve([
         'action' => 'accept', 'all_matching' => true,

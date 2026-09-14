@@ -104,7 +104,7 @@ class TranslationFileValidator
             T_COMMENT,
             T_DOC_COMMENT,
         ];
-        $allowedCharacters = ['[', ']', '(', ')', ',', ';'];
+        $allowedCharacters = ['[', ']', '(', ')', ',', ';', '.'];
         $literalTokens = [];
 
         foreach ($tokens as $token) {
@@ -214,6 +214,18 @@ class TranslationFileValidator
             if ($this->tokenIs($valueToken, T_CONSTANT_ENCAPSED_STRING)) {
                 $values[$key] = $this->decodeStringLiteral($valueToken[1], $path);
                 $position++;
+
+                while (($tokens[$position] ?? null) === '.') {
+                    $position++;
+                    $part = $tokens[$position] ?? null;
+
+                    if (! $this->tokenIs($part, T_CONSTANT_ENCAPSED_STRING)) {
+                        $this->rejectExecutablePhp($path);
+                    }
+
+                    $values[$key] .= $this->decodeStringLiteral($part[1], $path);
+                    $position++;
+                }
             } elseif ($valueToken === '[' || $this->tokenIs($valueToken, T_ARRAY)) {
                 $values[$key] = $this->parseArray($tokens, $position, $path);
             } else {
@@ -288,7 +300,7 @@ class TranslationFileValidator
     private function rejectExecutablePhp(string $path): never
     {
         throw new RuntimeException(
-            "Translation file [{$path}] contains executable PHP. Variables, interpolation, operators, and calls are not allowed."
+            "Translation file [{$path}] contains executable PHP. Only literal arrays, strings, and string literal concatenation are allowed."
         );
     }
 }

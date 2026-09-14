@@ -37,6 +37,7 @@ beforeEach(function (): void {
     app(VoxAuditLogger::class)->record('existing.event');
 
     prepareVoxFixtures();
+    config()->set('vox.frontend.manifest', $this->fixtureRoot.'/frontend.json');
     config()->set('vox.frontend.runtime.path', $this->fixtureRoot.'/runtime');
     File::ensureDirectoryExists($this->fixtureRoot.'/runtime');
     File::put($this->fixtureRoot.'/runtime/en.json', '{"Hello":"Hello"}');
@@ -110,7 +111,7 @@ it('denies reset to viewers without settings permission', function (): void {
 it('rolls back every deletion if audit recording fails', function (): void {
     $audit = Mockery::mock(VoxAuditLogger::class);
     $audit->shouldReceive('record')->once()->andThrow(new RuntimeException('Audit failed'));
-    expect(fn () => (new TranslationResetter($audit))->reset('all'))->toThrow(RuntimeException::class, 'Audit failed');
+    expect(fn () => app()->makeWith(TranslationResetter::class, ['audit' => $audit])->reset('all'))->toThrow(RuntimeException::class, 'Audit failed');
     expect(VoxTranslation::count())->toBe(1)
         ->and(VoxTranslationValue::count())->toBe(2)
         ->and(VoxTranslationOccurrence::count())->toBe(1)
@@ -147,3 +148,22 @@ it('denies reset to unauthenticated requests', function (): void {
     $this->postJson('/vox/settings/reset', ['scope' => 'all', 'confirmation' => 'RESET ALL VOX DATA'])->assertForbidden();
     expect(VoxTranslation::count())->toBe(1);
 });
+
+it('clears discovery manifests for either reset scope without changing configuration or runtime files', function (string $scope): void {
+    $dynamic = config('vox.dynamic_keys.manifest');
+    $frontend = config('vox.frontend.manifest');
+    File::put($dynamic, '{"patterns":[]}');
+    File::put($frontend, '{"groups":["messages"]}');
+    $patterns = config('vox.dynamic_keys.patterns');
+
+    app(TranslationResetter::class)->reset($scope);
+
+    expect(File::exists($dynamic))->toBeFalse()
+        ->and(File::exists($frontend))->toBeFalse()
+        ->and(config('vox.dynamic_keys.patterns'))->toBe($patterns);
+    foreach ($this->filesBefore as $path => $hash) {
+        expect(hash_file('sha256', $path))->toBe($hash);
+    }
+
+    app(TranslationResetter::class)->reset($scope);
+})->with(['translations', 'all']);

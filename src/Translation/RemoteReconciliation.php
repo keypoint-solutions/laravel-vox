@@ -103,23 +103,25 @@ class RemoteReconciliation
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
-    public function page(array $filters = [], int $page = 1): array
+    public function page(array $filters = [], int $page = 1, int $perPage = 25): array
     {
+        $perPage = in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
         $filters = $this->filters($filters);
         $rows = $this->rows($filters['environment_id']);
         $filtered = $this->filterRows($rows, $filters);
         $actionable = $filtered->where('actionable', true)->values();
-        $lastPage = max(1, (int) ceil($filtered->count() / 50));
+        $lastPage = max(1, (int) ceil($filtered->count() / $perPage));
         $page = min(max(1, $page), $lastPage);
 
         return [
-            'data' => $filtered->forPage($page, 50)->values()->all(),
+            'data' => $filtered->forPage($page, $perPage)->values()->all(),
             'total' => $filtered->count(),
             'current_page' => $page,
             'last_page' => $lastPage,
+            'per_page' => $perPage,
             'filters' => $filters,
             'counts' => $rows->countBy('state')->all(),
-            'locales' => $rows->pluck('locale')->unique()->sort()->values()->all(),
+            'locales' => $this->locales->sortLocales($rows->pluck('locale')->all()),
             'actionable_count' => $actionable->count(),
             'selection_token' => $this->selectionToken($actionable),
         ];
@@ -241,6 +243,10 @@ class RemoteReconciliation
 
                         $createdTranslations[$identity] = $translation;
                     }
+                    if ($translation->is_ignored) {
+                        throw ValidationException::withMessages(['reconciliation' => 'Restore ignored keys before accepting remote values.']);
+                    }
+
                     VoxTranslationValue::query()->updateOrCreate(
                         ['translation_id' => $translation->id, 'locale' => $row['locale']],
                         ['value' => $localValue, 'is_obsolete' => false, 'is_pending_publish' => true]

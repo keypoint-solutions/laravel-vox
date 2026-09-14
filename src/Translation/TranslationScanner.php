@@ -27,6 +27,9 @@ class TranslationScanner
 
     private bool $filesLoaded = false;
 
+    /** @var array<int, array{int, int}> */
+    private array $phpNonCodeRanges = [];
+
     /**
      * @param  array<int, string>  $paths
      * @param  array<int, string>  $exclude
@@ -54,6 +57,9 @@ class TranslationScanner
         foreach ($files as $filePath) {
             $content = File::get($filePath);
             $extension = $this->resolveExtension($filePath);
+            $this->phpNonCodeRanges = in_array($extension, ['php', 'blade.php'], true)
+                ? $this->phpNonCodeRanges($content)
+                : [];
             $matches = $this->matchKeys($content, $extension);
             $dynamicMatches = $this->matchDynamicKeys($content, $extension);
 
@@ -254,6 +260,9 @@ class TranslationScanner
                 $quote = $results[2][$index][0] ?? null;
 
                 if (($pattern['php_literal'] ?? false) && is_string($quote)) {
+                    if ($this->isInterpolatedPhpLiteral($rawKey, $quote)) {
+                        continue;
+                    }
                     $key = $this->decodePhpStringLiteral($key, $quote);
                 }
 
@@ -265,6 +274,10 @@ class TranslationScanner
                 $source = is_string($source) ? $source : null;
                 $fullMatch = $results[0][$index][0] ?? null;
                 $fullOffset = $results[0][$index][1] ?? null;
+
+                if (is_int($fullOffset) && $this->isInsidePhpStringOrComment($fullOffset)) {
+                    continue;
+                }
 
                 if ($key === '') {
                     continue;
@@ -308,6 +321,9 @@ class TranslationScanner
         $matches = [];
 
         foreach ($results as $result) {
+            if ($this->isInsidePhpStringOrComment($result[0][1])) {
+                continue;
+            }
             $argument = $result['argument'][0] ?? null;
             $offset = $result['argument'][1] ?? null;
             $source = $result[1][0] ?? null;
@@ -355,6 +371,10 @@ class TranslationScanner
                 continue;
             }
 
+            if ($this->isInterpolatedPhpLiteral($value, $quote)) {
+                return '';
+            }
+
             $key .= $this->decodePhpStringLiteral($value, $quote);
         }
 
@@ -381,6 +401,41 @@ class TranslationScanner
             '\e' => "\e",
             '\f' => "\f",
         ]);
+    }
+
+    private function isInterpolatedPhpLiteral(string $value, string $quote): bool
+    {
+        $tokens = token_get_all('<?php '.$quote.$value.$quote.';');
+
+        return ($tokens[1][0] ?? null) !== T_CONSTANT_ENCAPSED_STRING;
+    }
+
+    /** @return array<int, array{int, int}> */
+    private function phpNonCodeRanges(string $content): array
+    {
+        $ranges = [];
+        $offset = 0;
+
+        foreach (token_get_all($content) as $token) {
+            $text = is_array($token) ? $token[1] : $token;
+            if (is_array($token) && in_array($token[0], [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                $ranges[] = [$offset, $offset + strlen($text)];
+            }
+            $offset += strlen($text);
+        }
+
+        return $ranges;
+    }
+
+    private function isInsidePhpStringOrComment(int $offset): bool
+    {
+        foreach ($this->phpNonCodeRanges as [$start, $end]) {
+            if ($offset >= $start && $offset < $end) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function decodeJavaScriptStringLiteral(string $value): string
@@ -455,6 +510,10 @@ class TranslationScanner
                 $source = is_string($source) ? $source : null;
                 $matchText = $result[0][0] ?? null;
                 $offset = $result[0][1] ?? null;
+
+                if (is_int($offset) && $this->isInsidePhpStringOrComment($offset)) {
+                    continue;
+                }
 
                 if ($prefix === '') {
                     continue;

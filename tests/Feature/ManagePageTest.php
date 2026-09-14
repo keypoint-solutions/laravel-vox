@@ -10,6 +10,7 @@ use Inertia\Testing\AssertableInertia;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Tests\Support\LocaleProvisionTranslationDriver;
+use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 
 beforeEach(function (): void {
     $this->withoutVite();
@@ -112,10 +113,11 @@ it('marks and filters dynamic and orphan translations separately', function (): 
 
     $all = manageTranslations($this->get('/vox/manage'))->keyBy('display_key');
     $orphans = manageTranslations($this->get('/vox/manage?status=orphan'));
-    $dynamic = manageTranslations($this->get('/vox/manage?status=dynamic'));
+    $dynamic = manageTranslations($this->get('/vox/manage?status=retained'));
     $approved = manageTranslations($this->get('/vox/manage?status=approved'));
 
-    expect($all['messages.legal.terms']['is_dynamic'])->toBeTrue()
+    expect($all['messages.legal.terms']['is_retained'])->toBeTrue()
+        ->and($all['messages.legal.terms']['is_dynamic'])->toBeFalse()
         ->and($all['messages.legal.terms']['dynamic_pattern'])->toBe('messages.legal.*')
         ->and($all['messages.old']['is_orphan'])->toBeTrue()
         ->and($orphans->pluck('display_key')->all())->toBe(['messages.old'])
@@ -497,4 +499,18 @@ it('uses the recorded sync start as the new and updated boundary', function (): 
     $translations = manageTranslations($this->get('/vox/manage?status=updated'));
 
     expect($translations->pluck('id')->all())->toContain($translation->id);
+});
+
+it('allows published dynamic keys without direct source usage to be deleted', function (): void {
+    prepareVoxFixtures();
+    VoxTranslation::factory()->create(['group' => 'messages', 'key' => 'welcome', 'source' => 'dynamic']);
+    $files = app(TranslationFileRepository::class);
+    $values = $files->loadGroup('en', 'messages');
+    $key = 'unused_dynamic';
+    $files->saveGroup('en', 'messages', [$key => 'Unused']);
+    config()->set('vox.dynamic_keys.patterns', ['messages.*']);
+    VoxTranslation::query()->update(['key' => $key]);
+
+    $this->get('/vox/manage')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('translations.data.0.deletion_unavailable_reason', null));
 });

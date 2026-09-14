@@ -35,6 +35,7 @@ class PublishController
         $result = $publisher->publish();
 
         $auditLogger->record('publish', [
+            'deleted_keys' => $result->deletedKeys(),
             'values' => $result->values(),
             'files' => $result->fileCount(),
             'skipped_translations' => $result->skippedTranslations(),
@@ -45,12 +46,17 @@ class PublishController
 
         $message = "Published {$result->values()} translation values across {$result->fileCount()} files.";
 
+        if ($result->deletedKeys() !== []) {
+            $message .= ' Applied '.count($result->deletedKeys()).' pending deletions.';
+        }
+
         if ($result->frontendFileCount() > 0) {
             $message .= " Refreshed {$result->frontendFileCount()} frontend locale bundles.";
         }
 
         return Inertia::flash('success', $message)
             ->flash('publish_result', [
+                'deleted_keys' => $result->deletedKeys(),
                 'values' => $result->values(),
                 'files' => $result->fileCount(),
                 'skipped_translations' => $result->skippedTranslations(),
@@ -74,7 +80,7 @@ class PublishController
         }
 
         $prefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
-        $approved = VoxTranslation::query()->where('status', 'approved')->with('values')->get();
+        $approved = VoxTranslation::query()->where('status', 'approved')->where('is_ignored', false)->with('values')->get();
         $orphan = $approved->where('is_orphan', true)->count();
         $active = $approved->where('is_orphan', false);
         $dynamic = $active->filter(
@@ -98,6 +104,7 @@ class PublishController
         })->count();
 
         return [
+            'pending_deletions' => VoxTranslation::query()->where('is_pending_delete', true)->count(),
             'approved' => $approved->count(),
             'publishable' => $active->count() - $incomplete,
             'pending' => VoxTranslation::query()->where('status', 'pending')->count(),

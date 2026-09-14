@@ -50,7 +50,7 @@ it('creates a concrete dynamic translation from an open pattern', function (): v
         ->click('[data-test="store-dynamic-translation"]')
         ->waitForText('Dynamic translation browser.dynamic.admin created.')
         ->assertMissing('[data-test="dynamic-create-panel"]')
-        ->pressAndWaitFor('Dynamic')
+        ->pressAndWaitFor('Retained by rule')
         ->assertSee('browser.dynamic.admin')
         ->assertDontSee('browser.ordinary')
         ->assertNoJavaScriptErrors();
@@ -82,7 +82,7 @@ it('filters and individually approves a translation with visible feedback', func
         ->assertSee('browser.individual-approval')
         ->assertDontSee('browser.other')
         ->hover('[data-test="workflow-status"]')
-        ->assertVisible('[data-test="workflow-status"] + [role="tooltip"]')
+        ->assertVisible('[role="tooltip"]')
         ->click('[data-test="approval-action"]')
         ->waitForText('Translation approved.')
         ->pressAndWaitFor('Approved')
@@ -126,4 +126,75 @@ it('bulk approves selected translations and can edit a translated value', functi
         ->assertNoJavaScriptErrors();
 
     expect($first->values()->where('locale', 'fr')->value('value'))->toBe('Valeur modifiée');
+});
+
+it('ignores and restores a translation through confirmed cleanup', function (): void {
+    $row = VoxTranslationFactory::new()->withValues(['en' => 'Cleanup example', 'fr' => 'Exemple'])->create(['group' => 'browser', 'key' => 'cleanup-example']);
+    $page = visit('/vox/manage')
+        ->click('[data-test="translation-row-'.$row->id.'"]')
+        ->press('Ignore in Vox')
+        ->assertSee('Published language files will not be changed.')
+        ->fill('#cleanup-confirmation', 'CONFIRM')
+        ->click('[data-test="confirm-cleanup"]')
+        ->waitForText('Translation selection updated.')
+        ->pressAndWaitFor('Ignored')
+        ->assertSee('browser.cleanup-example')
+        ->click('[data-test="translation-row-'.$row->id.'"]')
+        ->press('Restore key')
+        ->fill('#cleanup-confirmation', 'CONFIRM')
+        ->click('[data-test="confirm-cleanup"]')
+        ->waitForText('Translation selection updated.')
+        ->assertNoJavaScriptErrors();
+    expect($row->fresh()->is_ignored)->toBeFalse();
+});
+
+it('deletes an orphan after a button confirmation without typing', function (): void {
+    $row = VoxTranslationFactory::new()
+        ->withValues(['en' => 'Unused value'])
+        ->create(['group' => 'browser', 'key' => 'unused-orphan', 'is_orphan' => true]);
+
+    visit('/vox/manage?status=orphan')
+        ->click('[data-test="translation-row-'.$row->id.'"] [data-test="delete-translation"]')
+        ->assertMissing('[data-test="translation-edit-panel"]')
+        ->assertSee('Publish will permanently remove')
+        ->assertMissing('#cleanup-confirmation')
+        ->click('[data-test="confirm-cleanup"]')
+        ->waitForText('Translation selection updated.')
+        ->assertNoJavaScriptErrors();
+
+    expect($row->fresh()->is_pending_delete)->toBeTrue();
+});
+
+it('changes page size while retaining filters and resetting the page', function (): void {
+    VoxTranslationFactory::new()->count(60)->create(['group' => 'browser', 'is_orphan' => false]);
+
+    visit('/vox/manage?group=browser&scope=group&page=2')
+        ->assertSee('Page 2 of 3')
+        ->select('select[aria-label="Records per page"]', '50')
+        ->waitForText('Page 1 of 2')
+        ->click('button[aria-label="Next page"]')
+        ->waitForText('Page 2 of 2')
+        ->select('select[aria-label="Records per page"]', '100')
+        ->waitForText('Page 1 of 1')
+        ->assertSee('60 items')
+        ->assertNoJavaScriptErrors();
+});
+
+it('renders group tooltips outside the scroll container and inside the viewport', function (): void {
+    VoxTranslationFactory::new()->withValues(['en' => 'Tooltip example'])->create([
+        'group' => 'json', 'key' => 'Tooltip example', 'is_frontend' => true,
+    ]);
+
+    $page = visit('/vox/manage')->hover('[data-test="group-frontend-tooltip"]');
+    $page->assertVisible('[role="tooltip"]');
+    $bounds = $page->script("() => {
+        const tooltip = document.querySelector('[role=tooltip]');
+        const rect = tooltip.getBoundingClientRect();
+        return { portalled: tooltip.parentElement === document.body, left: rect.left, right: rect.right, width: innerWidth };
+    }");
+
+    expect($bounds['portalled'])->toBeTrue()
+        ->and($bounds['left'])->toBeGreaterThanOrEqual(0)
+        ->and($bounds['right'])->toBeLessThanOrEqual($bounds['width']);
+    $page->assertNoJavaScriptErrors();
 });

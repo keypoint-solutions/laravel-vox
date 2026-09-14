@@ -1,71 +1,23 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import laravelVueI18n from 'laravel-vue-i18n/vite';
 import { normalizePath } from 'vite';
+
+import { PhpTranslationCatalogue } from './php-catalogue.js';
 
 const virtualModuleId = 'virtual:laravel-vox/translations';
 const resolvedVirtualModuleId = `\0${virtualModuleId}`;
-
-function localeFromFilename(filename) {
-    const basename = filename.replace(/\.json$/u, '');
-
-    return basename.startsWith('php_') ? basename.slice(4) : basename;
-}
-
-function buildVirtualModule(langPath) {
-    if (!existsSync(langPath)) {
-        return 'export const availableVoxLocales = []; export async function loadVoxLocale() { return {}; }';
-    }
-
-    const files = readdirSync(langPath)
-        .filter((filename) => filename.endsWith('.json'))
-        .sort();
-    const loaderSource = files
-        .map((filename) => {
-            const name = filename.replace(/\.json$/u, '');
-            const file = `/@fs/${normalizePath(resolve(langPath, filename))}`;
-
-            return `${JSON.stringify(name)}: () => import(${JSON.stringify(file)})`;
-        })
-        .join(',\n');
-    const locales = [...new Set(files.map(localeFromFilename))];
-
-    return `
-const loaders = {
-${loaderSource}
-};
-
-export const availableVoxLocales = ${JSON.stringify(locales)};
-
-export async function loadVoxLocale(locale) {
-    const load = loaders[locale];
-
-    if (!load) {
-        return {};
-    }
-
-    return await load();
-}
-`;
-}
+const phpModulePrefix = 'virtual:laravel-vox/php/';
+const resolvedPhpModulePrefix = `\0${phpModulePrefix}`;
 
 function resolveFrontendGroups(root, options) {
-    if (Array.isArray(options.frontendGroups)) {
-        return options.frontendGroups;
-    }
-
+    if (Array.isArray(options.frontendGroups)) return options.frontendGroups;
     const manifestPath = resolve(root, options.manifestPath ?? 'storage/vox/frontend.json');
-
-    if (!existsSync(manifestPath)) {
-        return [];
-    }
-
+    if (!existsSync(manifestPath)) return [];
     try {
         const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-
         return Array.isArray(manifest.groups)
             ? manifest.groups.filter((group) => typeof group === 'string' && group !== '')
             : [];
@@ -74,98 +26,159 @@ function resolveFrontendGroups(root, options) {
     }
 }
 
-function filterPhpTranslations(langPath, groups) {
-    if (!existsSync(langPath) || groups.includes('*')) {
-        return;
-    }
-
-    for (const filename of readdirSync(langPath).filter((file) => /^php_.+\.json$/u.test(file))) {
-        const path = resolve(langPath, filename);
-        const translations = JSON.parse(readFileSync(path, 'utf8'));
-        const filtered = {};
-
-        for (const [key, value] of Object.entries(translations)) {
-            if (groups.some((group) => key === group || key.startsWith(`${group}.`))) {
-                filtered[key] = value;
-            }
-        }
-
-        writeFileSync(path, JSON.stringify(filtered));
-    }
-}
-
 /**
- * Make a Laravel application's PHP and JSON translations available to the
- * Laravel Vox Vue integration.
- *
- * @param {{ langPath?: string, frontendGroups?: string[], manifestPath?: string, runtime?: boolean }} options
+ * Compile PHP translations once, then reparse only edited files during development.
+ * @param {import('./vite.js').LaravelVoxViteOptions} options
  * @returns {import('vite').PluginOption[]}
  */
 export default function laravelVox(options = {}) {
     let root = process.cwd();
-    let langPath = resolve(root, options.langPath ?? 'lang');
+    let langPath;
+    let manifestPath;
+    let catalogue;
     let frontendGroups = [];
+    const jsonContents = new Map();
+    const outputs = new Map();
+    const events = new Map();
+
+    function jsonFiles() {
+        return existsSync(langPath)
+            ? readdirSync(langPath)
+                  .filter((file) => file.endsWith('.json') && !file.startsWith('php_'))
+                  .sort()
+            : [];
+    }
+
+    function virtualSource() {
+        const json = jsonFiles();
+        const locales = [...new Set([...catalogue.locales(), ...json.map((file) => file.slice(0, -5))])].sort();
+        const loaders = [
+            ...json.map(
+                (file) =>
+                    `${JSON.stringify(file.slice(0, -5))}: () => import(${JSON.stringify(`/@fs/${normalizePath(resolve(langPath, file))}`)})`
+            ),
+            ...catalogue
+                .locales()
+                .map(
+                    (locale) =>
+                        `${JSON.stringify(`php_${locale}`)}: () => import(${JSON.stringify(phpModulePrefix + encodeURIComponent(locale))})`
+                ),
+        ];
+        return `const loaders = {${loaders.join(',\n')}};
+export const availableVoxLocales = ${JSON.stringify(locales)};
+export async function loadVoxLocale(locale) { return loaders[locale] ? await loaders[locale]() : {}; }
+`;
+    }
+
+    function updateOutputs(locales) {
+        const changed = [];
+        for (const locale of locales) {
+            const id = resolvedPhpModulePrefix + encodeURIComponent(locale);
+            const source = `export default ${JSON.stringify(catalogue.messages(locale, frontendGroups))};`;
+            if (outputs.get(id) !== source) {
+                outputs.set(id, source);
+                changed.push(id);
+            }
+        }
+        const source = virtualSource();
+        if (outputs.get(resolvedVirtualModuleId) !== source) {
+            outputs.set(resolvedVirtualModuleId, source);
+            changed.push(resolvedVirtualModuleId);
+        }
+        return changed;
+    }
 
     const aliases = {
         name: 'laravel-vox-alias',
         config() {
             return {
                 resolve: {
-                    alias: {
-                        '@laravel-vox': fileURLToPath(new URL('.', import.meta.url)),
-                    },
+                    alias: { '@laravel-vox': fileURLToPath(new URL('.', import.meta.url)) },
                     dedupe: ['vue', 'laravel-vue-i18n'],
                 },
             };
         },
     };
-
-    if (options.runtime) {
-        return [aliases];
-    }
+    if (options.runtime) return [aliases];
 
     return [
         aliases,
-        laravelVueI18n(options.langPath),
         {
             name: 'laravel-vox-translations',
-            enforce: 'post',
             configResolved(config) {
                 root = config.root;
                 langPath = resolve(root, options.langPath ?? 'lang');
-                frontendGroups = resolveFrontendGroups(root, options);
+                manifestPath = resolve(root, options.manifestPath ?? 'storage/vox/frontend.json');
+                catalogue = new PhpTranslationCatalogue([
+                    resolve(root, 'vendor/laravel/framework/src/Illuminate/Translation/lang'),
+                    langPath,
+                    ...(options.additionalLangPaths ?? []).map((path) => resolve(root, path)),
+                ]);
             },
             buildStart() {
-                filterPhpTranslations(langPath, frontendGroups);
+                frontendGroups = resolveFrontendGroups(root, options);
+                catalogue.initialize();
+                outputs.clear();
+                jsonContents.clear();
+                for (const file of jsonFiles())
+                    jsonContents.set(resolve(langPath, file), readFileSync(resolve(langPath, file), 'utf8'));
+                updateOutputs(catalogue.locales());
             },
             resolveId(id) {
-                if (id === virtualModuleId) {
-                    return resolvedVirtualModuleId;
-                }
+                if (id === virtualModuleId || id.startsWith(phpModulePrefix)) return `\0${id}`;
             },
             load(id) {
-                if (id === resolvedVirtualModuleId) {
-                    return buildVirtualModule(langPath);
-                }
+                if (outputs.has(id)) return outputs.get(id);
             },
             configureServer(server) {
-                server.watcher.add(langPath);
-                server.watcher.on('all', (_event, path) => {
-                    if (!normalizePath(path).startsWith(`${normalizePath(langPath)}/`)) {
-                        return;
-                    }
-
-                    const module = server.moduleGraph.getModuleById(resolvedVirtualModuleId);
-
-                    if (module) {
-                        server.moduleGraph.invalidateModule(module);
-                    }
-                });
+                server.watcher.add([...catalogue.roots, manifestPath]);
             },
-            handleHotUpdate(context) {
-                if (normalizePath(context.file).startsWith(`${normalizePath(langPath)}/`)) {
-                    filterPhpTranslations(langPath, frontendGroups);
-                }
+            hotUpdate: {
+                order: 'pre',
+                async handler(context) {
+                    const file = resolve(context.file);
+                    const isPhp = catalogue.describe(file) !== null;
+                    const isJson =
+                        normalizePath(file).startsWith(`${normalizePath(langPath)}/`) &&
+                        file.slice(langPath.length + 1).match(/^(?!php_)[^/\\]+\.json$/u);
+                    const isManifest = file === manifestPath && !Array.isArray(options.frontendGroups);
+                    if (!isPhp && !isJson && !isManifest) return;
+
+                    // Vite invokes this hook once per environment for the same filesystem event.
+                    const eventKey = `${context.type}:${context.timestamp}:${file}`;
+                    if (!events.has(eventKey)) {
+                        const update = async () => {
+                            if (isManifest) {
+                                frontendGroups = resolveFrontendGroups(root, options);
+                                return updateOutputs(catalogue.locales());
+                            }
+                            const contents = context.type === 'delete' ? null : await context.read();
+                            if (isPhp) {
+                                const locale = catalogue.update(file, contents);
+                                return locale === null ? [] : updateOutputs([locale]);
+                            }
+                            if (jsonContents.get(file) === contents || (contents === null && !jsonContents.has(file)))
+                                return [];
+                            if (contents === null) jsonContents.delete(file);
+                            else jsonContents.set(file, contents);
+                            return [file, ...updateOutputs([])];
+                        };
+                        events.set(eventKey, update());
+                        if (events.size > 100) events.delete(events.keys().next().value);
+                    }
+                    const changed = await events.get(eventKey);
+                    const graph = this.environment.moduleGraph;
+                    const modules = new Set();
+                    for (const id of changed) {
+                        if (id === file) {
+                            for (const module of context.modules) modules.add(module);
+                        } else {
+                            const module = graph.getModuleById(id);
+                            if (module) modules.add(module);
+                        }
+                    }
+                    return [...modules];
+                },
             },
         },
     ];

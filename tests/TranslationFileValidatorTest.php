@@ -11,6 +11,7 @@ it('accepts literal nested PHP and JSON translation arrays', function (): void {
 // A normal translation file.
 return [
     'greeting' => 'Hello :name',
+    'multiline' => 'Hello :name'."\n"."\n".'Welcome back',
     'nested' => array(
         'message' => "Welcome\nback",
     ),
@@ -30,7 +31,9 @@ it('rejects executable PHP translation expressions before they can run', functio
 })->with([
     'variable' => "<?php return ['message' => \$value];",
     'function call' => "<?php return ['message' => strtoupper('unsafe')];",
-    'concatenation' => "<?php return ['message' => 'un'.'safe'];",
+    'concatenated call' => "<?php return ['message' => 'prefix'.strtoupper('unsafe')];",
+    'concatenated variable' => "<?php return ['message' => 'prefix'.\$value];",
+    'concatenated number' => "<?php return ['message' => 'prefix'. 1];",
     'interpolation' => "<?php return ['message' => \"Hello {\$name}\"];",
     'include' => "<?php return ['message' => include 'payload.php'];",
 ]);

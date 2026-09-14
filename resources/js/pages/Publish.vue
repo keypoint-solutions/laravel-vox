@@ -15,6 +15,7 @@
         stats: {
             approved: number;
             publishable: number;
+            pending_deletions: number;
             pending: number;
             incomplete: number;
             dynamic: number;
@@ -30,6 +31,7 @@
             page.props.stats ?? {
                 approved: 0,
                 publishable: 0,
+                pending_deletions: 0,
                 pending: 0,
                 incomplete: 0,
                 dynamic: 0,
@@ -70,6 +72,14 @@
     <Head title="Publish" />
 
     <div class="space-y-6">
+        <p
+            v-if="stats.pending_deletions"
+            role="alert"
+            class="text-destructive rounded-lg border p-4"
+        >
+            {{ stats.pending_deletions }} keys are pending deletion. Publishing will remove them from language files and
+            runtime catalogues.
+        </p>
         <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
                 <p class="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">Language files</p>
@@ -80,7 +90,7 @@
                 </p>
             </div>
             <Button
-                :disabled="isPublishing || stats.publishable === 0"
+                :disabled="isPublishing || (stats.publishable === 0 && !stats.pending_deletions)"
                 class="shrink-0"
                 @click="publish"
             >

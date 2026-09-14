@@ -15,6 +15,7 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\TranslationDeletionEligibility;
 use KeypointSolutions\LaravelVox\Translation\TranslationKey;
 
 class ManageController
@@ -23,6 +24,7 @@ class ManageController
         private VoxLocaleResolver $localeResolver,
         private VoxFrontendManifest $frontendManifest,
         private VoxDynamicKeyRegistry $dynamicKeys,
+        private TranslationDeletionEligibility $deletionEligibility,
     ) {}
 
     public function __invoke(Request $request): Response
@@ -77,7 +79,7 @@ class ManageController
         $scope = $request->input('scope');
         $scope = is_string($scope) ? $scope : null;
 
-        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing', 'orphan', 'dynamic'];
+        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing', 'orphan', 'dynamic', 'retained', 'ignored', 'pending-deletion'];
         if (! in_array($status, $allowedStatus, true)) {
             $status = null;
         }
@@ -162,12 +164,8 @@ class ManageController
         array $locales,
         ?CarbonInterface $lastSyncAt
     ): LengthAwarePaginator {
-        $perPage = (int) $request->input('per_page', 25);
-        if ($perPage < 1) {
-            $perPage = 25;
-        }
-
-        $perPage = min($perPage, 100);
+        $perPage = $request->integer('per_page', 25);
+        $perPage = in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
 
         $query = VoxTranslation::query()
             ->with([
@@ -236,12 +234,20 @@ class ManageController
                     'has_missing_values' => $this->hasMissingValues($translation, $locales),
                     'is_frontend' => $translation->is_frontend,
                     'is_orphan' => $translation->is_orphan,
-                    'is_dynamic' => $dynamicMatch !== null,
+                    'is_dynamic' => in_array('detected', $dynamicMatch['sources'] ?? [], true) || in_array('binding', $dynamicMatch['sources'] ?? [], true),
+                    'is_retained' => array_intersect(['config', 'settings', 'retained-config'], $dynamicMatch['sources'] ?? []) !== [],
+                    'is_ignored' => $translation->is_ignored,
+                    'is_pending_delete' => $translation->is_pending_delete,
+                    'deletion_unavailable_reason' => $this->deletionEligibility->reason($translation),
+                    'retention_sources' => $dynamicMatch['sources'] ?? [],
+                    'matching_patterns' => $dynamicMatch['patterns'] ?? [],
+                    'dynamic_occurrences' => $dynamicMatch['occurrences'] ?? [],
                     'dynamic_pattern' => $dynamicMatch['pattern'] ?? null,
                     'source' => $translation->source,
                     'updated_at' => $translation->updated_at?->toIso8601String(),
                     'values' => $values,
-                    'occurrences' => $translation->occurrences->map(function ($occurrence): array {
+                    'values_count' => $translation->values->count(),
+                    'occurrences' => $translation->occurrences->reject(fn ($occurrence): bool => collect($dynamicMatch['occurrences'] ?? [])->contains(fn (array $possible): bool => $possible['file'] === $occurrence->file_path && ($possible['line'] ?? null) === $occurrence->line_number))->values()->map(function ($occurrence): array {
                         return [
                             'id' => $occurrence->id,
                             'file_path' => $occurrence->file_path,
@@ -259,7 +265,12 @@ class ManageController
      */
     private function applyStatusFilter(Builder $query, ?string $status, ?CarbonInterface $lastSyncAt, array $locales): void
     {
-        if ($status === null) {
+        $query->where('is_pending_delete', $status === 'pending-deletion');
+        if ($status === 'pending-deletion') {
+            return;
+        }
+        $query->where('is_ignored', $status === 'ignored');
+        if ($status === null || $status === 'ignored') {
             return;
         }
 
@@ -269,8 +280,8 @@ class ManageController
             return;
         }
 
-        if ($status === 'dynamic') {
-            $this->applyDynamicFilter($query);
+        if (in_array($status, ['dynamic', 'retained'], true)) {
+            $this->applyDynamicFilter($query, $status);
 
             return;
         }
@@ -312,9 +323,11 @@ class ManageController
         $query->where('status', $status);
     }
 
-    private function applyDynamicFilter(Builder $query): void
+    private function applyDynamicFilter(Builder $query, string $status): void
     {
-        $patterns = $this->dynamicKeys->patterns();
+        $patterns = array_column(array_filter($this->dynamicKeys->entries(), fn (array $entry): bool => $status === 'dynamic'
+            ? array_intersect(['detected', 'binding'], $entry['sources']) !== []
+            : array_intersect(['config', 'settings', 'retained-config'], $entry['sources']) !== []), 'pattern');
 
         if ($patterns === []) {
             $query->whereRaw('1 = 0');
@@ -488,7 +501,10 @@ class ManageController
             ['value' => 'approved', 'label' => 'Approved'],
             ['value' => 'missing', 'label' => 'Missing'],
             ['value' => 'orphan', 'label' => 'Orphan'],
-            ['value' => 'dynamic', 'label' => 'Dynamic'],
+            ['value' => 'dynamic', 'label' => 'Dynamic usage'],
+            ['value' => 'retained', 'label' => 'Retained by rule'],
+            ['value' => 'ignored', 'label' => 'Ignored'],
+            ['value' => 'pending-deletion', 'label' => 'Pending deletion'],
         ];
     }
 

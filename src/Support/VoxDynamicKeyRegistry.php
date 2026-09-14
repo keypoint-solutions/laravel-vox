@@ -54,8 +54,16 @@ class VoxDynamicKeyRegistry
     {
         $entries = [];
 
+        foreach ((array) config('vox.retained_keys', []) as $pattern) {
+            $pattern = self::normalizePattern($pattern);
+            if ($pattern !== '') {
+                $entries[$pattern] = $this->emptyEntry($pattern);
+                $entries[$pattern]['sources'][] = 'retained-config';
+            }
+        }
+
         foreach ($this->settings->configuredDynamicKeyPatterns() as $pattern) {
-            $entries[$pattern] = $this->emptyEntry($pattern);
+            $entries[$pattern] ??= $this->emptyEntry($pattern);
             $entries[$pattern]['sources'][] = 'config';
         }
 
@@ -116,6 +124,7 @@ class VoxDynamicKeyRegistry
 
         return [
             'pattern' => $matches[0]['pattern'],
+            'patterns' => array_column($matches, 'pattern'),
             'is_frontend' => collect($matches)->contains(
                 fn (array $entry): bool => $entry['is_frontend']
             ),

@@ -286,3 +286,90 @@ test('late switches cannot overwrite the latest stored choice', async () => {
     await pending;
     assert.equal(localStorage.getItem('laravel-vox.locale'), 'ro');
 });
+
+test('dictionary refresh updates reactive text, deleted keys, and cached locale switches in place', async () => {
+    const { createVoxController } = await import('../resources/js/consumer/shared.js');
+    const { I18n, wTrans } = await import('laravel-vue-i18n');
+    const translations = {
+        en: { Greeting: 'Hello', Fallback: 'Fallback', Deleted: 'Remove me' },
+        fr: { Greeting: 'Bonjour', Deleted: 'Remove me', Primary: 'Primary' },
+    };
+    const controller = createVoxController(async lang => ({ ...translations[lang] }));
+    controller.configureLocales(['en', 'fr']);
+    const plugin = await controller.initialize(controller.configure({ locale: 'fr' }));
+    const app = createApp({});
+    app.use(plugin);
+    const instance = I18n.getSharedInstance();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const greeting = wTrans('Greeting');
+    const fallback = wTrans('Fallback');
+    const deleted = wTrans('Deleted');
+    const primary = wTrans('Primary');
+    assert.equal(greeting.value, 'Bonjour');
+    assert.equal(deleted.value, 'Remove me');
+    translations.en = { Greeting: 'Hi', Fallback: 'Updated fallback', Primary: 'Now from fallback' };
+    translations.fr = { Greeting: 'Bonsoir' };
+    await controller.refreshMessages();
+    await nextTick();
+    assert.equal(I18n.getSharedInstance(), instance);
+    assert.equal(greeting.value, 'Bonsoir');
+    assert.equal(fallback.value, 'Fallback');
+    assert.equal(deleted.value, 'Deleted');
+    assert.equal(primary.value, 'Primary');
+    assert.equal(controller.useVox().locale.value, 'fr');
+    assert.equal(app.config.globalProperties.$t('Greeting'), 'Bonsoir');
+    await controller.setLocale('en');
+    assert.equal(greeting.value, 'Hi');
+    assert.equal(fallback.value, 'Updated fallback');
+    assert.equal(deleted.value, 'Deleted');
+    await controller.setLocale('fr');
+    assert.equal(greeting.value, 'Bonsoir');
+});
+
+test('translation refresh preserves a mounted form and its entered value', async () => {
+    const { createRenderer, h, ref, onMounted } = await import('vue');
+    const { createVoxController } = await import('../resources/js/consumer/shared.js');
+    const { wTrans } = await import('laravel-vue-i18n');
+    let label = 'Title';
+    let mounts = 0;
+    let draft;
+    const controller = createVoxController(async () => ({ Label: label }));
+    controller.configureLocales(['en']);
+    const plugin = await controller.initialize(controller.configure({ locale: 'en' }));
+    const renderer = createRenderer({
+        createElement: type => ({ type, children: [], props: {} }),
+        insert: (child, parent) => { child.parent = parent; parent.children.push(child); },
+        remove: child => { child.parent.children = child.parent.children.filter(node => node !== child); },
+        setElementText: (node, text) => { node.text = text; },
+        patchProp: (node, key, previous, value) => { node.props[key] = value; },
+        parentNode: node => node.parent,
+        nextSibling: () => null,
+    });
+    const root = { children: [] };
+    const app = renderer.createApp({
+        setup() {
+            draft = ref('');
+            const text = wTrans('Label');
+            onMounted(() => mounts++);
+            return () => h('form', [h('label', text.value), h('input', { value: draft.value })]);
+        },
+    });
+    app.use(plugin);
+    app.mount(root);
+    try {
+        draft.value = 'My unsaved event';
+        await nextTick();
+        const form = root.children[0];
+        const input = form.children[1];
+        label = 'Event title';
+        await controller.refreshMessages();
+        await nextTick();
+        assert.equal(mounts, 1);
+        assert.equal(root.children[0], form);
+        assert.equal(form.children[1], input);
+        assert.equal(input.props.value, 'My unsaved event');
+        assert.equal(form.children[0].text, 'Event title');
+    } finally {
+        app.unmount();
+    }
+});

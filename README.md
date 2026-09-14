@@ -8,6 +8,10 @@ Laravel Vox discovers translation usage, manages reviewed values in a dedicated 
 Laravel Vox was created by [Costin Bereveanu](https://github.com/schniper) and is maintained and offered by
 [Keypoint Solutions](https://keypoint.ro).
 
+## Frontend development feature
+
+**Incremental translation hot reload:** editing one PHP language file reparses only that file and updates only its affected locale module. Other languages reuse their cached translations, keeping development feedback fast even with many locales. [How translation hot reload works](#incremental-translation-hot-reload).
+
 ## Requirements
 
 - PHP 8.2–8.4
@@ -210,7 +214,7 @@ The settings UI is provider-neutral; credentials remain in the application envir
 ```dotenv
 OPENAI_API_KEY=...
 VOX_TRANSLATE_DRIVER=openai
-VOX_TRANSLATE_MODEL=gpt-5.4-mini
+VOX_TRANSLATE_MODEL=gpt-5.6-luna
 ```
 
 Supported models are retrieved from the provider account and constrained by the package's text-model catalog. Project-specific terminology or tone guidance can be stored from `/vox/settings`.
@@ -250,6 +254,18 @@ history and does not reset auto-increment counters. The audit event is part of t
 ## Vue frontend translations
 
 Vox integrates with `laravel-vue-i18n` so the frontend uses the same Laravel PHP and JSON language files, including parameter replacement and pluralization.
+
+### Incremental translation hot reload
+
+The bundled Vite integration compiles PHP language files once at development startup or production build, then caches each parsed file. During development:
+
+- Editing, adding, or deleting a PHP translation file rebuilds only its locale module from the cached files. Other locales are not reparsed or regenerated.
+- Unchanged file contents are skipped. Edits that leave the exported translations unchanged, such as whitespace changes or changes to excluded backend groups, trigger no translation update.
+- JSON language files are ordinary Vite modules; editing one does not recompile PHP translations.
+- Adding or removing a locale updates the lazy-loader catalogue. Changing the frontend-group manifest refilters cached translations without parsing PHP again.
+- Framework, application, namespaced vendor overrides, and optional `additionalLangPaths` retain their merge precedence. Later language roots override earlier values per key.
+
+No generated `php_*.json` files are written, and no active-development-locale setting or application-specific reload plugin is needed. Vox accepts translation updates without remounting the Vue application, preserving open dialogs and unsaved form state. Reactive `$t` rendering and `wTrans` values update in place; strings translated once and copied into plain variables remain snapshots. Changes to application code or Vite configuration still follow normal Vite reload behavior. This feature applies to bundled translations; runtime-loaded translations use their published artifacts instead.
 
 ### npm setup with bundled translations
 
@@ -538,8 +554,9 @@ local language directory. Import validates an entire Vox ZIP before merging its 
 directory and deliberately does not start a database sync; run local sync when ready to review the imported values.
 
 Publish, ZIP download, legacy remote ZIP pull, and ZIP import share a structural translation-file validator. PHP files must
-return one literal, optionally nested array with string keys and string values. Variables, interpolation,
-concatenation, function calls, includes, and other executable PHP are rejected before any validated archive is
+return one literal, optionally nested array with string keys and string values; concatenated string literals are
+also supported. Variables, interpolation,
+function calls, includes, and other executable PHP are rejected before any validated archive is
 applied.
 
 ## Configuration highlights
@@ -602,3 +619,23 @@ Copyright © 2026 Keypoint Solutions SRL.
 
 Laravel Vox is open-sourced software licensed under the [MIT license](LICENSE.md). The license preserves the
 copyright notice while allowing broad use, modification, and distribution.
+
+### Usage classification and cleanup
+
+Manage distinguishes **Static usage** (exact calls), **Dynamic usage** (detected patterns or bindings),
+**Retained by rule** (configuration or Settings), and **Orphan** (absent from source and language files, with no matching rule).
+These labels are independent of approval status and may overlap. The editor lists exact occurrences separately from
+possible dynamic matches; a matching pattern does not prove that a particular key is used.
+
+Use `vox.retained_keys` for explicit keys or wildcard retention rules. The default protects `auth.*`, `pagination.*`,
+`passwords.*`, and `validation.*`. Existing `vox.dynamic_keys.patterns` and Settings patterns continue to retain keys;
+`vox.dynamic_keys.bindings` still enumerates runtime key families.
+
+Delete individual or selected orphan keys and dynamic keys without direct static references from Manage. Deletion marks keys as pending in Vox. Files remain unchanged until Publish removes their values from language files and existing runtime catalogues in every locale. Sync and Parse preserve pending deletions; restore a key from the Pending deletion filter to cancel before publishing. Confirmation lists
+the keys and locale-value count. Scheduling deletion rechecks current source and records an audit entry. Publish removes the pending database records and related reconciliation records after file updates succeed. A future scan, binding, or remote import may recreate deleted keys.
+
+To stop managing a key while preserving its language-file values, use **Ignore in Vox**. Its database row and values remain available under the
+**Ignored** filter, but sync and publishing skip its values. Parsing preserves existing ignored values without generating
+new values for that key. Restore returns it to management; run Sync afterward to refresh its values and usage.
+
+Ignore and Restore leave published files untouched. Deletion does not remove matching retention rules; compiled frontend bundles need rebuilding after file changes outside development. Database resets preserve published and runtime files and remove ignored records.

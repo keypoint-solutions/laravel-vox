@@ -169,6 +169,23 @@ export function createVoxController(loadMessages) {
         }
     }
 
+    /** Refresh loaded dictionaries in place without reinstalling the Vue plugin. */
+    async function refreshMessages() {
+        const instance = I18n.getSharedInstance();
+        const loadedLocales = [...new Set([...messages.keys(), ...I18n.loaded.map(({ lang }) => lang)])];
+        const refreshed = await Promise.all(loadedLocales.map(async (lang) => [lang, await loadMessages(lang)]));
+
+        for (const [lang, translations] of refreshed) {
+            messages.set(lang, translations);
+            instance.addLoadedLang({ lang, messages: translations });
+        }
+
+        const activeLocale = instance.getActiveLanguage();
+        if (messages.has(activeLocale)) {
+            instance.setLanguage({ lang: activeLocale, messages: messages.get(activeLocale) });
+        }
+    }
+
     function useVox() {
         return {
             locale: readonly(locale),
@@ -177,5 +194,5 @@ export function createVoxController(loadMessages) {
         };
     }
 
-    return { availableLocales, configureLocales, configure, plugin, initialize, setLocale, useVox };
+    return { availableLocales, configureLocales, configure, plugin, initialize, setLocale, refreshMessages, useVox };
 }

@@ -1,15 +1,26 @@
-import { availableVoxLocales as bundledLocales, loadVoxLocale } from 'virtual:laravel-vox/translations';
+import * as initialCatalogue from 'virtual:laravel-vox/translations';
 
 import { createVoxController } from './shared.js';
 
 export { trans, trans_choice, transChoice, wTrans, wTransChoice } from 'laravel-vue-i18n';
 
+let catalogue = initialCatalogue;
+
 const controller = createVoxController(async (locale) => {
-    const [json, php] = await Promise.all([loadVoxLocale(locale), loadVoxLocale(`php_${locale}`)]);
+    const [json, php] = await Promise.all([catalogue.loadVoxLocale(locale), catalogue.loadVoxLocale(`php_${locale}`)]);
 
     return { ...(php.default ?? php), ...(json.default ?? json) };
 });
-controller.configureLocales(bundledLocales);
+controller.configureLocales(catalogue.availableVoxLocales);
+
+if (import.meta.hot) {
+    import.meta.hot.accept('virtual:laravel-vox/translations', async (updatedCatalogue) => {
+        if (!updatedCatalogue) return;
+        catalogue = updatedCatalogue;
+        controller.configureLocales(catalogue.availableVoxLocales);
+        await controller.refreshMessages();
+    });
+}
 
 /** @param {import('./vue.js').VoxI18nOptions} options */
 export function createVoxI18n(options = {}) {
