@@ -28,7 +28,7 @@
         dynamicPatterns: {
             pattern: string;
             is_frontend: boolean;
-            sources: ('config' | 'settings' | 'detected' | 'binding')[];
+            sources: ('retained-config' | 'settings' | 'detected' | 'binding')[];
             occurrences: {
                 file: string;
                 line: number | null;
@@ -453,7 +453,7 @@
                         >
                             {{ entry.pattern }}
                             <Badge
-                                v-if="entry.sources.includes('config') || entry.sources.includes('retained-config')"
+                                v-if="entry.sources.includes('retained-config')"
                                 variant="secondary"
                             >
                                 Retained by config

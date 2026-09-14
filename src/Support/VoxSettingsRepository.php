@@ -52,7 +52,7 @@ class VoxSettingsRepository
      */
     public function configuredDynamicKeyPatterns(): array
     {
-        $configured = config('vox.dynamic_keys.patterns', []);
+        $configured = config('vox.retained_keys', []);
         $bindings = config('vox.dynamic_keys.bindings', []);
 
         return $this->normalizePatterns(array_merge(

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, realpathSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { test } from 'node:test';
 import { parse } from 'laravel-vue-i18n/loader';
-import { build, createServer } from 'vite';
+import { build, createServer, resolveConfig } from 'vite';
 import vox from '../resources/js/consumer/vite.js';
 import { PhpTranslationCatalogue } from '../resources/js/consumer/php-catalogue.js';
 
@@ -181,4 +181,193 @@ test('runtime mode resolves the existing Vue entry to runtime delivery without b
     assert.match(code, /\/vox/u);
     assert.match(code, /credentials/u);
     assert.doesNotMatch(code, /Bonjour/u);
+});
+
+for (const scenario of [
+    { name: 'unset', value: undefined, expected: false },
+    { name: 'enabled', value: 'true', expected: true },
+    { name: 'disabled', value: 'false', expected: false },
+    { name: 'explicit bundled override', value: 'true', runtime: false, expected: false },
+    { name: 'explicit runtime override', value: 'false', runtime: true, expected: true },
+    { name: 'mode-specific env directory', value: 'false', modeValue: 'true', envDir: 'environment', expected: true },
+]) {
+    test(`runtime environment selection: ${scenario.name}`, async t => {
+        const { root, write } = fixture(t);
+        const directory = scenario.envDir ? `${scenario.envDir}/` : '';
+        if (scenario.value !== undefined) write(`${directory}.env`, `VOX_FRONTEND_RUNTIME_ENABLED=${scenario.value}\n`);
+        if (scenario.modeValue) write(`${directory}.env.production`, `VOX_FRONTEND_RUNTIME_ENABLED=${scenario.modeValue}\n`);
+        const config = await resolveConfig({
+            root, configFile: false, logLevel: 'silent', mode: 'production', envDir: scenario.envDir,
+            plugins: vox(scenario.runtime === undefined ? {} : { runtime: scenario.runtime }),
+        }, 'build');
+        const runtimeAlias = config.resolve.alias.find(alias => alias.find === '@laravel-vox/vue.js');
+        assert.equal(Boolean(runtimeAlias), scenario.expected);
+        if (runtimeAlias) assert.match(runtimeAlias.replacement, /runtime\.js$/);
+        assert.equal(config.plugins.some(p => p.name === 'laravel-vox-translations'), !scenario.expected);
+        assert.equal(config.env.VOX_FRONTEND_RUNTIME_ENABLED, undefined);
+    });
+}
+
+test('runtime development compiles startup and watched changes, coalesces writes, reports errors and recovers', async t => {
+    const waitFor = async predicate => {
+        for (let attempt = 0; attempt < 300; attempt++) {
+            if (predicate()) return;
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        assert.fail('Runtime compilation did not complete');
+    };
+    const { root, write } = fixture(t);
+    write('artisan', `
+        const fs = require('node:fs');
+        const calls = fs.existsSync('calls') ? Number(fs.readFileSync('calls', 'utf8')) : 0;
+        fs.writeFileSync('calls', String(calls + 1));
+        if (fs.existsSync('fail')) { console.error('Invalid translation'); process.exit(1); }
+        setTimeout(() => {}, 80);
+    `);
+    const errors = [];
+    const server = await createServer({
+        root, configFile: false, logLevel: 'silent',
+        plugins: vox({ runtime: true, frontendDiscovery: false, phpBinary: process.execPath }),
+        server: { middlewareMode: true, watch: { ignored: ['**/*'] } },
+    });
+    t.after(() => server.close());
+    const sent = [];
+    server.ws.send = payload => sent.push(payload);
+    server.config.logger.error = message => errors.push(message);
+    const { readFileSync } = await import('node:fs');
+    assert.equal(readFileSync(resolve(root, 'calls'), 'utf8'), '1');
+    for (let i = 0; i < 5; i++) server.watcher.emit('all', 'change', resolve(root, 'lang/en/messages.php'));
+    await waitFor(() => sent.length === 1);
+    assert.equal(readFileSync(resolve(root, 'calls'), 'utf8'), '2');
+    assert.equal(sent[0].event, 'vox:translations-updated');
+    write('fail', '');
+    server.watcher.emit('all', 'unlink', resolve(root, 'lang/fr/messages.php'));
+    await waitFor(() => sent.length === 2);
+    assert.equal(sent[1].event, 'vox:translations-error');
+    assert.match(errors[0], /Invalid translation/);
+    rmSync(resolve(root, 'fail'));
+    server.watcher.emit('all', 'add', resolve(root, 'storage/vox/frontend.json'));
+    await waitFor(() => sent.length === 3);
+    assert.equal(sent[2].event, 'vox:translations-updated');
+    assert.equal(sent.some(event => event.type === 'full-reload'), false);
+    await server.close();
+    assert.equal(server.watcher.listeners('all').length, 0);
+});
+
+test('runtime hot reload can be disabled and never applies during production builds', async t => {
+    const { root } = fixture(t);
+    for (const [command, options] of [['build', { runtime: true }], ['serve', { runtime: true, runtimeHotReload: false }]]) {
+        const config = await resolveConfig({ root, configFile: false, plugins: vox(options) }, command);
+        assert.equal(config.plugins.some(p => p.name === 'laravel-vox-runtime-hot-reload'), false);
+    }
+});
+
+function discoveryFixture(t) {
+    const fixtureData = fixture(t);
+    fixtureData.write('selection.json', JSON.stringify(['newgroup']));
+    fixtureData.write('artisan', `
+        const fs = require('node:fs');
+        const path = require('node:path');
+        const command = process.argv[2];
+        fs.appendFileSync('commands', command + '\\n');
+        if (fs.existsSync('fail')) { console.error('Discovery failed'); process.exit(1); }
+        if (command === 'vox:frontend-discover') {
+            const groups = JSON.parse(fs.readFileSync('selection.json', 'utf8'));
+            const manifest = JSON.stringify({ groups });
+            fs.mkdirSync('storage/vox', { recursive: true });
+            if (!fs.existsSync('storage/vox/frontend.json') || fs.readFileSync('storage/vox/frontend.json', 'utf8') !== manifest)
+                fs.writeFileSync('storage/vox/frontend.json', manifest);
+            console.log(JSON.stringify({ paths: [path.resolve('source')], extensions: ['vue', 'ts'], manifest: path.resolve('storage/vox/frontend.json') }));
+        }
+    `);
+    return fixtureData;
+}
+
+test('production discovery runs before bundled modules are compiled and runtime catalogues are compiled afterward', async t => {
+    const { root, write } = discoveryFixture(t);
+    write('lang/en/newgroup.php', "<?php return ['title' => 'Discovered before build'];");
+    write('main.js', "export { loadVoxLocale } from 'virtual:laravel-vox/translations';");
+    const result = await build({
+        root, configFile: false, logLevel: 'silent', plugins: vox({ runtime: false, phpBinary: process.execPath }),
+        build: { write: false, minify: false, lib: { entry: resolve(root, 'main.js'), formats: ['es'] } },
+    });
+    assert.ok((Array.isArray(result) ? result : [result]).flatMap(bundle => bundle.output)
+        .some(item => item.type === 'chunk' && item.code.includes('Discovered before build')));
+    assert.equal(readFileSync(resolve(root, 'commands'), 'utf8'), 'vox:frontend-discover\n');
+    await resolveConfig({ root, configFile: false, plugins: vox({ runtime: true, phpBinary: process.execPath }) }, 'build');
+    assert.equal(readFileSync(resolve(root, 'commands'), 'utf8'), 'vox:frontend-discover\nvox:frontend-discover\nvox:compile\n');
+    write('fail', '');
+    await assert.rejects(resolveConfig({ root, configFile: false, plugins: vox({ phpBinary: process.execPath }) }, 'build'), /Discovery failed/);
+});
+
+test('development discovery batches source edits, handles deletion, retries failures, and ignores unrelated files', async t => {
+    const { root, write } = discoveryFixture(t);
+    const server = await createServer({
+        root, configFile: false, logLevel: 'silent',
+        plugins: vox({ runtime: true, runtimeHotReload: false, phpBinary: process.execPath }),
+        server: { middlewareMode: true, ws: false, watch: { ignored: ['**/*'] } },
+    });
+    t.after(() => server.close());
+    const sent = [];
+    server.ws.send = event => sent.push(event);
+    const waitFor = async predicate => {
+        for (let attempt = 0; attempt < 300; attempt++) {
+            if (predicate()) return;
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        assert.fail('Discovery did not complete');
+    };
+    const commands = () => readFileSync(resolve(root, 'commands'), 'utf8').trim().split('\n');
+    const groups = () => JSON.parse(readFileSync(resolve(root, 'storage/vox/frontend.json'), 'utf8')).groups;
+    write('selection.json', JSON.stringify(['appointments']));
+    for (let i = 0; i < 5; i++) server.watcher.emit('all', 'change', resolve(root, 'source/Page.vue'));
+    server.watcher.emit('all', 'change', resolve(root, 'lang/en/messages.php'));
+    server.watcher.emit('all', 'change', resolve(root, 'source/style.css'));
+    await waitFor(() => groups().includes('appointments'));
+    assert.equal(commands().length, 2);
+    write('fail', '');
+    server.watcher.emit('all', 'add', resolve(root, 'source/New.vue'));
+    await waitFor(() => sent.length === 1);
+    assert.equal(sent[0].event, 'vox:translations-error');
+    assert.deepEqual(groups(), ['appointments']);
+    rmSync(resolve(root, 'fail'));
+    write('selection.json', '[]');
+    server.watcher.emit('all', 'unlink', resolve(root, 'source/Page.vue'));
+    await waitFor(() => groups().length === 0);
+    await server.close();
+    assert.equal(server.watcher.listeners('all').length, 0);
+});
+
+test('discovery can be disabled for externally prepared manifests', async t => {
+    const { root } = discoveryFixture(t);
+    await resolveConfig({ root, configFile: false, plugins: vox({ frontendDiscovery: false }) }, 'build');
+    assert.equal(existsSync(resolve(root, 'commands')), false);
+});
+
+test('a discovered manifest change automatically triggers runtime compilation through the file watcher', async t => {
+    const { root, write } = discoveryFixture(t);
+    write('source/Page.vue', '<template />');
+    const server = await createServer({
+        root, configFile: false, logLevel: 'silent',
+        plugins: vox({ runtime: true, phpBinary: process.execPath }),
+        server: { middlewareMode: true, ws: false, watch: { usePolling: true, interval: 25 } },
+    });
+    t.after(() => server.close());
+    const waitFor = async predicate => {
+        for (let attempt = 0; attempt < 300; attempt++) {
+            if (predicate()) return;
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        assert.fail('Runtime watcher did not receive the discovered manifest: ' + readFileSync(resolve(root, 'commands'), 'utf8') + JSON.stringify(server.watcher.getWatched()));
+    };
+    await waitFor(() => server.watcher.getWatched()[resolve(root, 'storage/vox')]?.includes('frontend.json'));
+    const sent = [];
+    server.ws.send = event => sent.push(event);
+    write('selection.json', JSON.stringify(['appointments']));
+    write('source/Page.vue', "<template>{{ $t('appointments.title') }}</template>");
+    await waitFor(() => sent.some(event => event.event === 'vox:translations-updated'));
+    assert.deepEqual(JSON.parse(readFileSync(resolve(root, 'storage/vox/frontend.json'), 'utf8')).groups, ['appointments']);
+    const commands = readFileSync(resolve(root, 'commands'), 'utf8').trim().split('\n');
+    assert.equal(commands.at(-1), 'vox:compile');
+    assert.ok(commands.filter(command => command === 'vox:frontend-discover').length >= 2);
 });

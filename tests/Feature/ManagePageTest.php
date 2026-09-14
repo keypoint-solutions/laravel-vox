@@ -99,7 +99,7 @@ it('returns manage data with groups, statuses, and occurrences', function (): vo
 });
 
 it('marks and filters dynamic and orphan translations separately', function (): void {
-    config()->set('vox.dynamic_keys.patterns', ['messages.legal.*']);
+    config()->set('vox.retained_keys', ['messages.legal.*']);
 
     VoxTranslation::factory()
         ->withValues(['en' => 'Terms', 'fr' => 'Conditions'])
@@ -127,7 +127,7 @@ it('marks and filters dynamic and orphan translations separately', function (): 
 
 it('creates concrete values covered by a dynamic pattern', function (): void {
     $this->withoutMiddleware(PreventRequestForgery::class);
-    config()->set('vox.dynamic_keys.patterns', ['enums.user_roles.*']);
+    config()->set('vox.retained_keys', ['enums.user_roles.*']);
 
     $this->from('/vox/manage')
         ->post('/vox/manage/translations', [
@@ -159,7 +159,7 @@ it('creates concrete values covered by a dynamic pattern', function (): void {
 
 it('rejects dynamic values outside the selected pattern and duplicate keys', function (): void {
     $this->withoutMiddleware(PreventRequestForgery::class);
-    config()->set('vox.dynamic_keys.patterns', ['enums.user_roles.*']);
+    config()->set('vox.retained_keys', ['enums.user_roles.*']);
 
     $this->from('/vox/manage')
         ->post('/vox/manage/translations', [
@@ -508,7 +508,7 @@ it('allows published dynamic keys without direct source usage to be deleted', fu
     $values = $files->loadGroup('en', 'messages');
     $key = 'unused_dynamic';
     $files->saveGroup('en', 'messages', [$key => 'Unused']);
-    config()->set('vox.dynamic_keys.patterns', ['messages.*']);
+    config()->set('vox.retained_keys', ['messages.*']);
     VoxTranslation::query()->update(['key' => $key]);
 
     $this->get('/vox/manage')->assertInertia(fn (AssertableInertia $page) => $page

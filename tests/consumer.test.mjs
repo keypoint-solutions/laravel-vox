@@ -159,7 +159,7 @@ test('bundled initialization and composable share the same locale behavior', asy
 
 test('Vite runtime mode registers automatic alias without translation bundling', async () => {
     const plugins = vox({ runtime: true });
-    assert.equal(plugins.length, 1);
+    assert.equal(plugins.some(plugin => plugin.name === 'laravel-vox-translations'), false);
     const config = await resolveConfig({ configFile: false, plugins }, 'serve');
     const alias = config.resolve.alias.find(alias => alias.find === '@laravel-vox');
     assert.equal(alias.replacement, fileURLToPath(new URL('../resources/js/consumer/', import.meta.url)));
@@ -372,4 +372,28 @@ test('translation refresh preserves a mounted form and its entered value', async
     } finally {
         app.unmount();
     }
+});
+
+test('runtime HMR events update translations in place and unregister on disposal', async () => {
+    const { registerRuntimeHotReload } = await import('../resources/js/consumer/runtime-hmr.js');
+    const { createVoxController } = await import('../resources/js/consumer/shared.js');
+    let wording = { Hello: 'Before', Removed: 'Old value' };
+    const controller = createVoxController(async () => wording);
+    controller.configureLocales(['en']);
+    await controller.initialize(controller.configure({ locale: 'en' }));
+    const reactiveText = runtime.wTrans('Hello');
+    const handlers = new Map();
+    let dispose;
+    registerRuntimeHotReload({
+        on(event, callback) { handlers.set(event, callback); },
+        off(event) { handlers.delete(event); },
+        dispose(callback) { dispose = callback; },
+    }, () => controller.refreshMessages());
+    wording = { Hello: 'After' };
+    await handlers.get('vox:translations-updated')();
+    await nextTick();
+    assert.equal(reactiveText.value, 'After');
+    assert.equal(runtime.trans('Removed'), 'Removed');
+    dispose();
+    assert.equal(handlers.size, 0);
 });

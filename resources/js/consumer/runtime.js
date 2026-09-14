@@ -1,3 +1,4 @@
+import { registerRuntimeHotReload } from './runtime-hmr.js';
 import { createVoxController, normalizeLocale } from './shared.js';
 
 export { trans, trans_choice, transChoice, wTrans, wTransChoice } from 'laravel-vue-i18n';
@@ -32,6 +33,13 @@ async function loadMessages(locale) {
 }
 
 const controller = createVoxController(loadMessages);
+let discoverLocales = true;
+if (import.meta.hot) {
+    registerRuntimeHotReload(import.meta.hot, async () => {
+        if (discoverLocales) await fetchVoxLocales();
+        await controller.refreshMessages();
+    });
+}
 export const availableVoxLocales = controller.availableLocales;
 export const setVoxLocale = controller.setLocale;
 export const useVox = controller.useVox;
@@ -75,6 +83,7 @@ function configureRuntime(options) {
 
 /** Legacy synchronous plugin; use createVox to await catalogue discovery. */
 export function createVoxI18n(options = {}) {
+    discoverLocales = options.locales === undefined;
     configureRuntime(options);
     controller.configureLocales(
         options.locales ??
@@ -94,6 +103,7 @@ export function createVoxI18n(options = {}) {
 
 /** Discover supported locales and prepare translations before mounting. */
 export async function createVox(options = {}) {
+    discoverLocales = options.locales === undefined;
     configureRuntime(options);
     let fallbackLocale = options.fallbackLocale;
 

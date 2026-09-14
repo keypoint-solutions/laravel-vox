@@ -28,7 +28,7 @@ function prepareVoxFixtures(): string
         $targetRoot.'/resources',
     ]);
     config()->set('vox.parse.exclude', []);
-    config()->set('vox.dynamic_keys.patterns', [
+    config()->set('vox.retained_keys', [
         'frontend.dynamicLabels.values.*',
         'frontend.dynamicLabels2.values.*',
     ]);

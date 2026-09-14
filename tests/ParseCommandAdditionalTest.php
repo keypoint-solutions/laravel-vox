@@ -8,7 +8,7 @@ it('retains dynamic keys in non-base locales when keep_orphan_other_locales_keys
     $targetRoot = prepareVoxFixtures();
 
     config()->set('vox.parse.keep_orphan_other_locales_keys', false);
-    config()->set('vox.dynamic_keys.patterns', ['messages.*']);
+    config()->set('vox.retained_keys', ['messages.*']);
 
     $frMessagesPath = $targetRoot.'/lang/fr/messages.php';
     $frMessages = require $frMessagesPath;

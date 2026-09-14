@@ -235,7 +235,7 @@ class ManageController
                     'is_frontend' => $translation->is_frontend,
                     'is_orphan' => $translation->is_orphan,
                     'is_dynamic' => in_array('detected', $dynamicMatch['sources'] ?? [], true) || in_array('binding', $dynamicMatch['sources'] ?? [], true),
-                    'is_retained' => array_intersect(['config', 'settings', 'retained-config'], $dynamicMatch['sources'] ?? []) !== [],
+                    'is_retained' => array_intersect(['settings', 'retained-config'], $dynamicMatch['sources'] ?? []) !== [],
                     'is_ignored' => $translation->is_ignored,
                     'is_pending_delete' => $translation->is_pending_delete,
                     'deletion_unavailable_reason' => $this->deletionEligibility->reason($translation),
@@ -330,7 +330,7 @@ class ManageController
     {
         $patterns = array_column(array_filter($this->dynamicKeys->entries(), fn (array $entry): bool => $status === 'dynamic'
             ? array_intersect(['detected', 'binding'], $entry['sources']) !== []
-            : array_intersect(['config', 'settings', 'retained-config'], $entry['sources']) !== []), 'pattern');
+            : array_intersect(['settings', 'retained-config'], $entry['sources']) !== []), 'pattern');
 
         if ($patterns === []) {
             $query->whereRaw('1 = 0');

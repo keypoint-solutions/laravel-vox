@@ -82,10 +82,14 @@ class VoxFrontendManifest
             File::makeDirectory($directory, 0755, true);
         }
 
-        app(TranslationFileTransaction::class)->replace($path, json_encode(
+        $contents = json_encode(
             ['groups' => $groups],
             JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
-        )."\n");
+        )."\n";
+
+        if (! File::isFile($path) || File::get($path) !== $contents) {
+            app(TranslationFileTransaction::class)->replace($path, $contents);
+        }
     }
 
     public function path(): string

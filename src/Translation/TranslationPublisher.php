@@ -7,6 +7,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use KeypointSolutions\LaravelVox\Events\TranslationsPublished;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
@@ -54,7 +55,7 @@ class TranslationPublisher
 
             $stagedResult = $regenerate
                 ? $this->publishUsing($this->files->forPath($stagingPath), null, true, true)
-                : $this->publishTo($stagingPath, $valueIds);
+                : $this->publishUsing($this->files->forPath($stagingPath), $valueIds, false, $valueIds === null);
             $this->validator->validateDirectory($stagingPath);
             $deletion = new TranslationFileDeletion($this->files->forPath($stagingPath), app(TranslationFileWriter::class), $this->validator);
             $deletedFiles = $deletion->prepare($pending, false);
@@ -110,7 +111,7 @@ class TranslationPublisher
                 }
             });
 
-            return new PublishResult(
+            $result = new PublishResult(
                 $stagedResult->values(),
                 $publishedFiles,
                 $stagedResult->incompleteTranslations(),
@@ -118,6 +119,17 @@ class TranslationPublisher
                 $frontendFiles,
                 deletedKeys: $pending->map(fn ($row): array => ['group' => $row->group, 'key' => $row->key])->all(),
             );
+
+            $event = new TranslationsPublished(
+                config('vox.frontend.runtime.enabled', false) ? 'runtime' : 'bundled',
+                $result,
+                $regenerate,
+            );
+            DB::connection(config('vox.database.connection', 'vox'))->afterCommit(
+                fn () => app(TranslationFileTransaction::class)->afterCommit(fn () => event($event))
+            );
+
+            return $result;
         } finally {
             File::deleteDirectory($stagingPath);
         }
@@ -171,23 +183,30 @@ class TranslationPublisher
                 if (! in_array($locale, $locales, true) || ($valueIds !== null && ! in_array($translationValue->id, $valueIds, true))) {
                     continue;
                 }
-                $value = $overridesOnly
-                    ? ($translationValue->published_override ?? ($includeDefaults ? $translationValue->file_value : null))
-                    : $translationValue->value;
-                if ($overridesOnly && $value === null) {
-                    continue;
-                }
-                if (! $overridesOnly && ($translationValue->is_obsolete || ! $translationValue->is_approved
-                    || (! $translationValue->is_pending_publish && $translationValue->file_value !== null))) {
-                    continue;
-                }
-                if (! is_string($value) || (! $includeDefaults && ($value === '' || Str::startsWith($value, $prefix)))) {
+                $publishDraft = ! $overridesOnly && ! $translationValue->is_obsolete
+                    && $translationValue->is_approved
+                    && ($translationValue->is_pending_publish || $translationValue->file_value === null);
+                if ($publishDraft && (! is_string($translationValue->value)
+                    || $translationValue->value === '' || Str::startsWith($translationValue->value, $prefix))) {
                     $incomplete = true;
-
-                    continue;
+                    $publishDraft = false;
                 }
-                if (! $overridesOnly) {
+
+                if ($publishDraft) {
+                    $value = $translationValue->value;
                     $publishedValues[$translationValue->id] = $value;
+                } elseif ($overridesOnly || $includeDefaults) {
+                    $value = $translationValue->published_override ?? ($includeDefaults ? $translationValue->file_value : null);
+                    if ($value === null) {
+                        continue;
+                    }
+                    if (! is_string($value) || (! $includeDefaults && ($value === '' || Str::startsWith($value, $prefix)))) {
+                        $incomplete = true;
+
+                        continue;
+                    }
+                } else {
+                    continue;
                 }
 
                 if ($translation->group === null || $translation->group === 'json') {

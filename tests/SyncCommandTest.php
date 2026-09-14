@@ -95,7 +95,7 @@ it('removes a stale frontend flag when a key is no longer used in frontend code'
 
 it('keeps database-only dynamic translations active during sync', function (): void {
     prepareVoxFixtures();
-    config()->set('vox.dynamic_keys.patterns', ['enums.user_roles.*']);
+    config()->set('vox.retained_keys', ['enums.user_roles.*']);
 
     $translation = VoxTranslation::factory()
         ->approved()

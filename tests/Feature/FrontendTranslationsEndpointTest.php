@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
@@ -64,4 +65,19 @@ it('does not expose artifacts while runtime delivery is disabled', function (): 
 
     $this->get('/vox/translations/en')->assertNotFound();
     $this->get('/vox/locales')->assertNotFound();
+});
+
+it('serves catalogues and normalized published locales without a Vox database', function (): void {
+    File::put($this->runtimeTranslationPath.'/pt_BR.json', '{"frontend.greeting":"Olá"}');
+    $connection = config('vox.database.connection');
+    DB::purge($connection);
+    config()->set("database.connections.{$connection}.driver", 'unavailable');
+
+    $this->get('/vox/locales')->assertOk()
+        ->assertJsonPath('locales.2.code', 'pt_BR');
+    $response = $this->get('/vox/translations/pt-br')->assertOk()
+        ->assertExactJson(['frontend.greeting' => 'Olá']);
+    $this->withHeader('If-None-Match', $response->headers->get('ETag'))
+        ->get('/vox/translations/pt-br')->assertStatus(304);
+    $this->get('/vox/translations/de')->assertNotFound();
 });

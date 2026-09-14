@@ -9,7 +9,7 @@ beforeEach(function (): void {
     config()->set('vox.translate.locales.mode', 'configured');
     config()->set('vox.translate.locales.values', ['en', 'fr']);
     config()->set('vox.translate.base_locale', 'en');
-    config()->set('vox.dynamic_keys.patterns', ['browser.dynamic.*']);
+    config()->set('vox.retained_keys', ['browser.dynamic.*']);
 
     $this->actingAs(User::factory()->create(['email' => 'admin@keypoint.ro']));
 });

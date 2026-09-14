@@ -87,7 +87,7 @@ it('stores the remote sync toggle without exposing its key', function (): void {
 });
 
 it('stores UI dynamic patterns separately from configured patterns', function (): void {
-    config()->set('vox.dynamic_keys.patterns', ['validation.*']);
+    config()->set('vox.retained_keys', ['validation.*']);
 
     $this->from('/vox/settings')
         ->post('/vox/settings', [

@@ -123,7 +123,9 @@ The management UI separates workflow state from source freshness:
 From `/vox/manage`, translations can be edited, AI-translated individually, or selected in bulk to fill only missing
 target values. New dynamic values can also AI-fill their missing target locales from the required source value before
 they are created. Bulk AI results return to pending review; selected translations can then be approved or returned to
-review together. Successful saves close the editor and appear in an accessible toast. `/vox/publish` writes approved edited values to PHP and JSON files, preserving unrelated drafts. Published edits are persistent overrides of application wording.
+review together. Successful saves close the editor and appear in an accessible toast. `/vox/publish` writes approved
+edited values and refreshes recorded published wording in PHP and JSON files, preserving unrelated drafts. It remains
+available with no newly approved changes for manual refreshes. Published edits are persistent overrides of application wording.
 
 ## Dynamic translation keys
 
@@ -137,7 +139,7 @@ Vox records supported template-string and concatenation expressions as wildcard 
 `enums.user_roles.*`. A wildcard can span dots. Effective patterns are the union of:
 
 - patterns detected by the latest scan;
-- application-owned `vox.dynamic_keys.patterns`;
+- application-owned `vox.retained_keys`;
 - additional patterns maintained in `/vox/settings`;
 - finite bindings registered by the application.
 
@@ -255,6 +257,60 @@ history and does not reset auto-increment counters. The audit event is part of t
 
 Vox integrates with `laravel-vue-i18n` so the frontend uses the same Laravel PHP and JSON language files, including parameter replacement and pluralization.
 
+### Choose delivery and frontend groups
+
+Delivery and translation selection are independent. Both modes select PHP groups using the frontend manifest;
+switching delivery does not require sending every translation to the browser.
+
+| Delivery          | `VOX_FRONTEND_RUNTIME_ENABLED` | After a manager publishes                                                           |
+| ----------------- | ------------------------------ | ----------------------------------------------------------------------------------- |
+| Bundled (default) | Unset or `false`               | Language files update. Rebuild and deploy the frontend to update its locale chunks. |
+| Runtime           | `true`                         | Language files and server JSON catalogues update. No frontend rebuild is required.  |
+
+With Composer integration, use `vox()` and import from `@laravel-vox/vue.js` in both development and production.
+The plugin reads the same `VOX_FRONTEND_RUNTIME_ENABLED` environment setting as Laravel; no `VITE_` variable is
+needed. Vite's mode-specific environment files and process environment apply. Keep the build environment and
+deployed Laravel configuration aligned. Changing delivery mode requires restarting Vite or rebuilding the frontend.
+An explicit `vox({ runtime: true })` or `vox({ runtime: false })` overrides the plugin's environment choice only;
+it does not change Laravel's endpoint configuration. npm consumers must also choose the matching `/vue` or
+`/vue/runtime` import shown below.
+
+Frontend groups default to automatic identification from scanned frontend calls. In a local Laravel application,
+the Vite plugin refreshes this selection automatically at startup, after source edits, and before production builds.
+Identification currently selects **whole PHP groups**, not individual keys:
+one frontend reference to `labels.save` includes all of `labels.php`. JSON translations are included without
+per-key frontend filtering. `retained_keys` protects wording from cleanup; it does not by itself expose a PHP group
+to the frontend.
+
+To override automatic group selection for both delivery modes, set `VOX_FRONTEND_GROUPS_MODE=configured` and
+`VOX_FRONTEND_GROUPS=labels,frontend`. Setting the value to `*` includes every PHP group under the application's
+language directory, including nested files and namespaced overrides. Omit these overrides to use automatic selection.
+The Vite-only `frontendGroups` option affects bundled delivery only. A missing or invalid manifest gives the bundler
+no PHP groups; automatic discovery or parse/sync generates it.
+
+### Automatic frontend group discovery
+
+When `artisan` exists at Vite's root, `vox()` runs `vox:frontend-discover` before preparing translations. The command
+reuses Vox's parser and its configured `parse.paths`, `parse.exclude`, and `parse.extensions`. It writes only the
+frontend manifest, without querying the Vox database, importing values, modifying language files, or publishing.
+Configured group selection takes precedence over source discovery.
+
+During development, source additions, edits, and deletions trigger a debounced rescan. The manifest is rewritten
+only when its groups change. The existing translation hot reload then updates bundled locale modules or recompiles
+and refetches runtime catalogues. Adding a first frontend reference to a group, or removing its last reference,
+therefore needs no manual sync. This minimal implementation rescans the configured sources rather than maintaining
+an incremental source index. Application source changes still follow normal Vite reload behavior.
+
+Production builds refresh the manifest before generating bundled locale chunks. In runtime mode they also run
+`vox:compile` afterward to prepare current server catalogues. Deploy these generated catalogues with the application;
+the JavaScript build does not upload them to the server. Discovery or compilation failures fail the build.
+
+Use `vox({ frontendDiscovery: false })` when another process prepares the manifest. If Artisan is not available at
+Vite's root, discovery is skipped; run `php artisan vox:frontend-discover` in the Laravel application before building
+and transfer its manifest as needed. In runtime mode, also compile and deploy the catalogues. `phpBinary` selects the
+PHP executable for both discovery and compilation. Restart Vite after changing parser paths or configuration.
+Discovery selects groups; creating translation values and resolving ambiguous dynamic keys remain separate tasks.
+
 ### Incremental translation hot reload
 
 The bundled Vite integration compiles PHP language files once at development startup or production build, then caches each parsed file. During development:
@@ -265,7 +321,27 @@ The bundled Vite integration compiles PHP language files once at development sta
 - Adding or removing a locale updates the lazy-loader catalogue. Changing the frontend-group manifest refilters cached translations without parsing PHP again.
 - Framework, application, namespaced vendor overrides, and optional `additionalLangPaths` retain their merge precedence. Later language roots override earlier values per key.
 
-No generated `php_*.json` files are written, and no active-development-locale setting or application-specific reload plugin is needed. Vox accepts translation updates without remounting the Vue application, preserving open dialogs and unsaved form state. Reactive `$t` rendering and `wTrans` values update in place; strings translated once and copied into plain variables remain snapshots. Changes to application code or Vite configuration still follow normal Vite reload behavior. This feature applies to bundled translations; runtime-loaded translations use their published artifacts instead.
+No generated `php_*.json` files are written, and no active-development-locale setting or application-specific reload plugin is needed. Vox accepts translation updates without remounting the Vue application, preserving open dialogs and unsaved form state. Reactive `$t` rendering and `wTrans` values update in place; strings translated once and copied into plain variables remain snapshots. Changes to application code or Vite configuration still follow normal Vite reload behavior.
+
+### Runtime translation hot reload
+
+With runtime delivery enabled, the Vox Vite plugin runs `php artisan vox:compile --no-interaction` at development
+startup and after PHP or JSON language files or the frontend manifest change. Rapid saves are batched, and
+compilations run one at a time. This recompiles the runtime catalogues from language files; it does not import,
+approve, or publish database translations. Unlike bundled hot reload, compilation currently rebuilds all catalogues.
+
+After a successful compilation, connected runtime clients refetch their loaded locale dictionaries and update
+reactive translations in place, preserving open dialogs and unsaved forms. Compilation failures are reported in
+the terminal and browser console; the browser retains its current translations and a subsequent save retries.
+
+This requires the Vox Vite plugin, a local Laravel application with Artisan at Vite's root, and PHP on `PATH`.
+Use `vox({ phpBinary: '/path/to/php' })` to select another executable, or `vox({ runtimeHotReload: false })`
+to disable automatic compilation, for example when the runtime endpoint belongs to a separate server.
+The watcher defaults to `lang` and `storage/vox/frontend.json`; any `langPath` and `manifestPath` overrides
+must match the consuming application's PHP configuration. The compiler uses Laravel's frontend selection settings.
+
+Automatic frontend discovery updates the manifest when source usage changes, unless `frontendDiscovery` is disabled.
+Browser hot reload is inactive during production builds and does not change production publishing.
 
 ### npm setup with bundled translations
 
@@ -282,7 +358,7 @@ import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 
 export default defineConfig({
-    plugins: [laravel({ input: ['resources/js/app.ts'] }), vue(), vox()],
+    plugins: [laravel({ input: ['resources/js/app.ts'] }), vue(), vox({ runtime: false })],
 });
 ```
 
@@ -451,9 +527,20 @@ Omit `locale` to use the server-rendered page language. Pass `locales: ['en', 'f
 in that case `fallbackLocale` defaults to `en`. `fetchVoxLocales()` remains available for applications needing the
 full catalogue, including locale names and `has_runtime_translations`.
 
-npm consumers do not need the Vox Vite plugin in runtime mode. Composer consumers can use
+The frontend locale and translation endpoints do not query the Vox database. They resolve locales from application
+configuration and published runtime catalogue files, then serve those files with cache validation. Manager-added
+locales are available to runtime clients once their catalogues have been generated. Admin and publishing workflows
+continue to use the Vox database.
+
+npm consumers can use the Vox Vite plugin for automatic group discovery, build preparation, and runtime translation hot reload. Composer consumers can use
 `vox({ runtime: true })` for automatic alias registration without translation bundling, then import
 `createVox`, `trans`, and `useVox` from `@laravel-vox/runtime.js`.
+
+When `runtime` is omitted, `vox()` reads `VOX_FRONTEND_RUNTIME_ENABLED` from Vite's environment files
+and process environment, defaulting to bundled translations when unset. No `VITE_` variable is needed,
+and this setting is not exposed to browser code. Explicit `runtime: true` or `runtime: false` takes precedence.
+An application may explicitly choose different development behavior, but no development override is required.
+Restart Vite after changing this environment setting.
 
 For a custom route prefix, configure one base URL:
 
@@ -467,8 +554,50 @@ Explicit endpoint overrides take precedence over `baseUrl`.
 
 Publish prepares validated JSON at `storage/vox/frontend-translations`; translation requests only read these
 artifacts and support ETag revalidation. JSON translations and PHP groups in the frontend manifest are included,
-while backend-only PHP groups remain private. Local `vox:sync` also refreshes these artifacts when runtime delivery
+while PHP groups excluded by the selection are not sent to the browser. Local `vox:sync` also refreshes these artifacts when runtime delivery
 is enabled. A locale listed in the catalogue may not yet have prepared artifacts; publish or sync it before use.
+In production, already-open pages cache their loaded locale dictionaries; publishing does not push changes into
+them. Reload the page to fetch the current catalogue. During Vite development, the runtime hot reload integration
+described above recompiles edited language files and refreshes connected clients automatically.
+
+### Reacting to publication
+
+Vox emits `KeypointSolutions\LaravelVox\Events\TranslationsPublished` after a successful publication has committed
+its Vox database transaction and completed the file transaction. It covers the Publish page, `vox:publish`,
+selected **Accept and publish** operations, and `vox:publish --published-only`. Manual publication with no changed
+values also emits the event, so it can request a rebuild or refresh. Failed or rolled-back publication does not emit it.
+Internal staging (`publishTo`), Sync, Compile, and Deploy do not emit this publication event.
+
+The event contains:
+
+- `frontendMode`: `'bundled'` or `'runtime'`, captured from `vox.frontend.runtime.enabled` at publication time.
+  This is the configured server mode, not inspection of an existing Vite build or its explicit overrides.
+- `result`: the `PublishResult`, including `values()`, `files()`, `frontendFiles()`, and `deletedKeys()`.
+- `publishedOnly`: `true` for regeneration of recorded defaults and published overrides; otherwise `false`.
+
+Register a listener in your application's service provider, or use Laravel's event listener discovery:
+
+```php
+use App\Jobs\RebuildFrontendTranslations;
+use Illuminate\Support\Facades\Event;
+use KeypointSolutions\LaravelVox\Events\TranslationsPublished;
+
+Event::listen(TranslationsPublished::class, function (TranslationsPublished $event): void {
+    if ($event->frontendMode === 'bundled') {
+        RebuildFrontendTranslations::dispatch();
+    }
+});
+```
+
+`RebuildFrontendTranslations` is an application-owned job: implement it to invoke your build/deployment pipeline.
+Use an asynchronous queue for expensive work. Vox does not run npm, assume a hosting platform, or deploy assets.
+The application decides whether to coalesce requests, refresh caches, or notify another service. The event fires
+for backend-only publications too; consumers may inspect the result if they need finer filtering. Deletion-only
+or manual refresh publications must not be skipped solely because `values()` is zero.
+
+Publication is already committed when listeners run. A synchronous listener exception propagates to the caller,
+but does not undo published wording. A successful Publish in bundled mode means the language files are published;
+frontend visibility still depends on the application's subsequent build and deployment.
 
 Build-time bundling remains suitable for isolated, offline, or static SPAs. A cross-origin SPA may opt into runtime
 loading with an absolute base URL or endpoint, but authentication and CORS remain the consuming application's
@@ -586,7 +715,7 @@ The published `config/vox.php` controls:
 - automatic or manual route registration;
 - enabled dashboard features and middleware;
 - database connection and language path;
-- scan paths, exclusions, dynamic-key patterns and bindings, output formatting, and missing-value marker;
+- scan paths, exclusions, retained keys and dynamic-key bindings, output formatting, and missing-value marker;
 - locales, base locale, AI driver, model, guidance, and provider credentials;
 - frontend group auto-detection or explicit overrides;
 - optional prebuilt runtime frontend artifacts, endpoint path, and middleware;
@@ -648,7 +777,7 @@ These labels are independent of approval status and may overlap. The editor list
 possible dynamic matches; a matching pattern does not prove that a particular key is used.
 
 Use `vox.retained_keys` for explicit keys or wildcard retention rules. The default protects `auth.*`, `pagination.*`,
-`passwords.*`, and `validation.*`. Existing `vox.dynamic_keys.patterns` and Settings patterns continue to retain keys;
+`passwords.*`, and `validation.*`. Additional Settings patterns also retain keys;
 `vox.dynamic_keys.bindings` still enumerates runtime key families.
 
 Delete individual or selected orphan keys and dynamic keys without direct static references from Manage. Deletion marks keys as pending in Vox. Files remain unchanged until Publish removes their values from language files and existing runtime catalogues in every locale. Sync and Parse preserve pending deletions; restore a key from the Pending deletion filter to cancel before publishing. Confirmation lists

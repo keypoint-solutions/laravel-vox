@@ -5,6 +5,7 @@ namespace KeypointSolutions\LaravelVox;
 use KeypointSolutions\LaravelVox\Commands\CleanupCommand;
 use KeypointSolutions\LaravelVox\Commands\CompileCommand;
 use KeypointSolutions\LaravelVox\Commands\DeployCommand;
+use KeypointSolutions\LaravelVox\Commands\DiscoverFrontendCommand;
 use KeypointSolutions\LaravelVox\Commands\GenerateSyncKeyCommand;
 use KeypointSolutions\LaravelVox\Commands\ParseTranslationsCommand;
 use KeypointSolutions\LaravelVox\Commands\PublishCommand;
@@ -72,6 +73,7 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
                 SetupCommand::class,
                 DeployCommand::class,
                 CompileCommand::class,
+                DiscoverFrontendCommand::class,
                 PublishCommand::class,
                 ReviewCommand::class,
                 ParseTranslationsCommand::class,

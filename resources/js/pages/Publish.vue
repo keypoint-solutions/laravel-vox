@@ -87,17 +87,18 @@
                 <p class="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">Language files</p>
                 <h1 class="mt-2 text-2xl font-semibold">Publish approved translations</h1>
                 <p class="text-muted-foreground mt-2 max-w-2xl text-sm">
-                    Write approved wording to Laravel PHP and JSON files, one locale at a time. Unreviewed, empty, and
-                    flagged values stay unchanged. Orphan keys are skipped.
+                    Publish approved changes and refresh previously published wording in language files and frontend
+                    translations. You can publish even when there are no new changes. Unreviewed drafts stay
+                    unpublished.
                 </p>
             </div>
             <Button
-                :disabled="isPublishing || (stats.publishable === 0 && !stats.pending_deletions)"
+                :disabled="isPublishing"
                 class="shrink-0"
                 @click="publish"
             >
                 <UploadCloud class="size-4" />
-                {{ isPublishing ? 'Publishing…' : 'Publish approved' }}
+                {{ isPublishing ? 'Publishing…' : 'Publish translations' }}
             </Button>
         </header>
 

@@ -14,6 +14,9 @@ class TranslationFileTransaction
 
     private bool $active = false;
 
+    /** @var array<int, Closure> */
+    private array $afterCommit = [];
+
     public function run(Closure $callback): mixed
     {
         if ($this->active) {
@@ -21,7 +24,8 @@ class TranslationFileTransaction
         }
         $this->active = true;
         try {
-            return $callback();
+            $result = $callback();
+            $afterCommit = $this->afterCommit;
         } catch (Throwable $exception) {
             foreach (array_reverse($this->originals, true) as $path => $contents) {
                 if ($contents === null) {
@@ -34,6 +38,22 @@ class TranslationFileTransaction
         } finally {
             $this->active = false;
             $this->originals = [];
+            $this->afterCommit = [];
+        }
+
+        foreach ($afterCommit as $callback) {
+            $callback();
+        }
+
+        return $result;
+    }
+
+    public function afterCommit(Closure $callback): void
+    {
+        if ($this->active) {
+            $this->afterCommit[] = $callback;
+        } else {
+            $callback();
         }
     }
 

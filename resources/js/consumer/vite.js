@@ -3,13 +3,25 @@ import { resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { normalizePath } from 'vite';
+import { loadEnv, normalizePath } from 'vite';
 
+import { frontendDiscovery } from './frontend-discovery.js';
 import { PhpTranslationCatalogue } from './php-catalogue.js';
+import { runtimeHotReload } from './runtime-hot-reload.js';
 
 const virtualModuleId = 'virtual:laravel-vox/translations';
 const resolvedVirtualModuleId = `\0${virtualModuleId}`;
 const phpModulePrefix = 'virtual:laravel-vox/php/';
+
+function runtimeEnabled(options, config, environment) {
+    if (options.runtime !== undefined) return options.runtime;
+    const root = resolve(config.root ?? process.cwd());
+    const variables =
+        config.envDir === false
+            ? process.env
+            : loadEnv(environment.mode, resolve(root, config.envDir ?? '.'), 'VOX_FRONTEND_RUNTIME_ENABLED');
+    return ['true', '(true)', '1'].includes((variables.VOX_FRONTEND_RUNTIME_ENABLED ?? '').toLowerCase());
+}
 const resolvedPhpModulePrefix = `\0${phpModulePrefix}`;
 
 function resolveFrontendGroups(root, options) {
@@ -90,11 +102,11 @@ export async function loadVoxLocale(locale) { return loaders[locale] ? await loa
 
     const aliases = {
         name: 'laravel-vox-alias',
-        config() {
+        config(config, environment) {
             return {
                 resolve: {
                     alias: {
-                        ...(options.runtime
+                        ...(runtimeEnabled(options, config, environment)
                             ? { '@laravel-vox/vue.js': fileURLToPath(new URL('./runtime.js', import.meta.url)) }
                             : {}),
                         '@laravel-vox': fileURLToPath(new URL('.', import.meta.url)),
@@ -104,12 +116,17 @@ export async function loadVoxLocale(locale) { return loaders[locale] ? await loa
             };
         },
     };
-    if (options.runtime) return [aliases];
+    const runtimeDevelopment = runtimeHotReload(options, runtimeEnabled);
+    const discovery = frontendDiscovery(options, runtimeEnabled);
+    if (options.runtime) return [aliases, discovery, runtimeDevelopment];
 
     return [
         aliases,
         {
             name: 'laravel-vox-translations',
+            apply(config, environment) {
+                return !runtimeEnabled(options, config, environment);
+            },
             configResolved(config) {
                 root = config.root;
                 langPath = resolve(root, options.langPath ?? 'lang');
@@ -186,5 +203,7 @@ export async function loadVoxLocale(locale) { return loaders[locale] ? await loa
                 },
             },
         },
+        discovery,
+        runtimeDevelopment,
     ];
 }

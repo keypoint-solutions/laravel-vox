@@ -63,11 +63,6 @@ class VoxDynamicKeyRegistry
             }
         }
 
-        foreach ($this->settings->configuredDynamicKeyPatterns() as $pattern) {
-            $entries[$pattern] ??= $this->emptyEntry($pattern);
-            $entries[$pattern]['sources'][] = 'config';
-        }
-
         foreach ($this->settings->editableDynamicKeyPatterns() as $pattern) {
             $entries[$pattern] ??= $this->emptyEntry($pattern);
             $entries[$pattern]['sources'][] = 'settings';

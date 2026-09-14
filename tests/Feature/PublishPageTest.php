@@ -71,8 +71,40 @@ it('shows real publish readiness statistics', function (): void {
         );
 });
 
+it('refreshes published files and runtime bundles with no publishable changes while preserving drafts', function (): void {
+    config()->set('vox.frontend.runtime.enabled', true);
+    config()->set('vox.frontend.runtime.path', $this->publishLangPath.'/runtime');
+    config()->set('vox.frontend.groups', ['messages']);
+
+    $translation = VoxTranslation::factory()->approved()->create(['group' => 'messages', 'key' => 'greeting']);
+    $english = $translation->values()->create([
+        'locale' => 'en', 'value' => 'Published greeting', 'file_value' => 'Original greeting',
+        'published_override' => 'Published greeting', 'is_approved' => true, 'is_pending_publish' => false,
+    ]);
+    $french = $translation->values()->create([
+        'locale' => 'fr', 'value' => 'Bonjour', 'file_value' => 'Bonjour',
+        'is_approved' => true, 'is_pending_publish' => false,
+    ]);
+    $english->saveDraft('Unapproved greeting');
+    $french->saveDraft('Brouillon');
+
+    $this->get('/vox/publish')->assertInertia(fn (AssertableInertia $page) => $page
+        ->component('Publish', false)->where('stats.publishable', 0));
+    $this->post('/vox/publish')->assertRedirect();
+
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    expect($files->loadGroup('en', 'messages'))->toBe(['greeting' => 'Published greeting'])
+        ->and($files->loadGroup('fr', 'messages'))->toBe(['greeting' => 'Bonjour'])
+        ->and(json_decode(File::get($this->publishLangPath.'/runtime/en.json'), true)['messages.greeting'])->toBe('Published greeting')
+        ->and($english->fresh()->value)->toBe('Unapproved greeting')
+        ->and($english->fresh()->is_pending_publish)->toBeTrue()
+        ->and($english->fresh()->is_approved)->toBeFalse()
+        ->and($french->fresh()->value)->toBe('Brouillon')
+        ->and($french->fresh()->published_override)->toBeNull();
+});
+
 it('publishes complete dynamic values while leaving orphans untouched', function (): void {
-    config()->set('vox.dynamic_keys.patterns', [
+    config()->set('vox.retained_keys', [
         'messages.dynamic.*',
         'Dynamic JSON',
     ]);

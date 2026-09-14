@@ -154,13 +154,13 @@ it('clears discovery manifests for either reset scope without changing configura
     $frontend = config('vox.frontend.manifest');
     File::put($dynamic, '{"patterns":[]}');
     File::put($frontend, '{"groups":["messages"]}');
-    $patterns = config('vox.dynamic_keys.patterns');
+    $patterns = config('vox.retained_keys');
 
     app(TranslationResetter::class)->reset($scope);
 
     expect(File::exists($dynamic))->toBeFalse()
         ->and(File::exists($frontend))->toBeFalse()
-        ->and(config('vox.dynamic_keys.patterns'))->toBe($patterns);
+        ->and(config('vox.retained_keys'))->toBe($patterns);
     foreach ($this->filesBefore as $path => $hash) {
         expect(hash_file('sha256', $path))->toBe($hash);
     }

@@ -15,7 +15,7 @@ beforeEach(function (): void {
     File::put($root.'/lang/en/messages.php', "<?php\nreturn ['greeting' => 'Hello'];\n");
     File::put($root.'/lang/fr/messages.php', "<?php\nreturn ['greeting' => 'Bonjour'];\n");
     config()->set('vox.parse.paths', []);
-    config()->set('vox.dynamic_keys.patterns', []);
+    config()->set('vox.retained_keys', []);
     config()->set('vox.frontend.manifest', $root.'/frontend.json');
     config()->set('vox.frontend.runtime.enabled', false);
     config()->set('vox.deployment.lock_path', $root.'/deployment.lock');

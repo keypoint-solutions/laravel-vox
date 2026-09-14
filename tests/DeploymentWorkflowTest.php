@@ -14,7 +14,7 @@ beforeEach(function (): void {
     File::ensureDirectoryExists($root.'/lang/en');
     File::put($root.'/lang/en/messages.php', "<?php\nreturn ['greeting' => 'Shipped greeting'];\n");
     config()->set('vox.parse.paths', []);
-    config()->set('vox.dynamic_keys.patterns', []);
+    config()->set('vox.retained_keys', []);
     config()->set('vox.frontend.manifest', $root.'/frontend.json');
     config()->set('vox.frontend.runtime.enabled', false);
     config()->set('vox.deployment.lock_path', $root.'/deployment.lock');

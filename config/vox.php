@@ -49,9 +49,6 @@ return [
     'retained_keys' => ['auth.*', 'pagination.*', 'passwords.*', 'validation.*'],
     'dynamic_keys' => [
         'manifest' => storage_path('vox/dynamic.json'),
-        'patterns' => [
-            // Legacy retention patterns remain supported here; prefer retained_keys.
-        ],
         'bindings' => [
             // 'enums.user_roles.*' => App\Enums\UserRole::class,
             // 'enums.order_statuses.*' => ['draft', 'submitted', 'paid'],

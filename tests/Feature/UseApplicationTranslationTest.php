@@ -18,7 +18,7 @@ beforeEach(function (): void {
     File::put($root.'/lang/en/messages.php', "<?php return ['greeting' => 'Hello'];");
     File::put($root.'/lang/fr/messages.php', "<?php return ['greeting' => 'Bonjour'];");
     config()->set('vox.parse.paths', []);
-    config()->set('vox.dynamic_keys.patterns', []);
+    config()->set('vox.retained_keys', []);
     config()->set('vox.frontend.manifest', $root.'/frontend.json');
     config()->set('vox.frontend.runtime.enabled', false);
     config()->set('vox.deployment.lock_path', $root.'/deployment.lock');
@@ -59,7 +59,7 @@ it('requires authorization to restore application wording', function (): void {
 });
 
 it('retains newly created dynamic drafts through deployment until approved and published', function (): void {
-    config()->set('vox.dynamic_keys.patterns', ['custom.*']);
+    config()->set('vox.retained_keys', ['custom.*']);
     $this->from('/vox/manage')->post('/vox/manage/translations', [
         'pattern' => 'custom.*', 'key' => 'custom.notice',
         'values' => ['en' => 'New notice', 'fr' => ''],

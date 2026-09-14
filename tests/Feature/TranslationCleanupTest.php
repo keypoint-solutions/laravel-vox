@@ -6,6 +6,7 @@ use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
+use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationDatabaseSynchronizer;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
@@ -42,7 +43,7 @@ it('rechecks published values and rolls back a mixed deletion batch', function (
 });
 
 it('deletes an unpublished dynamic key but refuses a key protected by a new retention rule', function (): void {
-    config()->set('vox.dynamic_keys.patterns', ['custom.*']);
+    config()->set('vox.retained_keys', ['custom.*']);
     $dynamic = VoxTranslation::factory()->create(['group' => 'custom', 'key' => 'new', 'source' => 'dynamic']);
     cleanupKeys($this, [$dynamic->id])->assertRedirect()->assertSessionHasNoErrors();
     $orphan = VoxTranslation::factory()->orphan()->create(['group' => 'custom', 'key' => 'retained']);
@@ -73,12 +74,13 @@ it('requires explicit confirmation and authorization', function (): void {
     expect($row->fresh())->not->toBeNull();
 });
 
-it('merges new retention rules with legacy patterns without claiming source discovery', function (): void {
+it('uses retained keys without reading the removed legacy patterns config', function (): void {
     config()->set('vox.retained_keys', ['keep.*']);
     config()->set('vox.dynamic_keys.patterns', ['legacy.*']);
     $registry = app(VoxDynamicKeyRegistry::class);
     expect($registry->match('thing', 'keep')['sources'])->toBe(['retained-config'])
-        ->and($registry->match('thing', 'legacy')['sources'])->toContain('config');
+        ->and($registry->match('thing', 'legacy'))->toBeNull()
+        ->and(app(VoxSettingsRepository::class)->configuredDynamicKeyPatterns())->toBe(['keep.*']);
 });
 
 it('rejects deleting an orphan that has gained an exact source occurrence', function (): void {
@@ -99,7 +101,7 @@ it('preserves ignored file values during parse even when obsolete removal is ena
 });
 
 it('deletes published dynamic phrases across PHP JSON namespaces and runtime catalogues', function (): void {
-    config()->set('vox.dynamic_keys.patterns', ['custom.*', 'vendorname::custom.*', 'Old phrase*']);
+    config()->set('vox.retained_keys', ['custom.*', 'vendorname::custom.*', 'Old phrase*']);
     $files = app(TranslationFileRepository::class);
     $rows = collect();
     foreach ([['custom', 'roles.Nurse'], ['vendorname::custom', 'roles.Nurse'], ['json', 'Old phrase']] as [$group, $key]) {
@@ -130,7 +132,7 @@ it('deletes published dynamic phrases across PHP JSON namespaces and runtime cat
 });
 
 it('keeps files and rows unchanged when scheduling deletion fails', function (): void {
-    config()->set('vox.dynamic_keys.patterns', ['custom.*']);
+    config()->set('vox.retained_keys', ['custom.*']);
     $row = VoxTranslation::factory()->create(['group' => 'custom', 'key' => 'unused', 'source' => 'dynamic']);
     $path = config('vox.paths.lang').'/en/custom.php';
     File::put($path, "<?php return ['unused' => 'Original', 'keep' => 'Keep'];");
@@ -144,7 +146,7 @@ it('keeps files and rows unchanged when scheduling deletion fails', function ():
 });
 
 it('can cancel a pending deletion before publishing', function (): void {
-    config()->set('vox.dynamic_keys.patterns', ['custom.*']);
+    config()->set('vox.retained_keys', ['custom.*']);
     $row = VoxTranslation::factory()->create(['group' => 'custom', 'key' => 'unused', 'source' => 'dynamic']);
     cleanupKeys($this, [$row->id])->assertSessionHasNoErrors();
     $this->get('/vox/manage?status=pending-deletion')->assertInertia(fn ($page) => $page->has('translations.data', 1));

@@ -117,15 +117,9 @@ class TranslationScanner
      */
     private function gatherFiles(): array
     {
-        $paths = [];
-
-        foreach ($this->paths as $path) {
-            $paths[] = $this->normalizePath($path);
-        }
-
         $files = [];
 
-        foreach ($paths as $path) {
+        foreach ($this->paths() as $path) {
             if (! File::exists($path)) {
                 continue;
             }
@@ -148,6 +142,12 @@ class TranslationScanner
 
             return ! $this->isExcluded($filePath);
         }));
+    }
+
+    /** @return array<int, string> */
+    public function paths(): array
+    {
+        return array_map(fn (string $path): string => $this->normalizePath($path), $this->paths);
     }
 
     private function normalizePath(string $path): string

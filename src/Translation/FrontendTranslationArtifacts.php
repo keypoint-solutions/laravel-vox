@@ -75,10 +75,10 @@ class FrontendTranslationArtifacts
     {
         $translations = [];
 
-        foreach ($this->manifest->groups() as $group) {
+        foreach ($this->groupsForLocale($files, $locale) as $group) {
             foreach (Arr::dot($files->loadGroup($locale, $group)) as $key => $value) {
                 if (is_string($value)) {
-                    $translations[$group.'.'.$key] = $value;
+                    $translations[str_replace(DIRECTORY_SEPARATOR, '.', $group).'.'.$key] = $value;
                 }
             }
         }
@@ -94,6 +94,43 @@ class FrontendTranslationArtifacts
         }
 
         return $translations;
+    }
+
+    /** @return array<int, string> */
+    private function groupsForLocale(TranslationFileRepository $files, string $locale): array
+    {
+        $groups = $this->manifest->groups();
+
+        if (! in_array('*', $groups, true)) {
+            return $groups;
+        }
+
+        $directories = ['' => $files->langPath().DIRECTORY_SEPARATOR.$locale];
+        $vendorPath = $files->langPath().DIRECTORY_SEPARATOR.'vendor';
+
+        if (File::isDirectory($vendorPath)) {
+            foreach (File::directories($vendorPath) as $namespacePath) {
+                $directories[basename($namespacePath).'::'] = $namespacePath.DIRECTORY_SEPARATOR.$locale;
+            }
+        }
+
+        $groups = [];
+
+        foreach ($directories as $prefix => $directory) {
+            if (! File::isDirectory($directory)) {
+                continue;
+            }
+
+            foreach (File::allFiles($directory) as $file) {
+                if ($file->getExtension() === 'php') {
+                    $groups[] = $prefix.substr($file->getRelativePathname(), 0, -4);
+                }
+            }
+        }
+
+        sort($groups);
+
+        return $groups;
     }
 
     /**

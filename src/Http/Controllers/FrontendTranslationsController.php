@@ -17,7 +17,7 @@ class FrontendTranslationsController
         FrontendTranslationArtifacts $artifacts,
     ): Response {
         abort_unless(config('vox.frontend.runtime.enabled', false), 404);
-        $locale = $localeResolver->resolveLocale($locale);
+        $locale = $localeResolver->resolveLocale($locale, $localeResolver->resolveRuntimeLocales());
         abort_unless($locale !== null, 404);
 
         $path = $artifacts->pathForLocale($locale);

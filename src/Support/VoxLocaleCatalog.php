@@ -13,6 +13,7 @@ class VoxLocaleCatalog
     ) {}
 
     /**
+     * @param  array<int, string>|null  $locales
      * @return array{
      *     default_locale: string,
      *     locales: array<int, array{
@@ -23,9 +24,9 @@ class VoxLocaleCatalog
      *     }>
      * }
      */
-    public function all(): array
+    public function all(?array $locales = null): array
     {
-        $locales = $this->localeResolver->resolveLocales();
+        $locales ??= $this->localeResolver->resolveLocales();
         $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
         $locales = array_values(array_unique(array_merge([$baseLocale], $locales)));
 

@@ -24,7 +24,7 @@ class DynamicRegistryProvider implements DynamicKeyProvider
 beforeEach(function (): void {
     $this->dynamicManifestPath = base_path('tests/.tmp/dynamic-'.Str::uuid().'.json');
     config()->set('vox.dynamic_keys.manifest', $this->dynamicManifestPath);
-    config()->set('vox.dynamic_keys.patterns', []);
+    config()->set('vox.retained_keys', []);
     config()->set('vox.dynamic_keys.bindings', []);
 });
 
@@ -35,7 +35,7 @@ afterEach(function (): void {
 });
 
 it('unions config, UI, and detected dynamic patterns with source metadata', function (): void {
-    config()->set('vox.dynamic_keys.patterns', ['validation.*']);
+    config()->set('vox.retained_keys', ['validation.*']);
     app(VoxSettingsRepository::class)->save([
         'dynamic_key_patterns' => ['enums.user_roles.*'],
     ]);
@@ -57,7 +57,7 @@ it('unions config, UI, and detected dynamic patterns with source metadata', func
         'enums.user_roles.*',
         'frontend.labels.*',
         'validation.*',
-    ])->and($entries['validation.*']['sources'])->toContain('config')
+    ])->and($entries['validation.*']['sources'])->toContain('retained-config')
         ->and($entries['enums.user_roles.*']['sources'])->toContain('settings')
         ->and($entries['frontend.labels.*']['sources'])->toContain('detected')
         ->and($entries['frontend.labels.*']['is_frontend'])->toBeTrue()

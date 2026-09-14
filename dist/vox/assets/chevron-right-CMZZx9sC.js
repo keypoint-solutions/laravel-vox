@@ -1,1 +1,0 @@
-import{d as e}from"./Layout-0FTxTb5q.js";var t=e({name:`chevron-left`,size:24,node:[[`path`,{d:`m15 18-6-6 6-6`,key:`1wnfg3`}]]}),n=e({name:`chevron-right`,size:24,node:[[`path`,{d:`m9 18 6-6-6-6`,key:`mthhwq`}]]});export{t as n,n as t};

@@ -17,15 +17,36 @@ class VoxLocaleResolver
      */
     public function resolveLocales(): array
     {
-        $configured = $this->listConfiguration->configuredValues('vox.translate.locales');
-        $locales = $configured === null
-            ? $this->discoverLocales()
-            : $this->normalizeLocales($configured);
-
-        $locales = $this->normalizeLocales(array_merge($locales, $this->settings->provisionedLocales()));
+        $locales = $this->normalizeLocales(array_merge($this->applicationLocales(), $this->settings->provisionedLocales()));
         $baseLocale = $this->resolveBaseLocale($locales);
 
         return $this->sortLocales(array_merge([$baseLocale], $locales));
+    }
+
+    /** @return array<int, string> */
+    public function resolveRuntimeLocales(): array
+    {
+        $locales = $this->applicationLocales();
+        $path = config('vox.frontend.runtime.path', storage_path('vox/frontend-translations'));
+
+        if (File::isDirectory($path)) {
+            foreach (File::files($path) as $file) {
+                $locale = $file->getBasename('.json');
+                if ($file->getExtension() === 'json' && $this->normalizeLocaleCode($locale) !== '') {
+                    $locales[] = $locale;
+                }
+            }
+        }
+
+        return $this->sortLocales(array_merge([$this->resolveBaseLocale($locales)], $locales));
+    }
+
+    /** @return array<int, string> */
+    private function applicationLocales(): array
+    {
+        $configured = $this->listConfiguration->configuredValues('vox.translate.locales');
+
+        return $configured === null ? $this->discoverLocales() : $this->normalizeLocales($configured);
     }
 
     /**
@@ -113,7 +134,8 @@ class VoxLocaleResolver
         return implode('_', $segments);
     }
 
-    public function resolveLocale(string $requestedLocale): ?string
+    /** @param array<int, string>|null $locales */
+    public function resolveLocale(string $requestedLocale, ?array $locales = null): ?string
     {
         $normalized = $this->normalizeLocaleCode($requestedLocale);
 
@@ -121,7 +143,7 @@ class VoxLocaleResolver
             return null;
         }
 
-        foreach ($this->resolveLocales() as $locale) {
+        foreach ($locales ?? $this->resolveLocales() as $locale) {
             if ($this->normalizeLocaleCode($locale) === $normalized) {
                 return $locale;
             }
