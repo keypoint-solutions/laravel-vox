@@ -246,6 +246,9 @@ class ManageController
                     'source' => $translation->source,
                     'updated_at' => $translation->updated_at?->toIso8601String(),
                     'values' => $values,
+                    'file_values' => $translation->values->pluck('file_value', 'locale')->all(),
+                    'published_overrides' => $translation->values->pluck('published_override', 'locale')->all(),
+                    'approved_locales' => $translation->values->where('is_approved', true)->pluck('locale')->all(),
                     'values_count' => $translation->values->count(),
                     'occurrences' => $translation->occurrences->reject(fn ($occurrence): bool => collect($dynamicMatch['occurrences'] ?? [])->contains(fn (array $possible): bool => $possible['file'] === $occurrence->file_path && ($possible['line'] ?? null) === $occurrence->line_number))->values()->map(function ($occurrence): array {
                         return [

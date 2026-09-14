@@ -15,6 +15,7 @@ use function Laravel\Prompts\warning;
 class SyncRemoteTranslationsCommand extends Command
 {
     public $signature = 'vox:sync-remote
+        {--include-drafts : Fetch editable remote values instead of published wording}
         {--environment= : Environment ID for non-interactive pulls}
         {--check : Fail if changes need review or accepted values still need publishing}';
 
@@ -30,7 +31,7 @@ class SyncRemoteTranslationsCommand extends Command
             return self::FAILURE;
         }
 
-        $selected = $this->option('environment');
+        $selected = $this->option('environment') ?? config('vox.sync.default_environment');
 
         if ($selected === null && ! $this->input->isInteractive()) {
             warning('Pass --environment=ID for a non-interactive remote pull.');
@@ -54,7 +55,7 @@ class SyncRemoteTranslationsCommand extends Command
         }
 
         try {
-            $count = app(RemoteTranslationSyncer::class)->sync($environment);
+            $count = app(RemoteTranslationSyncer::class)->sync($environment, (bool) $this->option('include-drafts'));
         } catch (Throwable $exception) {
             warning($exception->getMessage());
 

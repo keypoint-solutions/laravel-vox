@@ -4,10 +4,8 @@ namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
-use RuntimeException;
 
 class FrontendTranslationArtifacts
 {
@@ -37,15 +35,8 @@ class FrontendTranslationArtifacts
                 JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
             )."\n";
             $path = $this->pathForLocale($locale);
-            $temporaryPath = $path.'.'.Str::uuid().'.tmp';
-
             $this->validator->validateContents($contents, $path);
-
-            if (File::put($temporaryPath, $contents) === false || ! File::move($temporaryPath, $path)) {
-                File::delete($temporaryPath);
-
-                throw new RuntimeException("Unable to publish frontend translations for locale [{$locale}].");
-            }
+            app(TranslationFileTransaction::class)->replace($path, $contents);
 
             $publishedFiles[] = $path;
         }
@@ -55,7 +46,7 @@ class FrontendTranslationArtifacts
                 strtolower($file->getExtension()) === 'json'
                 && ! in_array($file->getPathname(), $publishedFiles, true)
             ) {
-                File::delete($file->getPathname());
+                app(TranslationFileTransaction::class)->delete($file->getPathname());
             }
         }
 

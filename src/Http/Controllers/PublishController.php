@@ -2,6 +2,7 @@
 
 namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -68,7 +69,7 @@ class PublishController
     }
 
     /**
-     * @return array{approved: int, publishable: int, pending: int, incomplete: int, dynamic: int, orphan: int}
+     * @return array{pending_deletions: int, approved: int, publishable: int, publishable_values: int, pending: int, incomplete: int, dynamic: int, orphan: int}
      */
     private function stats(): array
     {
@@ -80,7 +81,11 @@ class PublishController
         }
 
         $prefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
-        $approved = VoxTranslation::query()->where('status', 'approved')->where('is_ignored', false)->with('values')->get();
+        $approved = VoxTranslation::query()
+            ->where('is_ignored', false)
+            ->whereHas('values', fn (Builder $query): Builder => $query->where('is_approved', true)->whereIn('locale', $locales))
+            ->with('values')
+            ->get();
         $orphan = $approved->where('is_orphan', true)->count();
         $active = $approved->where('is_orphan', false);
         $dynamic = $active->filter(
@@ -89,24 +94,44 @@ class PublishController
                 $translation->group === 'json' ? null : $translation->group
             )
         )->count();
-        $incomplete = $active->filter(function (VoxTranslation $translation) use ($locales, $prefix): bool {
-            $values = $translation->values->keyBy('locale');
+        $publishable = 0;
+        $publishableValues = 0;
+        $incomplete = 0;
 
-            foreach ($locales as $locale) {
-                $value = $values->get($locale)?->value;
+        foreach ($active as $translation) {
+            $hasPublishableValue = false;
+            $hasIncompleteValue = false;
+
+            foreach ($translation->values as $translationValue) {
+                if (! $translationValue->is_approved || ! in_array($translationValue->locale, $locales, true)) {
+                    continue;
+                }
+
+                if (! $translationValue->is_pending_publish && $translationValue->file_value !== null) {
+                    continue;
+                }
+
+                $value = $translationValue->value;
 
                 if (! is_string($value) || $value === '' || str_starts_with($value, $prefix)) {
-                    return true;
+                    $hasIncompleteValue = true;
+
+                    continue;
                 }
+
+                $hasPublishableValue = true;
+                $publishableValues++;
             }
 
-            return false;
-        })->count();
+            $publishable += (int) $hasPublishableValue;
+            $incomplete += (int) $hasIncompleteValue;
+        }
 
         return [
             'pending_deletions' => VoxTranslation::query()->where('is_pending_delete', true)->count(),
             'approved' => $approved->count(),
-            'publishable' => $active->count() - $incomplete,
+            'publishable' => $publishable,
+            'publishable_values' => $publishableValues,
             'pending' => VoxTranslation::query()->where('status', 'pending')->count(),
             'incomplete' => $incomplete,
             'dynamic' => $dynamic,

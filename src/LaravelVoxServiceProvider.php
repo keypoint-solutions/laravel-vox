@@ -3,9 +3,13 @@
 namespace KeypointSolutions\LaravelVox;
 
 use KeypointSolutions\LaravelVox\Commands\CleanupCommand;
+use KeypointSolutions\LaravelVox\Commands\CompileCommand;
+use KeypointSolutions\LaravelVox\Commands\DeployCommand;
 use KeypointSolutions\LaravelVox\Commands\GenerateSyncKeyCommand;
 use KeypointSolutions\LaravelVox\Commands\ParseTranslationsCommand;
+use KeypointSolutions\LaravelVox\Commands\PublishCommand;
 use KeypointSolutions\LaravelVox\Commands\ResetCommand;
+use KeypointSolutions\LaravelVox\Commands\ReviewCommand;
 use KeypointSolutions\LaravelVox\Commands\SettingsCommand;
 use KeypointSolutions\LaravelVox\Commands\SetupCommand;
 use KeypointSolutions\LaravelVox\Commands\SyncRemoteTranslationsCommand;
@@ -16,7 +20,9 @@ use KeypointSolutions\LaravelVox\Support\OpenAiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\UnavailableAiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\VoxDatabaseManager;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
+use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
+use KeypointSolutions\LaravelVox\Translation\TranslationFileTransaction;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -24,6 +30,8 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
 {
     public function packageRegistered(): void
     {
+        $this->app->singleton(VoxMutationLock::class);
+        $this->app->singleton(TranslationFileTransaction::class);
         $this->app->singleton(
             VoxDynamicKeyRegistry::class,
             fn ($app): VoxDynamicKeyRegistry => new VoxDynamicKeyRegistry(
@@ -62,6 +70,10 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
                 CleanupCommand::class,
                 ResetCommand::class,
                 SetupCommand::class,
+                DeployCommand::class,
+                CompileCommand::class,
+                PublishCommand::class,
+                ReviewCommand::class,
                 ParseTranslationsCommand::class,
                 TranslateMissingTranslationsCommand::class,
                 SyncTranslationsCommand::class,

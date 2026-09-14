@@ -99,6 +99,7 @@ class HandleInertiaRequests extends Middleware
             ),
             'manage' => route($routeNamePrefix.'manage', absolute: false),
             'manage_translation_cleanup' => route($routeNamePrefix.'manage.translations.cleanup', absolute: false),
+            'manage_translation_use_application' => route($routeNamePrefix.'manage.translations.use-application', ['translation' => '__translation__'], absolute: false),
             'manage_translation_store' => route(
                 $routeNamePrefix.'manage.translations.store',
                 absolute: false

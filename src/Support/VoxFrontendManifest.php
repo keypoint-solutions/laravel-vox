@@ -4,6 +4,7 @@ namespace KeypointSolutions\LaravelVox\Support;
 
 use Illuminate\Support\Facades\File;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Translation\TranslationFileTransaction;
 
 class VoxFrontendManifest
 {
@@ -81,7 +82,7 @@ class VoxFrontendManifest
             File::makeDirectory($directory, 0755, true);
         }
 
-        File::put($path, json_encode(
+        app(TranslationFileTransaction::class)->replace($path, json_encode(
             ['groups' => $groups],
             JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
         )."\n");

@@ -61,7 +61,7 @@ class TranslationFileRepository
         $contents = $this->writer->toPhp($data, $commented, $lineComments, $rawCommented);
 
         $this->validator()->validateContents($contents, $path);
-        File::put($path, $contents);
+        app(TranslationFileTransaction::class)->replace($path, $contents);
     }
 
     /**
@@ -289,7 +289,7 @@ class TranslationFileRepository
         $contents = $this->writer->toJson($data);
 
         $this->validator()->validateContents($contents, $path);
-        File::put($path, $contents);
+        app(TranslationFileTransaction::class)->replace($path, $contents);
     }
 
     public function groupPath(string $locale, string $group): string

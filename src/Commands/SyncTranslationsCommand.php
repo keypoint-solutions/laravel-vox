@@ -36,6 +36,7 @@ class SyncTranslationsCommand extends Command
         ]);
 
         info('Database synced.');
+        info('Inspect incoming file changes on the Sync page or with vox:review. Existing drafts were preserved.');
         table(['Metric', 'Count'], [
             ['Translations', (string) $result->translations()],
             ['Orphans', (string) $result->orphanTranslations()],

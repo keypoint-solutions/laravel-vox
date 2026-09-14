@@ -18,7 +18,9 @@ use KeypointSolutions\LaravelVox\Http\Controllers\SyncEnvironmentController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncLocalTranslationsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncPageController;
 use KeypointSolutions\LaravelVox\Http\Controllers\TranslationCleanupController;
+use KeypointSolutions\LaravelVox\Http\Controllers\UseApplicationTranslationController;
 use KeypointSolutions\LaravelVox\Http\Middleware\Authorize;
+use KeypointSolutions\LaravelVox\Http\Middleware\SerializeVoxWrites;
 
 $configMiddleware = config('vox.system.middleware', []);
 
@@ -28,7 +30,7 @@ Route::post('/sync', SyncController::class)
     ->middleware(config('vox.sync.middleware', []))
     ->name('sync.remote');
 
-Route::middleware($configMiddleware)
+Route::middleware([...$configMiddleware, SerializeVoxWrites::class])
     ->group(function (): void {
         Route::get('/', DashboardController::class)->name('dashboard');
 
@@ -57,6 +59,8 @@ Route::middleware($configMiddleware)
             ->name('manage.translations.translate-draft');
         Route::patch('/manage/translations/{translation}', [ManageTranslationController::class, 'update'])
             ->name('manage.translations.update');
+        Route::post('/manage/translations/{translation}/use-application', UseApplicationTranslationController::class)
+            ->name('manage.translations.use-application');
         Route::post('/manage/translations/{translation}/toggle-approval',
             [ManageTranslationController::class, 'toggleApproval'])
             ->name('manage.translations.toggle-approval');

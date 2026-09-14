@@ -46,7 +46,7 @@ it('exports current database wording through the keyed endpoint including unpubl
     ]);
 
     $this->postJson('/vox/sync')->assertForbidden();
-    $this->withHeader('X-Vox-Key', 'snapshot-key')->postJson('/vox/sync')
+    $this->withHeader('X-Vox-Key', 'snapshot-key')->postJson('/vox/sync', ['include_drafts' => true])
         ->assertOk()->assertHeader('Cache-Control', 'no-store, private')
         ->assertJsonPath('format', RemoteTranslationSnapshot::FORMAT)
         ->assertJsonCount(1, 'values')
@@ -82,7 +82,7 @@ it('accepts selected candidates through the protected UI route and rejects repla
     $this->postJson('/vox/sync/reconcile', $decision)->assertForbidden();
     config()->set('vox.system.bypass_auth_in_local', true);
     $this->from('/vox/sync')->post('/vox/sync/reconcile', $decision)->assertRedirect('/vox/sync');
-    expect(VoxTranslation::query()->first()->status)->toBe('pending')
+    expect(VoxTranslation::query()->first()->status)->toBe('approved')
         ->and(VoxTranslation::query()->first()->values()->first()->value)->toBe('Remote wording')
         ->and(VoxAudit::query()->where('action', 'remote-reconciliation')->count())->toBe(1);
     $this->postJson('/vox/sync/reconcile', $decision)->assertUnprocessable();

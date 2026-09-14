@@ -74,6 +74,7 @@ class VoxTranslationFactory extends Factory
                     'locale' => $locale,
                     'value' => $value,
                     'is_obsolete' => false,
+                    'is_approved' => $translation->status === 'approved',
                 ]);
             }
         });

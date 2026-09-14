@@ -31,7 +31,7 @@ class SyncController
         }
 
         if ($request->wantsJson()) {
-            return response()->json($snapshot->export())->header('Cache-Control', 'no-store');
+            return response()->json($snapshot->export($request->boolean('include_drafts')))->header('Cache-Control', 'no-store');
         }
 
         $langPath = config('vox.paths.lang', resource_path('lang'));

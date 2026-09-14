@@ -14,6 +14,7 @@ class ReconcileRemoteTranslationsController
     {
         $validated = $request->validate([
             'action' => ['required', Rule::in(['accept', 'keep', 'edit'])],
+            'publish' => ['sometimes', 'boolean'],
             'all_matching' => ['sometimes', 'boolean'],
             'selection_token' => ['nullable', 'string', 'size:64'],
             'entries' => ['sometimes', 'array', 'max:1000'],
@@ -33,8 +34,8 @@ class ReconcileRemoteTranslationsController
 
         $count = $reconciliation->resolve($validated);
         $message = $validated['action'] === 'keep'
-            ? "Kept local values for {$count} remote changes."
-            : "Accepted {$count} values into pending review. Approve them in Manage, then Publish.";
+            ? "Kept local values for {$count} incoming changes."
+            : "Accepted and approved {$count} values.".(! empty($validated['publish']) ? ' Published the selected eligible values.' : ' Ready to publish.');
 
         return Inertia::flash('success', $message)->back();
     }

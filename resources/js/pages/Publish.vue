@@ -15,6 +15,7 @@
         stats: {
             approved: number;
             publishable: number;
+            publishable_values: number;
             pending_deletions: number;
             pending: number;
             incomplete: number;
@@ -31,6 +32,7 @@
             page.props.stats ?? {
                 approved: 0,
                 publishable: 0,
+                publishable_values: 0,
                 pending_deletions: 0,
                 pending: 0,
                 incomplete: 0,
@@ -85,8 +87,8 @@
                 <p class="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">Language files</p>
                 <h1 class="mt-2 text-2xl font-semibold">Publish approved translations</h1>
                 <p class="text-muted-foreground mt-2 max-w-2xl text-sm">
-                    Write reviewed database values back to Laravel PHP and JSON files. Pending, incomplete, and orphan
-                    translations remain untouched; approved dynamic translations publish normally.
+                    Write approved wording to Laravel PHP and JSON files, one locale at a time. Unreviewed, empty, and
+                    flagged values stay unchanged. Orphan keys are skipped.
                 </p>
             </div>
             <Button
@@ -122,22 +124,24 @@
                 <div class="p-5">
                     <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Publishable</p>
                     <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.publishable }}</p>
-                    <p class="text-muted-foreground mt-1 text-xs">Approved and eligible</p>
+                    <p class="text-muted-foreground mt-1 text-xs">
+                        {{ stats.publishable_values }} approved locale values across these keys
+                    </p>
                 </div>
                 <div class="p-5">
                     <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Pending review</p>
                     <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.pending }}</p>
-                    <p class="text-muted-foreground mt-1 text-xs">Never written by Publish</p>
+                    <p class="text-muted-foreground mt-1 text-xs">Keys with wording still awaiting review</p>
                 </div>
                 <div class="p-5">
                     <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Incomplete approved</p>
                     <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.incomplete }}</p>
-                    <p class="text-muted-foreground mt-1 text-xs">Skipped until every locale is complete</p>
+                    <p class="text-muted-foreground mt-1 text-xs">Keys with empty or flagged approved values</p>
                 </div>
                 <div class="p-5">
                     <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Dynamic approved</p>
                     <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.dynamic }}</p>
-                    <p class="text-muted-foreground mt-1 text-xs">Published when complete</p>
+                    <p class="text-muted-foreground mt-1 text-xs">Approved locale values publish independently</p>
                 </div>
                 <div class="p-5">
                     <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Orphan approved</p>
@@ -172,9 +176,8 @@
         >
             <CircleAlert class="mt-0.5 size-5 shrink-0 text-amber-500" />
             <p class="text-sm">
-                {{ stats.incomplete }} approved
-                {{ stats.incomplete === 1 ? 'translation is' : 'translations are' }} incomplete and will be skipped.
-                Complete every configured locale in Manage before publishing.
+                {{ stats.incomplete }} {{ stats.incomplete === 1 ? 'key has' : 'keys have' }} empty or flagged approved
+                values. Those values are skipped; other approved locales still publish.
             </p>
         </section>
 
@@ -184,9 +187,8 @@
         >
             <Sparkles class="mt-0.5 size-5 shrink-0 text-emerald-500" />
             <p class="text-sm">
-                {{ stats.dynamic }} approved dynamic
-                {{ stats.dynamic === 1 ? 'translation is' : 'translations are' }} eligible for normal publishing when
-                every locale is complete.
+                {{ stats.dynamic }} dynamic {{ stats.dynamic === 1 ? 'key has' : 'keys have' }} approved wording. Each
+                nonempty, unflagged locale can publish independently.
             </p>
         </section>
 

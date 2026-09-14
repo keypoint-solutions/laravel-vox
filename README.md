@@ -113,17 +113,17 @@ language values and source metadata into the review database.
 
 The management UI separates workflow state from source freshness:
 
-- new and changed values are `pending`;
-- approved values changed by local sync or an accepted remote review decision return to `pending`;
-- unchanged approved values remain approved;
+- first-import file values are registered as approved application defaults, without an approval backlog;
+- manual and AI draft edits are pending until accepted or approved;
+- incoming local and remote changes can be inspected before accepting all or selected values; acceptance includes approval;
+- approval applies per language, so accepting one language never approves another language's draft;
 - database rows absent from both source code and language files are shown as `Orphan`;
-- only complete approved translations are eligible for publishing.
+- each approved non-empty value without a missing-value marker can publish independently; other languages do not block it.
 
 From `/vox/manage`, translations can be edited, AI-translated individually, or selected in bulk to fill only missing
 target values. New dynamic values can also AI-fill their missing target locales from the required source value before
 they are created. Bulk AI results return to pending review; selected translations can then be approved or returned to
-review together. Successful saves close the editor and appear in an accessible toast. `/vox/publish` writes complete
-approved values to PHP and JSON language files without publishing pending changes.
+review together. Successful saves close the editor and appear in an accessible toast. `/vox/publish` writes approved edited values to PHP and JSON files, preserving unrelated drafts. Published edits are persistent overrides of application wording.
 
 ## Dynamic translation keys
 
@@ -476,17 +476,15 @@ responsibility.
 
 ## Local and remote synchronization
 
-Local sync imports the current application's language files into the Vox database:
+Local sync imports the current application's language files into the Vox database. First imports register already-live defaults. Later differences appear in **Incoming translations**, preserving local wording and drafts until a decision is made:
 
 ```bash
 php artisan vox:sync
 ```
 
 Use `php artisan vox:sync --parse` to update language files from discovered source keys first, then import the result
-with the same scan. In `/vox/sync`, choosing local sync asks whether to perform that file-updating step or import the
-files as they are. Both paths refresh source occurrences and frontend metadata. Rows found in neither source nor
-language files are retained as Orphans for deliberate review instead of silently disappearing. Accepted remote values
-remain protected from file imports and orphan classification until Publish writes them; existing orphans retain their
+with the same scan. In `/vox/sync`, **Sync local files** imports immediately; **Parse and sync** also updates the files. Both paths show results before any acceptance decision and refresh source occurrences and frontend metadata. Rows found in neither source nor
+language files are retained as Orphans for deliberate review instead of silently disappearing. Draft values remain protected from file imports. Published overrides survive file imports and deployments; existing orphans retain their
 normal publishing restriction.
 
 ### Adding a language
@@ -497,7 +495,7 @@ Locale identifiers such as `de-DE` are canonicalized to Laravel-friendly forms s
 
 Without AI, source strings are copied with `VOX_MISSING_TRANSLATION_PREFIX`, keeping them visible in Manage as
 missing. With **Translate with AI now**, the active translation driver translates the source strings before the
-files are installed. Both paths return affected translations to pending review and record an audit event. When
+files are installed. Both paths register the generated files as application defaults and record an audit event. When
 runtime frontend delivery is enabled, its per-locale artifacts are refreshed as part of the same successful action.
 
 Provisioned locales supplement `vox.translate.locales.values` in Vox settings, so adding a language works even when
@@ -511,8 +509,7 @@ php artisan vox:generate-sync-key
 ```
 
 Configure that application URL and key under **Configured environments** in `/vox/sync`, then select **Pull now**.
-Current Vox endpoints exchange database snapshots, including unpublished administrator edits. Older ZIP endpoints
-are also supported. Both formats create review candidates without changing local translation values, approvals,
+Current Vox endpoints exchange published translation snapshots. Use **Pull drafts** or `vox:sync-remote --include-drafts` to explicitly fetch editable values instead. Version 2 snapshots distinguish this contract from older database snapshots; both installations must support it. Older published-file ZIP endpoints are also supported. Both formats create review candidates without changing local translation values, approvals,
 language files, or frontend artifacts.
 
 **Review remote changes** compares each environment, key, and locale independently:
@@ -525,8 +522,7 @@ language files, or frontend artifacts.
 | Matching                   | Both sides currently contain the same wording.                                                  |
 | No longer on remote        | The latest snapshot omitted a previously seen value; no local deletion is inferred.             |
 
-Use **Accept remote**, **Keep local**, or **Edit merged value**. Accepting or editing changes only the local database
-and returns the translation to pending approval. Approve it in Manage, then Publish to update the language files.
+Use **Accept remote**, **Keep local**, or **Edit merged value**. Accepting or editing approves only the selected language values in the local database. **Accept and publish** also writes just that accepted selection to files; unrelated drafts and approved work remain untouched.
 Keeping local wording acknowledges and rejects that remote version, so an unchanged pull does not reopen it.
 Repeated unresolved pulls do not advance the review baseline. A new remote edit can require review again.
 
@@ -544,7 +540,7 @@ php artisan vox:sync-remote --environment=1 --check --no-interaction
 ```
 
 This command exits unsuccessfully on a failed pull, incoming changes, conflicts, or local review values not yet
-reflected in language files. Resolve changes, approve and publish accepted values, then rerun the check before deployment. It only
+reflected in language files. Resolve changes and publish accepted values, then rerun the check when needed. It only
 checks the selected environment's current snapshot; it does not deploy the application or push values to the remote.
 
 Remote archives reject absolute paths, traversal entries, and symbolic links. Secrets are never returned to the settings or environment UI.
@@ -558,6 +554,30 @@ return one literal, optionally nested array with string keys and string values; 
 also supported. Variables, interpolation,
 function calls, includes, and other executable PHP are rejected before any validated archive is
 applied.
+
+## Deployment and published overrides
+
+Use `php artisan vox:deploy --no-interaction` to initialize Vox on its first deployment and prepare translations on subsequent releases. It runs setup and package migrations, installs dashboard assets, imports shipped defaults without moderation, preserves published manager overrides and drafts, and prepares effective PHP/JSON files and frontend artifacts. It never pulls a remote environment.
+
+Release activation belongs to the application's deployment tooling. Run `vox:deploy` from the target release before activation. For workflows that allow manager writes during deployment, the application can wrap translation preparation and its own activation callback in `app(VoxMutationLock::class)->run(...)` (using `KeypointSolutions\LaravelVox\Support\VoxMutationLock`). Call the command in the same PHP process so the nested lock is reused. The application must also prevent requests running in retired releases from writing afterward. Vox does not switch symlinks, track active application releases, or orchestrate application rollback.
+
+Keep `storage/vox` persistent across releases, and never overwrite it from a build's storage directory. All processes that publish or activate a release must share the configured lock file. Compiled frontend translations are stored in `storage/vox/frontend-translations` by default and can be rebuilt from recorded defaults and published overrides. Enable runtime delivery for production frontends that must reflect manager publications without rebuilding JavaScript. With `vox({ runtime: true })`, existing `@laravel-vox/vue.js` imports resolve to the runtime consumer automatically.
+
+`vox:deploy` requires freshly installed application translation files. It imports those files as the new defaults, then applies previously published manager overrides. A retry must reinstall the fresh source files before calling it again. Vox does not keep original-file snapshots or deployment history.
+
+Use `php artisan vox:publish --no-interaction` to publish approved pending edits and deletions, matching the dashboard Publish action.
+
+Use `php artisan vox:publish --published-only --no-interaction` to regenerate recorded defaults and published overrides without importing the current files. It does not approve or publish drafts or apply pending deletions. Application translation lookup remains entirely file-based; the database is used only when managing or generating translations. Generated frontend artifacts are disposable output under storage. Preserve the target installation's Vox storage rather than overwriting it with build-machine data.
+
+Use `php artisan vox:compile --no-interaction` to rebuild frontend JSON from the current language files, using the configured locales and frontend groups. Compilation does not import or modify database translations, apply stored overrides, approve drafts, or modify source language files. It validates output and restores previous artifacts on failure. This is a general file compilation operation; application deployment tooling decides when to invoke it.
+
+A manager can choose **Use application wording** for one language to remove its published override. Unpublished drafts remain separate. Missing release keys do not delete manager drafts or published overrides. Explicit translation deletion remains a separate operation.
+
+### Inspecting imports from the command line
+
+`vox:sync` and `vox:sync-remote` fetch data before asking for any review decision. Inspect file candidates with `vox:review`, or remote candidates with `vox:review --environment=ID`. Then use `--accept-all`, `--keep-all`, or `--accept-all --publish` on that review command. The Sync page supports individual and partial decisions. A selected source's published wording is fetched by default; drafts require an explicit option.
+
+Set `VOX_DEFAULT_SYNC_ENVIRONMENT` to a configured environment ID to omit `--environment` on remote pulls. This is a convenience for development, not a prerequisite or safety check for deployment. Sources retain independent comparison baselines; no deployment revision history is introduced.
 
 ## Configuration highlights
 

@@ -13,7 +13,7 @@
         Trash2,
         Upload,
     } from '@lucide/vue';
-    import { computed, markRaw, ref } from 'vue';
+    import { computed, markRaw, nextTick, ref } from 'vue';
 
     import RemoteReconciliationPanel, { type ReconciliationPage } from '@/components/RemoteReconciliationPanel.vue';
     import { Badge, Button, Input, Label, Tooltip } from '@/components/ui';
@@ -56,7 +56,6 @@
     const routes = computed(() => page.props.vox?.routes);
     const editingId = ref<number | null>(null);
     const isSyncingLocal = ref(false);
-    const showLocalSyncOptions = ref(false);
     const pullingId = ref<number | null>(null);
     const archiveInput = ref<HTMLInputElement | null>(null);
     const isImportingArchive = ref(false);
@@ -119,14 +118,29 @@
         form.post(routes.value?.sync_environment_store ?? '', options);
     }
 
-    function pull(environment: EnvironmentItem): void {
+    function showIncoming(sourceId: number): void {
+        router.get(
+            routes.value?.sync ?? '',
+            { environment_id: sourceId, state: 'review', review_page: 1 },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                onSuccess: async () => {
+                    await nextTick();
+                    document.getElementById('remote-review')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                },
+            }
+        );
+    }
+
+    function pull(environment: EnvironmentItem, includeDrafts = false): void {
         pullingId.value = environment.id;
         success.value = null;
         actionError.value = null;
 
         router.post(
             environmentRoute(routes.value?.sync_environment_pull, environment.id),
-            {},
+            { include_drafts: includeDrafts },
             {
                 preserveScroll: true,
                 onError: (errors) => {
@@ -135,6 +149,7 @@
                 onSuccess: (responsePage) => {
                     success.value =
                         (responsePage.flash?.success as string | undefined) ?? 'Remote translations synchronized.';
+                    showIncoming(environment.id);
                 },
                 onFinish: () => {
                     pullingId.value = null;
@@ -145,7 +160,6 @@
 
     function syncLocal(updateLanguageFiles: boolean): void {
         isSyncingLocal.value = true;
-        showLocalSyncOptions.value = false;
         success.value = null;
         actionError.value = null;
 
@@ -160,6 +174,7 @@
                 onSuccess: (responsePage) => {
                     success.value =
                         (responsePage.flash?.success as string | undefined) ?? 'Local translations synchronized.';
+                    showIncoming(-1);
                 },
                 onFinish: () => {
                     isSyncingLocal.value = false;
@@ -257,11 +272,11 @@
 
     <div class="space-y-6">
         <header>
-            <p class="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">Remote environments</p>
+            <p class="text-muted-foreground text-xs font-medium tracking-[0.2em] uppercase">Translation sources</p>
             <h1 class="mt-2 text-2xl font-semibold">Synchronize translations</h1>
             <p class="text-muted-foreground mt-2 max-w-2xl text-sm">
-                Pull translations from another Vox application, review differences, and accept the wording you want
-                before approval and publishing.
+                Compare translations from local files or another Vox application, then accept the wording you want and
+                publish the selected changes when ready.
             </p>
         </header>
 
@@ -291,19 +306,28 @@
                 <div>
                     <h2 class="text-sm font-semibold">Local files to database</h2>
                     <p class="text-muted-foreground mt-1 text-sm">
-                        Scan this application's source and language files, then refresh Vox's review database.
+                        Compare language files with the database, then review and accept the incoming differences.
                     </p>
                 </div>
             </div>
             <Button
-                aria-haspopup="dialog"
                 data-test="sync-local-open"
                 :disabled="isSyncingLocal || pullingId !== null"
                 variant="outline"
-                @click="showLocalSyncOptions = true"
+                @click="syncLocal(false)"
             >
                 {{ isSyncingLocal ? 'Synchronizing…' : 'Sync local files' }}
             </Button>
+            <Tooltip text="Update language files from source keys first, then sync for review">
+                <Button
+                    data-test="sync-with-file-update"
+                    :disabled="isSyncingLocal || pullingId !== null"
+                    variant="ghost"
+                    @click="syncLocal(true)"
+                >
+                    Parse and sync
+                </Button>
+            </Tooltip>
         </section>
 
         <section class="bg-card rounded-xl border">
@@ -366,7 +390,7 @@
                             <span class="text-muted-foreground mt-0.5 block text-xs">
                                 {{
                                     page.props.ai.available
-                                        ? 'This may take several minutes. Generated values remain pending review.'
+                                        ? 'This may take several minutes. Generated file values will be available immediately.'
                                         : 'Configure an AI translation driver and credentials to enable this option.'
                                 }}
                             </span>
@@ -473,8 +497,8 @@
                 <div>
                     <h2 class="text-sm font-semibold">Configured environments</h2>
                     <p class="text-muted-foreground mt-1 text-xs">
-                        Pull production or staging values into review without changing local files. Last successful
-                        sync:
+                        Pull published production or staging values for review. Pull drafts also includes unpublished
+                        wording. Last successful sync:
                         {{ formatDateTime(page.props.lastSyncAt, 'Not synced yet') }}
                     </p>
                 </div>
@@ -510,14 +534,22 @@
                     </div>
                     <p class="text-muted-foreground mt-1 truncate text-xs">{{ environment.url }}</p>
                 </div>
-                <div class="flex shrink-0 items-center gap-2">
+                <div class="flex shrink-0 flex-wrap items-center gap-2">
                     <Button
-                        :disabled="pullingId !== null"
+                        :disabled="pullingId !== null || isSyncingLocal"
                         size="sm"
                         @click="pull(environment)"
                     >
                         <RefreshCw :class="['size-4', pullingId === environment.id && 'animate-spin']" />
-                        {{ pullingId === environment.id ? 'Pulling…' : 'Pull now' }}
+                        {{ pullingId === environment.id ? 'Pulling…' : 'Pull published' }}
+                    </Button>
+                    <Button
+                        :disabled="pullingId !== null || isSyncingLocal"
+                        size="sm"
+                        variant="ghost"
+                        @click="pull(environment, true)"
+                    >
+                        Pull drafts
                     </Button>
                     <Tooltip text="Edit environment">
                         <Button
@@ -643,59 +675,6 @@
                     </Button>
                 </div>
             </form>
-        </section>
-    </div>
-
-    <div
-        v-if="showLocalSyncOptions"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-        @click.self="showLocalSyncOptions = false"
-    >
-        <section
-            aria-describedby="local-sync-description"
-            aria-labelledby="local-sync-title"
-            aria-modal="true"
-            class="bg-card w-full max-w-lg rounded-xl border p-6 shadow-xl"
-            data-test="sync-local-dialog"
-            role="dialog"
-        >
-            <h2
-                id="local-sync-title"
-                class="text-lg font-semibold"
-            >
-                Update language files from source first?
-            </h2>
-            <p
-                id="local-sync-description"
-                class="text-muted-foreground mt-2 text-sm"
-            >
-                Both choices scan source code and refresh occurrences. Updating first also adds discovered keys and
-                applies your obsolete-key and dynamic-key rules before importing the files into Vox.
-            </p>
-            <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button
-                    type="button"
-                    variant="ghost"
-                    @click="showLocalSyncOptions = false"
-                >
-                    Cancel
-                </Button>
-                <Button
-                    data-test="sync-without-file-update"
-                    type="button"
-                    variant="outline"
-                    @click="syncLocal(false)"
-                >
-                    Sync files as they are
-                </Button>
-                <Button
-                    data-test="sync-with-file-update"
-                    type="button"
-                    @click="syncLocal(true)"
-                >
-                    Update files & sync
-                </Button>
-            </div>
         </section>
     </div>
 </template>

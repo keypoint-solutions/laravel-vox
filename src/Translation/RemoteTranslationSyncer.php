@@ -17,7 +17,7 @@ class RemoteTranslationSyncer
         private RemoteReconciliation $reconciliation,
     ) {}
 
-    public function sync(VoxEnvironment $environment): int
+    public function sync(VoxEnvironment $environment, bool $includeDrafts = false): int
     {
         if ($environment->secret_key === '') {
             throw new RuntimeException('The environment is missing a sync key.');
@@ -28,7 +28,7 @@ class RemoteTranslationSyncer
         $response = Http::accept('application/json')
             ->timeout(30)
             ->withHeaders(['X-Vox-Key' => $environment->secret_key])
-            ->post($endpoint);
+            ->post($endpoint, ['include_drafts' => $includeDrafts]);
 
         if (! $response->successful()) {
             throw new RuntimeException("Remote sync failed with HTTP {$response->status()}.");

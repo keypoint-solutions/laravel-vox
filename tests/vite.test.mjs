@@ -161,3 +161,24 @@ test('Vite dev server sends accepted translation updates without a page reload',
     assert.match((await server.transformRequest('virtual:laravel-vox/php/fr')).code, /Bonsoir/);
     assert.match((await server.transformRequest('virtual:laravel-vox/php/en')).code, /Hello/);
 });
+
+
+test('runtime mode resolves the existing Vue entry to runtime delivery without bundling language files', async t => {
+    const { root, write } = fixture(t);
+    write('entry.js', "export { createVox } from '@laravel-vox/vue.js';");
+    const result = await build({
+        root,
+        configFile: false,
+        logLevel: 'silent',
+        plugins: vox({ runtime: true }),
+        build: {
+            write: false,
+            lib: { entry: resolve(root, 'entry.js'), formats: ['es'] },
+            rolldownOptions: { external: ['vue', 'laravel-vue-i18n'] },
+        },
+    });
+    const code = (Array.isArray(result) ? result : [result]).flatMap(bundle => bundle.output).filter(item => item.type === 'chunk').map(item => item.code).join('\n');
+    assert.match(code, /\/vox/u);
+    assert.match(code, /credentials/u);
+    assert.doesNotMatch(code, /Bonjour/u);
+});

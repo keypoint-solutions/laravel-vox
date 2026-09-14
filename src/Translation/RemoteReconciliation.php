@@ -13,6 +13,7 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 
 class RemoteReconciliation
 {
@@ -99,6 +100,30 @@ class RemoteReconciliation
         });
     }
 
+    public function ingestFileValue(VoxTranslation $translation, string $locale, string $value, ?string $baseline): void
+    {
+        $candidate = VoxRemoteTranslation::query()->whereNull('environment_id')->firstOrNew([
+            'identity' => RemoteTranslationSnapshot::identity($translation->group, $translation->key, $locale),
+        ]);
+        if (! $candidate->exists) {
+            $candidate->fill([
+                'environment_id' => null,
+                'group' => $translation->group ?? 'json',
+                'key' => $translation->key,
+                'locale' => $locale,
+                'base_value' => $baseline,
+                'base_local_value' => $baseline,
+                'has_baseline' => $baseline !== null,
+                'revision' => 0,
+            ]);
+        }
+        $candidate->last_seen_value = $candidate->remote_value;
+        $candidate->remote_value = $value;
+        $candidate->remote_present = true;
+        $candidate->revision++;
+        $candidate->save();
+    }
+
     /**
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
@@ -168,7 +193,7 @@ class RemoteReconciliation
      */
     public function resolve(array $decision): int
     {
-        return DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($decision): int {
+        return app(VoxMutationLock::class)->run(fn (): int => app(TranslationFileTransaction::class)->run(fn (): int => DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($decision): int {
             VoxEnvironment::query()->orderBy('id')->lockForUpdate()->get();
             $filters = $this->filters($decision['filters'] ?? []);
             $rows = $this->rows($filters['environment_id'], true);
@@ -220,6 +245,7 @@ class RemoteReconciliation
 
             $candidates = VoxRemoteTranslation::query()->whereIntegerInRaw('id', $selected->pluck('id')->all())->get()->keyBy('id');
             $createdTranslations = [];
+            $acceptedValueIds = [];
 
             foreach ($selected as $row) {
                 $localValue = $row['local_value'];
@@ -247,12 +273,12 @@ class RemoteReconciliation
                         throw ValidationException::withMessages(['reconciliation' => 'Restore ignored keys before accepting remote values.']);
                     }
 
-                    VoxTranslationValue::query()->updateOrCreate(
-                        ['translation_id' => $translation->id, 'locale' => $row['locale']],
-                        ['value' => $localValue, 'is_obsolete' => false, 'is_pending_publish' => true]
-                    );
-                    $translation->status = 'pending';
-                    $translation->touch();
+                    $accepted = VoxTranslationValue::query()->firstOrNew([
+                        'translation_id' => $translation->id,
+                        'locale' => $row['locale'],
+                    ]);
+                    $accepted->saveDraft($localValue, approved: true);
+                    $acceptedValueIds[] = $accepted->id;
                 }
 
                 $candidate = $candidates->get($row['id']);
@@ -263,6 +289,10 @@ class RemoteReconciliation
                 $candidate->save();
             }
 
+            if (($decision['publish'] ?? false) && $acceptedValueIds !== []) {
+                app(TranslationPublisher::class)->publish($acceptedValueIds);
+            }
+
             $this->auditLogger->record('remote-reconciliation', [
                 'decision' => $action,
                 'values' => $selected->count(),
@@ -271,7 +301,7 @@ class RemoteReconciliation
             ]);
 
             return $selected->count();
-        });
+        })));
     }
 
     /**
@@ -281,7 +311,9 @@ class RemoteReconciliation
     {
         $query = VoxRemoteTranslation::query()->orderBy('id');
 
-        if ($environmentId !== null) {
+        if ($environmentId === -1) {
+            $query->whereNull('environment_id');
+        } elseif ($environmentId !== null) {
             $query->where('environment_id', $environmentId);
         }
 
@@ -320,7 +352,7 @@ class RemoteReconciliation
                 'pending_publish' => $value?->is_pending_publish ?? false,
                 'revision' => $candidate->revision,
             ];
-            $row['token'] = $this->token([$row, $translation?->status, $value?->is_obsolete, $value?->is_pending_publish]);
+            $row['token'] = $this->token([$row, $translation?->status, $value?->is_obsolete, $value?->is_pending_publish, $value?->is_approved, $value?->file_value, $value?->published_override]);
 
             return $row;
         });

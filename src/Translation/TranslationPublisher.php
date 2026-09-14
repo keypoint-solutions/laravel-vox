@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 use RuntimeException;
 
 class TranslationPublisher
@@ -21,16 +22,25 @@ class TranslationPublisher
         private FrontendTranslationArtifacts $frontendArtifacts,
     ) {}
 
-    public function publish(): PublishResult
+    public function publish(?array $valueIds = null): PublishResult
     {
-        return DB::connection(config('vox.database.connection', 'vox'))->transaction(function (): PublishResult {
-            $pending = VoxTranslation::query()->where('is_pending_delete', true)->lockForUpdate()->get();
+        return app(VoxMutationLock::class)->run(fn (): PublishResult => app(TranslationFileTransaction::class)->run(fn (): PublishResult => DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($valueIds): PublishResult {
+            $pending = $valueIds === null ? VoxTranslation::query()->where('is_pending_delete', true)->lockForUpdate()->get() : collect();
 
-            return $this->publishPending($pending);
-        });
+            return $this->publishPending($pending, $valueIds);
+        })));
     }
 
-    private function publishPending(Collection $pending): PublishResult
+    public function regenerate(): PublishResult
+    {
+        return app(VoxMutationLock::class)->run(fn (): PublishResult => app(TranslationFileTransaction::class)->run(
+            fn (): PublishResult => DB::connection(config('vox.database.connection', 'vox'))->transaction(
+                fn (): PublishResult => $this->publishPending(collect(), null, true)
+            )
+        ));
+    }
+
+    private function publishPending(Collection $pending, ?array $valueIds, bool $regenerate = false): PublishResult
     {
         $langPath = $this->files->langPath();
         $stagingPath = storage_path('vox/publish-'.Str::uuid());
@@ -42,7 +52,10 @@ class TranslationPublisher
                 throw new RuntimeException('Unable to prepare translation files for publishing.');
             }
 
-            $stagedResult = $this->publishTo($stagingPath);
+            $stagedResult = $regenerate
+                ? $this->publishUsing($this->files->forPath($stagingPath), null, true, true)
+                : $this->publishTo($stagingPath, $valueIds);
+            $this->validator->validateDirectory($stagingPath);
             $deletion = new TranslationFileDeletion($this->files->forPath($stagingPath), app(TranslationFileWriter::class), $this->validator);
             $deletedFiles = $deletion->prepare($pending, false);
             foreach ($deletedFiles as $path => $change) {
@@ -61,9 +74,7 @@ class TranslationPublisher
                 $destination = rtrim($langPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$relativePath;
                 File::ensureDirectoryExists(dirname($destination));
 
-                if (! File::copy($stagedFile, $destination)) {
-                    throw new RuntimeException("Unable to publish translation file [{$relativePath}].");
-                }
+                app(TranslationFileTransaction::class)->replace($destination, File::get($stagedFile));
 
                 $publishedFiles[] = $destination;
             }
@@ -74,7 +85,7 @@ class TranslationPublisher
 
             $runtimeChanges = app(TranslationFileDeletion::class)->prepare($pending);
             foreach ($runtimeChanges as $path => $change) {
-                File::replace($path, $change['after']);
+                app(TranslationFileTransaction::class)->replace($path, $change['after']);
                 $frontendFiles[] = $path;
             }
 
@@ -90,6 +101,9 @@ class TranslationPublisher
 
                     if ($current !== null && $current->value === $value) {
                         $current->timestamps = false;
+                        if ($current->is_pending_publish || $current->value !== $current->file_value) {
+                            $current->published_override = $value;
+                        }
                         $current->is_pending_publish = false;
                         $current->save();
                     }
@@ -109,16 +123,16 @@ class TranslationPublisher
         }
     }
 
-    public function publishTo(string $langPath): PublishResult
+    public function publishTo(string $langPath, ?array $valueIds = null, bool $overridesOnly = false): PublishResult
     {
         $this->validator->validateDirectory($langPath);
-        $result = $this->publishUsing($this->files->forPath($langPath));
+        $result = $this->publishUsing($this->files->forPath($langPath), $valueIds, $overridesOnly);
         $this->validator->validateDirectory($langPath);
 
         return $result;
     }
 
-    private function publishUsing(TranslationFileRepository $files): PublishResult
+    private function publishUsing(TranslationFileRepository $files, ?array $valueIds, bool $overridesOnly, bool $includeDefaults = false): PublishResult
     {
         $locales = $this->localeResolver->resolveLocales();
         $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
@@ -137,7 +151,6 @@ class TranslationPublisher
         $orphanTranslations = 0;
 
         $translations = VoxTranslation::query()
-            ->where('status', 'approved')
             ->where('is_ignored', false)
             ->with('values')
             ->orderBy('group')
@@ -152,27 +165,29 @@ class TranslationPublisher
             }
 
             $values = $translation->values->keyBy('locale');
-            $isComplete = collect($locales)->every(function (string $locale) use ($values, $prefix): bool {
-                $value = $values->get($locale)?->value;
+            $incomplete = false;
 
-                return is_string($value) && $value !== '' && ! Str::startsWith($value, $prefix);
-            });
-
-            if (! $isComplete) {
-                $incompleteTranslations++;
-
-                continue;
-            }
-
-            foreach ($locales as $locale) {
-                $value = $values->get($locale)?->value;
-
-                if (! is_string($value)) {
+            foreach ($values as $locale => $translationValue) {
+                if (! in_array($locale, $locales, true) || ($valueIds !== null && ! in_array($translationValue->id, $valueIds, true))) {
                     continue;
                 }
+                $value = $overridesOnly
+                    ? ($translationValue->published_override ?? ($includeDefaults ? $translationValue->file_value : null))
+                    : $translationValue->value;
+                if ($overridesOnly && $value === null) {
+                    continue;
+                }
+                if (! $overridesOnly && ($translationValue->is_obsolete || ! $translationValue->is_approved
+                    || (! $translationValue->is_pending_publish && $translationValue->file_value !== null))) {
+                    continue;
+                }
+                if (! is_string($value) || (! $includeDefaults && ($value === '' || Str::startsWith($value, $prefix)))) {
+                    $incomplete = true;
 
-                if ($values->get($locale)->is_pending_publish) {
-                    $publishedValues[$values->get($locale)->id] = $value;
+                    continue;
+                }
+                if (! $overridesOnly) {
+                    $publishedValues[$translationValue->id] = $value;
                 }
 
                 if ($translation->group === null || $translation->group === 'json') {
@@ -181,6 +196,9 @@ class TranslationPublisher
                 } else {
                     $groupUpdates[$locale][$translation->group][$translation->key] = $value;
                 }
+            }
+            if ($incomplete) {
+                $incompleteTranslations++;
             }
         }
 

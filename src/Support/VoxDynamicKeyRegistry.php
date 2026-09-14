@@ -5,6 +5,7 @@ namespace KeypointSolutions\LaravelVox\Support;
 use BackedEnum;
 use Illuminate\Support\Facades\File;
 use KeypointSolutions\LaravelVox\DynamicKeyProvider;
+use KeypointSolutions\LaravelVox\Translation\TranslationFileTransaction;
 use KeypointSolutions\LaravelVox\Translation\TranslationKey;
 use UnitEnum;
 
@@ -255,7 +256,7 @@ class VoxDynamicKeyRegistry
             File::makeDirectory($directory, 0755, true);
         }
 
-        File::put($path, json_encode(
+        app(TranslationFileTransaction::class)->replace($path, json_encode(
             ['patterns' => array_values($patterns)],
             JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
         )."\n");

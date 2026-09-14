@@ -110,7 +110,11 @@ return [
             ],
         ],
     ],
+    'deployment' => [
+        'lock_path' => storage_path('vox/publish.lock'),
+    ],
     'sync' => [
+        'default_environment' => env('VOX_DEFAULT_SYNC_ENVIRONMENT'),
         'enabled' => env('VOX_SYNC_ENABLED', true),
         'key' => env('VOX_SYNC_KEY'),
         'middleware' => [],

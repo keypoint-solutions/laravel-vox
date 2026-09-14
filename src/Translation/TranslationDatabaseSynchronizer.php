@@ -2,9 +2,11 @@
 
 namespace KeypointSolutions\LaravelVox\Translation;
 
+use Illuminate\Support\Facades\DB;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 
 class TranslationDatabaseSynchronizer
 {
@@ -16,7 +18,17 @@ class TranslationDatabaseSynchronizer
         private FrontendTranslationArtifacts $frontendArtifacts,
     ) {}
 
-    public function sync(bool $updateLanguageFiles = false): SyncResult
+    public function sync(bool $updateLanguageFiles = false, bool $deployment = false, ?TranslationFileRepository $sourceFiles = null): SyncResult
+    {
+        return app(VoxMutationLock::class)->run(
+            fn (): SyncResult => app(TranslationFileTransaction::class)->run(
+                fn (): SyncResult => DB::connection(config('vox.database.connection', 'vox'))
+                    ->transaction(fn (): SyncResult => $this->syncUsing($updateLanguageFiles, $deployment, $sourceFiles))
+            )
+        );
+    }
+
+    private function syncUsing(bool $updateLanguageFiles, bool $deployment, ?TranslationFileRepository $sourceFiles): SyncResult
     {
         $scanner = new TranslationScanner(
             base_path(),
@@ -42,7 +54,7 @@ class TranslationDatabaseSynchronizer
                 ->updateFromScan($scanResults, $locales, $baseLocale);
         }
 
-        $result = (new TranslationSyncer($this->files, $this->dynamicKeys))->sync($locales, $scanResults);
+        $result = (new TranslationSyncer($sourceFiles ?? $this->files, $this->dynamicKeys))->sync($locales, $scanResults, $deployment);
 
         if ($languageFileResult !== null) {
             $result->setLanguageFileChanges(
@@ -53,7 +65,11 @@ class TranslationDatabaseSynchronizer
 
         $this->frontendManifest->writeFromDatabase();
 
-        if (config('vox.frontend.runtime.enabled', false)) {
+        if (! $deployment) {
+            app(TranslationPublisher::class)->publishTo($this->files->langPath(), overridesOnly: true);
+        }
+
+        if (! $deployment && config('vox.frontend.runtime.enabled', false)) {
             $this->frontendArtifacts->publish();
         }
 

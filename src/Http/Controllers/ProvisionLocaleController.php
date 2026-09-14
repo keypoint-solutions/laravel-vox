@@ -55,7 +55,7 @@ class ProvisionLocaleController
             return Inertia::flash(
                 'success',
                 "Added {$name} ({$result->locale}) and AI translated {$result->translatedValues} values. "
-                    .'Review them in Manage before approval.'
+                    .'The new file values are live and available in Manage.'
             )->back();
         }
 

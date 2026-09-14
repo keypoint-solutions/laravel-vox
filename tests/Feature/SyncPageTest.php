@@ -149,7 +149,7 @@ it('can AI translate a newly provisioned locale before synchronizing it', functi
         ->assertRedirect('/vox/sync')
         ->assertInertiaFlash(
             'success',
-            'Added Romanian (ro) and AI translated 2 values. Review them in Manage before approval.'
+            'Added Romanian (ro) and AI translated 2 values. The new file values are live and available in Manage.'
         );
 
     expect($files->loadGroup('ro', 'messages'))
@@ -160,7 +160,7 @@ it('can AI translate a newly provisioned locale before synchronizing it', functi
             ->where('key', 'greeting')
             ->firstOrFail()
             ->status)
-        ->toBe('pending');
+        ->toBe('approved');
 });
 
 it('rejects unsafe and already defined locale codes without changing files', function (): void {

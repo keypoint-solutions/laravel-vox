@@ -63,7 +63,7 @@ it('shows real publish readiness statistics', function (): void {
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('Publish', false)
             ->where('stats.approved', 3)
-            ->where('stats.publishable', 2)
+            ->where('stats.publishable', 3)
             ->where('stats.pending', 1)
             ->where('stats.incomplete', 1)
             ->where('stats.dynamic', 0)
@@ -150,7 +150,7 @@ it('publishes approved complete values without overwriting pending values', func
     $this->from('/vox/publish')
         ->post('/vox/publish')
         ->assertRedirect('/vox/publish')
-        ->assertInertiaFlash('success', 'Published 4 translation values across 4 files.');
+        ->assertInertiaFlash('success', 'Published 5 translation values across 4 files.');
 
     $english = require $this->publishLangPath.'/en/messages.php';
     $french = require $this->publishLangPath.'/fr/messages.php';
@@ -159,7 +159,8 @@ it('publishes approved complete values without overwriting pending values', func
     expect($english['greeting'])->toBe('Published greeting')
         ->and($french['greeting'])->toBe('Salutation publiée')
         ->and($english['pending'])->toBe('Existing pending value')
-        ->and($english)->not->toHaveKey('incomplete')
+        ->and($english['incomplete'])->toBe('Complete')
+        ->and($french)->not->toHaveKey('incomplete')
         ->and($englishJson['Publish example'])->toBe('Published JSON')
         ->and(File::get($this->publishLangPath.'/en/messages.php'))->toContain('// Translator note')
         ->and(VoxAudit::query()->where('action', 'publish')->exists())->toBeTrue();

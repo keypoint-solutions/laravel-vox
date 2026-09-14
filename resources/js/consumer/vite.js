@@ -93,7 +93,12 @@ export async function loadVoxLocale(locale) { return loaders[locale] ? await loa
         config() {
             return {
                 resolve: {
-                    alias: { '@laravel-vox': fileURLToPath(new URL('.', import.meta.url)) },
+                    alias: {
+                        ...(options.runtime
+                            ? { '@laravel-vox/vue.js': fileURLToPath(new URL('./runtime.js', import.meta.url)) }
+                            : {}),
+                        '@laravel-vox': fileURLToPath(new URL('.', import.meta.url)),
+                    },
                     dedupe: ['vue', 'laravel-vue-i18n'],
                 },
             };

@@ -61,7 +61,8 @@ it('keeps ignored rows through sync and publishing and permits restoration', fun
     cleanupKeys($this, [$row->id], 'restore')->assertRedirect()->assertSessionHasNoErrors();
     app(TranslationDatabaseSynchronizer::class)->sync();
     expect($row->fresh()->is_ignored)->toBeFalse()
-        ->and($row->fresh()->values->firstWhere('locale', 'en')->value)->toBe('Published');
+        ->and($row->fresh()->values->firstWhere('locale', 'en')->value)->toBe('Draft')
+        ->and($row->fresh()->values->firstWhere('locale', 'en')->file_value)->toBe('Published');
 });
 
 it('requires explicit confirmation and authorization', function (): void {

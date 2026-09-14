@@ -103,13 +103,13 @@ it('keeps accepted values through local sync and writes them only after approval
     expect(decideVoxValues($this, 'accept'))->toBe(2);
 
     app(TranslationDatabaseSynchronizer::class)->sync();
-    expect($this->translation->fresh()->status)->toBe('pending')
+    expect($this->translation->fresh()->status)->toBe('approved')
         ->and($this->translation->values()->first()->value)->toBe('Accepted wording')
         ->and(VoxTranslation::query()->where('key', 'new_key')->first()->is_orphan)->toBeFalse()
         ->and((require $this->reconciliationRoot.'/en/messages.php')['greeting'])->toBe('Original');
 
     app(TranslationPublisher::class)->publish();
-    expect((require $this->reconciliationRoot.'/en/messages.php')['greeting'])->toBe('Original');
+    expect((require $this->reconciliationRoot.'/en/messages.php')['greeting'])->toBe('Accepted wording');
 
     VoxTranslation::query()->update(['status' => 'approved']);
     app(TranslationPublisher::class)->publish();
@@ -183,7 +183,7 @@ it('stores a manually merged value as pending and rejects edits to more than one
     ]);
 
     expect($this->translation->values()->first()->value)->toBe('Merged wording')
-        ->and($this->translation->fresh()->status)->toBe('pending')
+        ->and($this->translation->fresh()->status)->toBe('approved')
         ->and($this->reconciliation->unresolvedCount())->toBe(0);
 
     pullVoxValues($this, [incomingVoxValue('Changed'), incomingVoxValue('New', 'other')]);

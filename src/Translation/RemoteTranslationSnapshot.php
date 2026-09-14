@@ -10,12 +10,12 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 
 class RemoteTranslationSnapshot
 {
-    public const FORMAT = 'vox-reconciliation-v1';
+    public const FORMAT = 'vox-reconciliation-v2';
 
     /**
      * @return array{format: string, values: array<int, array{group: string, key: string, locale: string, value: string}>}
      */
-    public function export(): array
+    public function export(bool $includeDrafts = false): array
     {
         $values = [];
 
@@ -25,11 +25,15 @@ class RemoteTranslationSnapshot
                     continue;
                 }
 
+                $published = $value->liveValue();
+                if (! $includeDrafts && $published === null) {
+                    continue;
+                }
                 $values[] = [
                     'group' => $translation->group ?? 'json',
                     'key' => $translation->key,
                     'locale' => $value->locale,
-                    'value' => $value->value,
+                    'value' => $includeDrafts ? $value->value : $published,
                 ];
             }
         }

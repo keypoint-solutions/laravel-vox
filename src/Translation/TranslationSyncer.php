@@ -5,10 +5,12 @@ namespace KeypointSolutions\LaravelVox\Translation;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use KeypointSolutions\LaravelVox\Models\VoxRemoteTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationOccurrence;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
+use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 
 class TranslationSyncer
 {
@@ -21,17 +23,19 @@ class TranslationSyncer
      * @param  array<int, string>  $locales
      * @param  array<string, array<string, mixed>>  $scanResults
      */
-    public function sync(array $locales, array $scanResults): SyncResult
+    public function sync(array $locales, array $scanResults, bool $deployment = false): SyncResult
     {
-        return DB::connection(config('vox.database.connection', 'vox'))
-            ->transaction(fn (): SyncResult => $this->syncTranslations($locales, $scanResults));
+        return app(VoxMutationLock::class)->run(
+            fn (): SyncResult => DB::connection(config('vox.database.connection', 'vox'))
+                ->transaction(fn (): SyncResult => $this->syncTranslations($locales, $scanResults, $deployment)),
+        );
     }
 
     /**
      * @param  array<int, string>  $locales
      * @param  array<string, array<string, mixed>>  $scanResults
      */
-    private function syncTranslations(array $locales, array $scanResults): SyncResult
+    private function syncTranslations(array $locales, array $scanResults, bool $deployment): SyncResult
     {
         $langPath = $this->files->langPath();
         $result = new SyncResult;
@@ -43,6 +47,8 @@ class TranslationSyncer
         $translations = $this->applyScanMetadata($translations, $scanResults);
         $translations = $this->applyDynamicMetadata($translations);
         $seenTranslationIds = [];
+        $seenValueIds = [];
+        $fileCandidates = VoxRemoteTranslation::query()->whereNull('environment_id')->pluck('identity')->flip();
 
         foreach ($translations as $fullKey => $payload) {
             $translation = VoxTranslation::query()->lockForUpdate()->firstOrNew([
@@ -96,35 +102,48 @@ class TranslationSyncer
                     ]
                 );
 
-                if ($translationValue->is_pending_publish && $translationValue->value !== $value) {
+                if ($translationValue->exists) {
+                    $seenValueIds[] = $translationValue->id;
+                }
+                $oldFileValue = $translationValue->file_value;
+                $current = $translationValue->value;
+                $isNewValue = ! $translationValue->exists;
+
+                if (! $deployment && $translationValue->published_override !== null && $value === $translationValue->published_override) {
                     continue;
                 }
 
-                if (
-                    ! $translationValue->exists
-                    || $translationValue->value !== $value
-                    || $translationValue->is_obsolete
-                ) {
-                    $contentChanged = true;
+                $translationValue->file_value = $value;
+                $translationValue->is_obsolete = false;
+
+                if ($isNewValue || ($deployment && ! $translationValue->is_pending_publish
+                    && $translationValue->published_override === null && ($current === $oldFileValue || $current === $value))) {
+                    $translationValue->value = $value;
+                    $translationValue->is_approved = true;
+                    $translationValue->is_pending_publish = false;
+                } elseif ($current === $value && ! $translationValue->is_pending_publish) {
+                    $translationValue->is_approved = true;
+                }
+                if (! $isNewValue && ! $deployment && ($current !== $value || $fileCandidates->has(RemoteTranslationSnapshot::identity($translation->group, $translation->key, $locale)))) {
+                    app(RemoteReconciliation::class)->ingestFileValue(
+                        $translation, $locale, $value, $oldFileValue ?? $current
+                    );
                 }
 
-                $translationValue->fill([
-                    'value' => $value,
-                    'is_obsolete' => false,
-                    'is_pending_publish' => false,
-                ])->save();
+                if (! $isNewValue && $oldFileValue === null && $current !== $value) {
+                    $translationValue->is_pending_publish = true;
+                }
+
+                $contentChanged = $contentChanged || $oldFileValue !== $value;
+                $translationValue->save();
+                $seenValueIds[] = $translationValue->id;
             }
 
             if (! $isNew && $contentChanged) {
                 $result->incrementChangedTranslations();
-
-                if ($translation->status === 'approved') {
-                    $translation->status = 'pending';
-                    $result->incrementReopenedTranslations();
-                }
-
                 $translation->touch();
             }
+            $translation->refreshApproval();
 
             VoxTranslationOccurrence::query()
                 ->where('translation_id', $translation->id)
@@ -144,6 +163,16 @@ class TranslationSyncer
             $result->incrementTranslations();
         }
 
+        if ($deployment) {
+            $absent = VoxTranslationValue::query()->whereNotIn('id', $seenValueIds)
+                ->whereHas('translation', fn ($query) => $query->where('is_ignored', false))->lockForUpdate()->get();
+            foreach ($absent as $value) {
+                $value->file_value = null;
+                $value->is_obsolete = $value->published_override === null && ! $value->is_pending_publish;
+                $value->save();
+            }
+        }
+
         $orphanQuery = VoxTranslation::query()->where('is_ignored', false);
 
         if ($seenTranslationIds !== []) {
@@ -155,7 +184,7 @@ class TranslationSyncer
             ->with('values')
             ->get()
             ->filter(function (VoxTranslation $translation): bool {
-                if (! $translation->is_orphan && $translation->values->contains('is_pending_publish', true)) {
+                if (! $translation->is_orphan && ($translation->values->contains('is_pending_publish', true) || $translation->values->contains(fn ($value): bool => $value->published_override !== null))) {
                     return false;
                 }
 

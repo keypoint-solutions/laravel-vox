@@ -7,7 +7,7 @@
 
     interface Candidate {
         id: number;
-        environment_id: number;
+        environment_id: number | null;
         group: string;
         key: string;
         locale: string;
@@ -68,7 +68,8 @@
             search.value !== props.review.filters.search
     );
     const environmentOptions = computed(() => [
-        { value: '', label: 'All environments' },
+        { value: '', label: 'All sources' },
+        { value: '-1', label: 'Local files' },
         ...props.environments.map((item) => ({ value: String(item.id), label: item.name })),
     ]);
     const stateOptions = [
@@ -77,7 +78,7 @@
         { value: 'conflict', label: 'Conflicts' },
         { value: 'outgoing', label: 'Local values kept / changed' },
         { value: 'reconciled', label: 'Matching values' },
-        { value: 'unavailable', label: 'No longer on remote' },
+        { value: 'unavailable', label: 'No longer in source' },
         { value: 'all', label: 'All values' },
     ];
     const labels: Record<string, string> = {
@@ -85,7 +86,7 @@
         conflict: 'Conflict',
         outgoing: 'Local value kept / changed',
         reconciled: 'Matching',
-        unavailable: 'No longer on remote',
+        unavailable: 'No longer in source',
     };
     const localeOptions = computed(() => [
         { value: '', label: 'All languages' },
@@ -156,7 +157,7 @@
         error.value = '';
     }
 
-    function decide(action: 'accept' | 'keep' | 'edit', row?: Candidate): void {
+    function decide(action: 'accept' | 'keep' | 'edit', row?: Candidate, publish = false): void {
         busy.value = true;
         message.value = '';
         error.value = '';
@@ -168,6 +169,7 @@
             page.props.vox?.routes?.sync_reconcile ?? '',
             {
                 action,
+                publish,
                 all_matching: !row && allMatching.value,
                 entries,
                 filters: props.review.filters,
@@ -204,7 +206,7 @@
                     id="remote-review-title"
                     class="text-sm font-semibold"
                 >
-                    Review remote changes
+                    Incoming translations
                 </h2>
                 <Button
                     size="sm"
@@ -215,8 +217,9 @@
                 >
             </div>
             <p class="text-muted-foreground text-sm">
-                Compare local and remote values before accepting them. Accepted values still need approval in Manage and
-                Publish before they reach language files. Keeping local values rejects the current remote changes.
+                Compare incoming wording with the current database value. Accept approves the selected translations;
+                Accept and publish also writes only those translations to language files. Keep local retains the
+                database wording.
             </p>
             <div class="flex flex-wrap gap-2 text-xs">
                 <Badge variant="secondary">{{ review.counts.incoming ?? 0 }} incoming</Badge>
@@ -229,7 +232,7 @@
                 @submit.prevent="filter()"
             >
                 <div class="space-y-1.5">
-                    <Label for="review-environment">Environment</Label>
+                    <Label for="review-environment">Source</Label>
                     <Select
                         id="review-environment"
                         v-model="environment"
@@ -334,7 +337,15 @@
                     :disabled="busy || filtersDirty || selectedCount === 0"
                     @click="decide('accept')"
                 >
-                    {{ busy ? 'Saving…' : `Accept remote (${selectedCount})` }}
+                    {{ busy ? 'Saving…' : `Accept (${selectedCount})` }}
+                </Button>
+                <Button
+                    data-test="review-bulk-accept-publish"
+                    variant="outline"
+                    :disabled="busy || filtersDirty || selectedCount === 0"
+                    @click="decide('accept', undefined, true)"
+                >
+                    Accept and publish ({{ selectedCount }})
                 </Button>
                 <Button
                     data-test="review-bulk-keep"
@@ -351,9 +362,9 @@
             v-if="review.data.length === 0"
             class="p-8 text-center"
         >
-            <p class="text-sm font-medium">No remote changes match these filters</p>
+            <p class="text-sm font-medium">No incoming changes match these filters</p>
             <p class="text-muted-foreground mt-2 text-sm">
-                Pull an environment to compare its values, or change the filters above.
+                Sync local files or pull an environment to compare wording, or change the filters above.
             </p>
         </div>
 
@@ -376,20 +387,25 @@
                         {{ row.group === 'json' ? row.key : `${row.group}.${row.key}` }}
                     </p>
                     <p class="text-muted-foreground text-xs">
-                        {{ environments.find((item) => item.id === row.environment_id)?.name }} · {{ row.locale }}
+                        {{
+                            row.environment_id === null
+                                ? 'Local files'
+                                : environments.find((item) => item.id === row.environment_id)?.name
+                        }}
+                        · {{ row.locale }}
                     </p>
                 </div>
                 <Badge :variant="row.state === 'conflict' ? 'outline' : 'secondary'">{{ labels[row.state] }}</Badge>
             </div>
             <div class="grid gap-4 md:grid-cols-2">
                 <div class="min-w-0 rounded-lg border p-3">
-                    <p class="text-muted-foreground mb-2 text-xs font-medium">Local value</p>
+                    <p class="text-muted-foreground mb-2 text-xs font-medium">Current database wording</p>
                     <pre
                         class="max-h-40 overflow-auto font-sans text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
                         >{{ row.local_value ?? 'No local value' }}</pre>
                 </div>
                 <div class="min-w-0 rounded-lg border p-3">
-                    <p class="text-muted-foreground mb-2 text-xs font-medium">Remote value</p>
+                    <p class="text-muted-foreground mb-2 text-xs font-medium">Incoming wording</p>
                     <pre
                         class="max-h-40 overflow-auto font-sans text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
                         >{{ row.remote_value }}</pre>
@@ -399,7 +415,7 @@
                 <summary class="cursor-pointer">Comparison history</summary>
                 <div class="mt-2 space-y-2">
                     <template v-if="row.has_baseline">
-                        <p>Remote value at last agreement or review:</p>
+                        <p>Source value at last agreement or review:</p>
                         <pre class="max-h-32 overflow-auto font-sans [overflow-wrap:anywhere] whitespace-pre-wrap">{{
                             row.base_value ?? 'No value'
                         }}</pre>
@@ -409,7 +425,7 @@
                         }}</pre>
                     </template>
                     <p v-else>No shared baseline yet. Existing values that differ need an explicit review decision.</p>
-                    <p>Previously seen remote value:</p>
+                    <p>Previously seen source value:</p>
                     <pre class="max-h-32 overflow-auto font-sans [overflow-wrap:anywhere] whitespace-pre-wrap">{{
                         row.last_seen_value ?? 'First observation'
                     }}</pre>
@@ -419,7 +435,7 @@
                 v-if="row.state === 'unavailable'"
                 class="text-muted-foreground text-xs"
             >
-                This value is absent from the latest remote snapshot. Local values are retained; remote removals are not
+                This value is absent from the latest source snapshot. Local values are retained; source removals are not
                 applied automatically.
             </p>
             <p
@@ -443,7 +459,14 @@
                     size="sm"
                     :disabled="busy || !row.locale_available"
                     @click="decide('accept', row)"
-                    >Accept remote</Button
+                    >Accept</Button
+                >
+                <Button
+                    size="sm"
+                    variant="outline"
+                    :disabled="busy || !row.locale_available || row.is_orphan"
+                    @click="decide('accept', row, true)"
+                    >Accept and publish</Button
                 >
                 <Button
                     size="sm"
@@ -502,7 +525,7 @@
             @submit.prevent="decide('edit', editing)"
         >
             <p class="text-muted-foreground text-sm">
-                Save the wording you want to keep. It will return to pending approval before Publish.
+                Save and approve the wording you want to keep. You can publish it when you are ready.
             </p>
             <Label for="review-edited-value">Merged translation</Label>
             <Textarea

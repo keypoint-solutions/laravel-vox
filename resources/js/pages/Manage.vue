@@ -18,7 +18,7 @@
         Trash2,
         X,
     } from '@lucide/vue';
-    import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+    import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
     import type { SelectOption, ToggleOption } from '@/components/ui';
     import {
@@ -83,6 +83,8 @@
         updated_at: string | null;
         values_count: number;
         values: Record<string, string>;
+        published_overrides: Record<string, string | null>;
+        file_values: Record<string, string | null>;
         occurrences: OccurrenceItem[];
     }
 
@@ -171,6 +173,7 @@
     const editTranslation = ref<TranslationItem | null>(null);
     const editValues = ref<Record<string, string>>({});
     const isSaving = ref(false);
+    const usingApplicationLocale = ref<string | null>(null);
     const isTranslating = ref(false);
     const actionError = ref<string | null>(null);
     const toast = ref<{ message: string; tone: 'success' | 'error' } | null>(null);
@@ -323,7 +326,9 @@
             }
 
             editTranslation.value = updated;
-            editValues.value = buildEditValues(updated);
+            if (usingApplicationLocale.value === null) {
+                editValues.value = buildEditValues(updated);
+            }
         }
     );
 
@@ -715,6 +720,32 @@
                 onError: handleBulkError,
                 onSuccess: (successPage) => {
                     showToast((successPage.flash?.success as string | undefined) ?? 'Translation status updated.');
+                },
+            }
+        );
+    }
+
+    function useApplicationWording(locale: string): void {
+        if (!editTranslation.value || usingApplicationLocale.value !== null) {
+            return;
+        }
+
+        actionError.value = null;
+        usingApplicationLocale.value = locale;
+
+        router.post(
+            translationActionUrl(voxRoutes.value?.manage_translation_use_application, editTranslation.value.id),
+            { locale },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onError: handleError,
+                onSuccess: (successPage) => {
+                    showToast((successPage.flash?.success as string | undefined) ?? 'Application wording restored.');
+                },
+                onFinish: async () => {
+                    await nextTick();
+                    usingApplicationLocale.value = null;
                 },
             }
         );
@@ -1660,6 +1691,33 @@
                         AI
                     </Button>
                 </div>
+                <div
+                    v-if="editTranslation?.published_overrides?.[locale] != null"
+                    class="bg-muted/40 space-y-3 rounded-lg border p-3 text-sm"
+                >
+                    <div>
+                        <p class="text-muted-foreground text-xs font-medium">Live Vox override</p>
+                        <p class="mt-1 [overflow-wrap:anywhere] whitespace-pre-wrap">
+                            {{ editTranslation.published_overrides[locale] }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-muted-foreground text-xs font-medium">Application wording</p>
+                        <p class="mt-1 [overflow-wrap:anywhere] whitespace-pre-wrap">
+                            {{ editTranslation.file_values?.[locale] ?? 'No application value' }}
+                        </p>
+                    </div>
+                    <Button
+                        :data-test="`use-application-wording-${locale}`"
+                        :disabled="usingApplicationLocale !== null || isSaving || isTranslating"
+                        size="sm"
+                        variant="outline"
+                        @click="useApplicationWording(locale)"
+                    >
+                        {{ usingApplicationLocale === locale ? 'Restoring…' : 'Use application wording' }}
+                    </Button>
+                    <p class="text-muted-foreground text-xs">Removes this live override and keeps your draft.</p>
+                </div>
                 <Textarea
                     v-model="editValues[locale]"
                     :data-test="`translation-value-${locale}`"
@@ -1783,7 +1841,7 @@
                     Cancel
                 </Button>
                 <Button
-                    :disabled="isSaving || editTranslation?.is_ignored"
+                    :disabled="isSaving || usingApplicationLocale !== null || editTranslation?.is_ignored"
                     @click="saveEdit"
                 >
                     {{ isSaving ? 'Saving…' : 'Save changes' }}

@@ -106,6 +106,8 @@ class ManageTranslationController
                         'translation_id' => $translation->id,
                         'locale' => $locale,
                         'value' => is_string($value) ? $value : '',
+                        'is_pending_publish' => true,
+                        'is_approved' => false,
                         'is_obsolete' => false,
                     ]);
                 }
@@ -199,16 +201,10 @@ class ManageTranslationController
                 continue;
             }
 
-            VoxTranslationValue::query()->updateOrCreate(
-                [
-                    'translation_id' => $translation->id,
-                    'locale' => $locale,
-                ],
-                [
-                    'value' => is_string($value) ? $value : '',
-                    'is_obsolete' => false,
-                ]
-            );
+            VoxTranslationValue::query()->firstOrNew([
+                'translation_id' => $translation->id,
+                'locale' => $locale,
+            ])->saveDraft(is_string($value) ? $value : '');
         }
 
         $translation->touch();
@@ -244,6 +240,7 @@ class ManageTranslationController
         $status = $translation->status === 'approved' ? 'pending' : 'approved';
 
         $translation->timestamps = false;
+        $translation->values()->update(['is_approved' => $status === 'approved']);
         $translation->status = $status;
         $translation->save();
         $translation->timestamps = true;
@@ -276,6 +273,8 @@ class ManageTranslationController
             ->whereIn('id', $ids)
             ->toBase()
             ->update(['status' => $status]);
+
+        VoxTranslationValue::query()->whereIn('translation_id', $ids)->update(['is_approved' => $status === 'approved']);
 
         $action = $status === 'approved' ? 'translations-bulk-approved' : 'translations-bulk-reopened';
         $auditLogger->record($action, [
@@ -379,16 +378,10 @@ class ManageTranslationController
             ->transaction(function () use ($translated, $translatedIds, $translatedValueCount, $auditLogger): void {
                 foreach ($translated as $result) {
                     foreach ($result['values'] as $locale => $value) {
-                        VoxTranslationValue::query()->updateOrCreate(
-                            [
-                                'translation_id' => $result['translation']->id,
-                                'locale' => $locale,
-                            ],
-                            [
-                                'value' => $value,
-                                'is_obsolete' => false,
-                            ]
-                        );
+                        VoxTranslationValue::query()->firstOrNew([
+                            'translation_id' => $result['translation']->id,
+                            'locale' => $locale,
+                        ])->saveDraft($value);
                     }
 
                     $result['translation']->status = 'pending';

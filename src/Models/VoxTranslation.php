@@ -36,6 +36,15 @@ class VoxTranslation extends VoxModel
         return $this->hasMany(VoxTranslationValue::class, 'translation_id');
     }
 
+    public function refreshApproval(): void
+    {
+        $status = $this->values()->where('is_approved', false)->exists() ? 'pending' : 'approved';
+        if ($this->status !== $status) {
+            $this->status = $status;
+            $this->save();
+        }
+    }
+
     public function occurrences(): HasMany
     {
         return $this->hasMany(VoxTranslationOccurrence::class, 'translation_id');
