@@ -19,7 +19,7 @@ class RemoteTranslationSnapshot
     {
         $values = [];
 
-        foreach (VoxTranslation::query()->where('is_orphan', false)->with('values')->orderBy('id')->get() as $translation) {
+        foreach (VoxTranslation::query()->where('is_orphan', false)->with('values')->lazyById(100) as $translation) {
             foreach ($translation->values as $value) {
                 if ($value->is_obsolete) {
                     continue;
@@ -83,15 +83,18 @@ class RemoteTranslationSnapshot
     {
         $validated = Validator::make(['values' => $values], [
             'values' => ['present', 'array', 'max:100000'],
-            'values.*' => ['required', 'array:group,key,locale,value'],
-            'values.*.group' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z0-9][A-Za-z0-9_.-]*(?:::[A-Za-z0-9][A-Za-z0-9_.-]*)?$/D'],
-            'values.*.key' => ['required', 'string', 'max:255'],
-            'values.*.locale' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*$/D'],
-            'values.*.value' => ['present', 'string', 'max:1000000'],
         ])->validate()['values'];
         $seen = [];
 
         foreach ($validated as $value) {
+            Validator::make(['entry' => $value], [
+                'entry' => ['required', 'array:group,key,locale,value'],
+                'entry.group' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z0-9][A-Za-z0-9_.-]*(?:::[A-Za-z0-9][A-Za-z0-9_.-]*)?$/D'],
+                'entry.key' => ['required', 'string', 'max:255'],
+                'entry.locale' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*$/D'],
+                'entry.value' => ['present', 'string', 'max:1000000'],
+            ])->validate();
+
             if ($value['group'] === 'json' && str_contains($value['key'], '::')) {
                 $namespace = explode('::', $value['key'], 2)[0];
 

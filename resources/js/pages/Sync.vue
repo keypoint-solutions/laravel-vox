@@ -498,8 +498,8 @@
                 <div>
                     <h2 class="text-sm font-semibold">Remote environments</h2>
                     <p class="text-muted-foreground mt-1 text-xs">
-                        Pull published production or staging values for review. Pull drafts also includes unpublished
-                        wording. Last successful sync:
+                        Pull published production or staging values for review. Choose “Pull including drafts” to
+                        include unpublished wording. Last successful sync:
                         {{ formatDateTime(page.props.lastSyncAt, 'Not synced yet') }}
                     </p>
                 </div>
@@ -552,7 +552,7 @@
                         variant="ghost"
                         @click="pull(environment, true)"
                     >
-                        Pull drafts
+                        Pull including drafts
                     </Button>
                     <Tooltip text="Edit environment">
                         <Button

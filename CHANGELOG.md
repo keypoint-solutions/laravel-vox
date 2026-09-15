@@ -4,6 +4,11 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.5 — 2026-09-15
+
+- Reduce remote translation snapshot memory usage by loading translations in batches and validating entries individually.
+- Rename “Pull drafts” to “Pull including drafts” and clarify that unpublished wording is included.
+
 ## 1.0.4 — 2026-09-15
 
 - Clarify remote-server deployment steps, persistent storage requirements, command responsibilities, frontend build ordering, and retries.
