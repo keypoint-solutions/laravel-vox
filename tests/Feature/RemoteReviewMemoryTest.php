@@ -1,8 +1,11 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Models\VoxRemoteTranslation;
+use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
 use KeypointSolutions\LaravelVox\Translation\RemoteTranslationSnapshot;
 
@@ -27,6 +30,17 @@ it('renders a page of a large remote snapshot within bounded memory', function (
         VoxRemoteTranslation::query()->insert($entries);
     }
 
+    $retrieved = 0;
+    foreach ([VoxRemoteTranslation::class, VoxTranslation::class, VoxTranslationValue::class] as $model) {
+        $model::retrieved(function () use (&$retrieved): void {
+            $retrieved++;
+        });
+    }
+    $queries = 0;
+    DB::listen(function () use (&$queries): void {
+        $queries++;
+    });
+
     memory_reset_peak_usage();
     $baseline = memory_get_usage(true);
     $page = app(RemoteReconciliation::class)->page(['environment_id' => $environment->id]);
@@ -34,6 +48,8 @@ it('renders a page of a large remote snapshot within bounded memory', function (
 
     expect($page['total'])->toBe(50000)
         ->and($page['data'])->toHaveCount(25)
+        ->and($retrieved)->toBe(0)
+        ->and($queries)->toBeLessThan(10)
         ->and($extraMemory)->toBeLessThan(64 * 1024 * 1024);
 
     $lastPage = app(RemoteReconciliation::class)->page(['environment_id' => $environment->id], 99999);

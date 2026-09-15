@@ -22,13 +22,13 @@ class SyncPageController
             && ($driver !== 'openai' || filled(config('vox.translate.providers.openai.api_key')));
 
         return Inertia::render('Sync', [
-            'reconciliation' => $reconciliation->page([
+            'reconciliation' => fn (): array => $reconciliation->page([
                 'environment_id' => $request->integer('environment_id') ?: null,
                 'state' => $request->string('state')->toString(),
                 'locale' => $request->string('locale')->toString(),
                 'search' => $request->string('search')->toString(),
             ], $request->integer('review_page', 1), $request->integer('per_page', 25)),
-            'environments' => VoxEnvironment::query()
+            'environments' => fn (): array => VoxEnvironment::query()
                 ->orderBy('name')
                 ->get()
                 ->map(fn (VoxEnvironment $environment): array => [
@@ -42,7 +42,7 @@ class SyncPageController
                 ])
                 ->values()
                 ->all(),
-            'lastSyncAt' => VoxAudit::query()
+            'lastSyncAt' => fn (): ?string => VoxAudit::query()
                 ->whereIn('action', ['sync', 'sync-remote'])
                 ->latest('created_at')
                 ->first()?->created_at?->toIso8601String(),

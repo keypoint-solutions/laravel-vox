@@ -9,6 +9,7 @@ use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Models\VoxRemoteTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
+use KeypointSolutions\LaravelVox\Translation\RemoteTranslationSnapshot;
 use KeypointSolutions\LaravelVox\Translation\TranslationDatabaseSynchronizer;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
@@ -374,4 +375,74 @@ it('updates baselines when local wording catches up and counts real remote chang
     pullVoxValues($this, [incomingVoxValue('Remote edit')]);
     expect($candidate->fresh()->remote_present)->toBeTrue()
         ->and(VoxAudit::query()->where('action', 'sync-remote')->latest('id')->first()->context['changed'])->toBe(1);
+});
+
+it('keeps database states and review tokens consistent for exact wording and null baselines', function (): void {
+    $wordings = [null, '', 'Original', 'original', 'Original ', 'Été'];
+    $expected = [];
+    foreach ($wordings as $local) {
+        foreach (array_slice($wordings, 1) as $remote) {
+            foreach ([false, true] as $baseline) {
+                foreach ([null, 'Original'] as $base) {
+                    $key = 'comparison_'.count($expected);
+                    $translation = VoxTranslation::factory()->create(['group' => 'messages', 'key' => $key]);
+                    if ($local !== null) {
+                        $translation->values()->create(['locale' => 'en', 'value' => $local]);
+                    }
+                    $candidate = VoxRemoteTranslation::query()->create([
+                        'environment_id' => $this->environment->id,
+                        'identity' => RemoteTranslationSnapshot::identity('messages', $key, 'en'),
+                        'group' => 'messages', 'key' => $key, 'locale' => 'en',
+                        'remote_value' => $remote, 'remote_present' => true,
+                        'has_baseline' => $baseline, 'base_value' => $base, 'base_local_value' => $base,
+                    ]);
+                    $expected[$candidate->id] = $local === $remote ? 'reconciled'
+                        : (! $baseline ? ($local === null ? 'incoming' : 'conflict')
+                            : ($remote !== $base ? ($local !== $base ? 'conflict' : 'incoming')
+                                : ($local === $base ? 'kept' : 'outgoing')));
+                }
+            }
+        }
+    }
+    for ($number = 1; $number <= 2; $number++) {
+        $page = $this->reconciliation->page(['state' => 'all'], $number, 100);
+        foreach ($page['data'] as $row) {
+            expect($row['state'])->toBe($expected[$row['id']]);
+            if ($row['actionable']) {
+                expect($this->reconciliation->reviewCandidate($row['id'], $row['token']))->toBe($row);
+            }
+        }
+    }
+});
+
+it('preserves literal Unicode searches and filters before paginating', function (): void {
+    pullVoxValues($this, [incomingVoxValue('ÉTÉ 100%_done', 'special'), incomingVoxValue('Other', 'other')]);
+    foreach (['été', '%_', 'special Original'] as $search) {
+        $page = $this->reconciliation->page(['state' => 'all', 'search' => $search]);
+        expect($page['total'])->toBe($search === 'special Original' ? 0 : 1);
+    }
+});
+
+it('invalidates bulk decisions when the default reference or publication metadata changes', function (string $field): void {
+    config()->set('vox.translate.locales.values', ['en', 'fr']);
+    $this->translation->values()->create(['locale' => 'fr', 'value' => 'Local']);
+    pullVoxValues($this, [['group' => 'messages', 'key' => 'greeting', 'locale' => 'fr', 'value' => 'Remote']]);
+    $page = $this->reconciliation->page();
+    if ($field === 'default') {
+        $this->translation->values()->where('locale', 'en')->update(['value' => 'New reference']);
+    } else {
+        $this->translation->values()->where('locale', 'fr')->update([$field => $field === 'file_value' ? 'Changed file' : true]);
+    }
+    expect(fn () => $this->reconciliation->resolve([
+        'action' => 'keep', 'all_matching' => true, 'selection_token' => $page['selection_token'],
+    ]))->toThrow(ValidationException::class);
+})->with(['default', 'file_value', 'is_pending_publish']);
+
+it('uses the latest local JSON identity without duplicating a review row', function (): void {
+    VoxTranslation::factory()->withValues(['en' => 'Older'])->create(['group' => null, 'key' => 'JSON key']);
+    VoxTranslation::factory()->withValues(['en' => 'Latest'])->create(['group' => 'json', 'key' => 'JSON key']);
+    pullVoxValues($this, [['group' => 'json', 'key' => 'JSON key', 'locale' => 'en', 'value' => 'Remote']]);
+    $page = $this->reconciliation->page();
+    expect($page['total'])->toBe(1)->and($page['data'][0]['local_value'])->toBe('Latest');
+    expect($this->reconciliation->reviewCandidate($page['data'][0]['id'], $page['data'][0]['token']))->toBe($page['data'][0]);
 });

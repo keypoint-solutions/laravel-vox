@@ -124,3 +124,12 @@ it('provides a non-interactive deployment check that fails on unresolved incomin
     $this->artisan('vox:sync-remote', ['--environment' => $this->remote->id, '--check' => true, '--no-interaction' => true])
         ->assertSuccessful();
 });
+
+it('does not rebuild the review for unrelated partial Inertia requests', function (): void {
+    $this->mock(RemoteReconciliation::class)->shouldNotReceive('page');
+    $this->get('/vox/sync', [
+        'X-Inertia' => 'true',
+        'X-Inertia-Partial-Component' => 'Sync',
+        'X-Inertia-Partial-Data' => 'baseLocale',
+    ])->assertOk()->assertJsonPath('props.baseLocale', 'en')->assertJsonMissingPath('props.reconciliation');
+});

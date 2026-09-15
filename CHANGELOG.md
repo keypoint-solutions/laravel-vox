@@ -4,6 +4,12 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.11 — 2026-09-15
+
+- Query review states, counts, and pages without hydrating the entire translation snapshot; preserve stale-decision checks and limit individual reviews to selected candidates.
+- Skip rebuilding sync review data on unrelated partial Inertia requests, including deferred application counters.
+- Explain automatic frontend translation discovery in the feature overview, including group-based selection, JSON inclusion, and configuration for dynamic keys.
+
 ## 1.0.10 — 2026-09-15
 
 - Batch remote snapshot imports, including existing comparisons and local translations, to bound memory use during first and repeated pulls. Preserve atomic imports, baseline updates, and detection of disappeared values.

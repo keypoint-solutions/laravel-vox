@@ -38,12 +38,16 @@ Repeated unchanged syncs preserve resolved decisions. Stale review submissions a
 
 ### Choose how the frontend receives translations
 
+**Automatic discovery keeps frontend translation payloads focused.** Vox scans supported translation calls in JavaScript, TypeScript, and Vue to identify the PHP translation groups your frontend uses. It includes those groups in browser catalogues, helping avoid shipping unrelated backend wording and reducing translation payload size. Discovery updates as source files change during development and applies to both bundled and runtime delivery.
+
+Selection is group-based: it does not trim every unused key or load translations separately for each page. JSON translations are included in full. For dynamic keys that static scanning cannot resolve, you can explicitly configure the frontend groups to include.
+
 | Delivery    | When translations change                                                                                                    |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------- |
 | **Bundled** | Include discovered frontend groups in your JavaScript build; rebuild assets to distribute new wording.                      |
 | **Runtime** | Fetch generated catalogues from the server; refresh them through Publish or Compile **without rebuilding frontend assets**. |
 
-The Vue integration supports locale discovery, fallback, pluralization, and reactive translations. Frontend group discovery helps limit the PHP groups exposed to the browser. Runtime endpoints serve generated files with cache revalidation, without reading the Vox database.
+The Vue integration supports locale discovery, fallback, pluralization, and reactive translations. Runtime endpoints serve generated files with cache revalidation, without reading the Vox database.
 
 For custom build pipelines, the [`TranslationsPublished` event](#publication-events) lets your application queue its own asset rebuild after successful publication. Deployment reconciliation preserves published management overrides and unpublished drafts when fresh application files arrive.
 

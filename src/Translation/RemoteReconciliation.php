@@ -4,6 +4,8 @@ namespace KeypointSolutions\LaravelVox\Translation;
 
 use Generator;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -154,41 +156,22 @@ class RemoteReconciliation
     {
         $perPage = in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
         $filters = $this->filters($filters);
-        $page = max(1, $page);
-        $total = 0;
-        $data = [];
-        $lastPageData = [];
-        $counts = [];
-        $locales = [];
-        $actionableTokens = [];
-
-        foreach ($this->rowBatches($filters['environment_id']) as $rows) {
-            foreach ($rows as $row) {
-                $counts[$row['state']] = ($counts[$row['state']] ?? 0) + 1;
-                $locales[$row['locale']] = true;
-            }
-
-            foreach ($this->filterRows($rows, $filters) as $row) {
-                if ($total % $perPage === 0) {
-                    $lastPageData = [];
-                }
-                $lastPageData[] = $row;
-
-                if (intdiv($total, $perPage) + 1 === $page) {
-                    $data[] = $row;
-                }
-
-                if ($row['actionable']) {
-                    $actionableTokens[] = $row['token'];
-                }
-                $total++;
-            }
-        }
-
+        $availableLocales = $this->locales->resolveLocales();
+        $defaultLocale = $this->locales->resolveBaseLocale($availableLocales);
+        $availableLocales[] = $defaultLocale;
+        $query = $this->reviewQuery($filters['environment_id']);
+        $counts = (clone $query)->select('state')->selectRaw('COUNT(*) as aggregate')
+            ->groupBy('state')->pluck('aggregate', 'state')->map(fn ($count): int => (int) $count)->all();
+        $locales = (clone $query)->distinct()->pluck('locale')->all();
+        $filtered = $this->filterQuery(clone $query, $filters);
+        $total = (clone $filtered)->count();
         $lastPage = max(1, (int) ceil($total / $perPage));
-        if ($page > $lastPage) {
-            $page = $lastPage;
-            $data = $lastPageData;
+        $page = min(max(1, $page), $lastPage);
+        $data = (clone $filtered)->orderBy('id')->forPage($page, $perPage)->get()
+            ->map(fn (object $record): array => $this->reviewRow($record, $availableLocales, $defaultLocale))->all();
+        $actionableTokens = [];
+        foreach ((clone $filtered)->whereIn('state', ['incoming', 'conflict', 'outgoing'])->orderBy('id')->cursor() as $record) {
+            $actionableTokens[] = $this->reviewRow($record, $availableLocales, $defaultLocale)['token'];
         }
 
         return [
@@ -199,7 +182,7 @@ class RemoteReconciliation
             'per_page' => $perPage,
             'filters' => $filters,
             'counts' => $counts,
-            'locales' => $this->locales->sortLocales(array_keys($locales)),
+            'locales' => $this->locales->sortLocales($locales),
             'actionable_count' => count($actionableTokens),
             'selection_token' => $this->token($actionableTokens),
         ];
@@ -207,7 +190,7 @@ class RemoteReconciliation
 
     public function unresolvedCount(?int $environmentId = null): int
     {
-        return $this->rows($environmentId)->where('needs_review', true)->count();
+        return $this->reviewQuery($environmentId)->whereIn('state', ['incoming', 'conflict'])->count();
     }
 
     public function unpublishedCount(?int $environmentId = null): int
@@ -252,7 +235,7 @@ class RemoteReconciliation
     /** @return array<int, array<string, mixed>> */
     public function reviewCandidates(array $entries): array
     {
-        $rows = $this->rows()->keyBy('id');
+        $rows = $this->rows(ids: array_column($entries, 'id'))->keyBy('id');
         $selected = [];
         foreach ($entries as $entry) {
             $row = $rows->get($entry['id']);
@@ -273,7 +256,7 @@ class RemoteReconciliation
         return app(VoxMutationLock::class)->run(fn (): int => app(TranslationFileTransaction::class)->run(fn (): int => DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($decision): int {
             VoxEnvironment::query()->orderBy('id')->lockForUpdate()->get();
             $filters = $this->filters($decision['filters'] ?? []);
-            $rows = $this->rows($filters['environment_id'], true);
+            $rows = $this->rows($filters['environment_id'], true, ($decision['all_matching'] ?? false) ? null : array_column($decision['entries'] ?? [], 'id'));
 
             if ($decision['all_matching'] ?? false) {
                 $selected = $this->filterRows($rows, $filters)->where('actionable', true)->values();
@@ -412,10 +395,10 @@ class RemoteReconciliation
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function rows(?int $environmentId = null, bool $lock = false): Collection
+    private function rows(?int $environmentId = null, bool $lock = false, ?array $ids = null): Collection
     {
         $rows = collect();
-        foreach ($this->rowBatches($environmentId, $lock) as $batch) {
+        foreach ($this->rowBatches($environmentId, $lock, $ids) as $batch) {
             $rows = $rows->concat($batch);
         }
 
@@ -425,9 +408,12 @@ class RemoteReconciliation
     /**
      * @return Generator<int, Collection<int, array<string, mixed>>>
      */
-    private function rowBatches(?int $environmentId = null, bool $lock = false): Generator
+    private function rowBatches(?int $environmentId = null, bool $lock = false, ?array $ids = null): Generator
     {
         $query = VoxRemoteTranslation::query()->orderBy('id');
+        if ($ids !== null) {
+            $query->whereIntegerInRaw('id', $ids);
+        }
 
         if ($environmentId === -1) {
             $query->whereNull('environment_id');
@@ -480,6 +466,135 @@ class RemoteReconciliation
                 return $row;
             });
         }
+    }
+
+    /**
+     * Read comparisons without hydrating candidates or unrelated language values.
+     */
+    private function reviewQuery(?int $environmentId): Builder
+    {
+        $connection = DB::connection(config('vox.database.connection', 'vox'));
+        $grammar = $connection->getQueryGrammar();
+        $equal = function (string $left, string $right) use ($connection, $grammar): string {
+            $left = $grammar->wrap($left);
+            $right = $grammar->wrap($right);
+            $comparison = match ($connection->getDriverName()) {
+                'mysql', 'mariadb' => "CAST($left AS BINARY) = CAST($right AS BINARY)",
+                'pgsql' => "$left COLLATE \"C\" = $right COLLATE \"C\"",
+                default => "$left COLLATE BINARY = $right COLLATE BINARY",
+            };
+
+            return "(COALESCE(($comparison), FALSE) OR ($left IS NULL AND $right IS NULL))";
+        };
+        $sameRemote = $equal('v.value', 'r.remote_value');
+        $sameBase = $equal('r.remote_value', 'r.base_value');
+        $sameLocalBase = $equal('v.value', 'r.base_local_value');
+        $defaultLocale = $this->locales->resolveBaseLocale($this->locales->resolveLocales());
+        $query = $connection->table('vox_remote_translations as r')
+            ->leftJoin('vox_translations as t', function (JoinClause $join) use ($equal): void {
+                $join->on('t.key', '=', 'r.key')->whereRaw($equal('t.key', 'r.key'))
+                    ->where(function (Builder $query) use ($equal): void {
+                        $query->whereRaw($equal('t.group', 'r.group'))
+                            ->orWhere(function (Builder $query): void {
+                                $query->whereNull('t.group')->where('r.group', 'json');
+                            });
+                    })
+                    ->where('t.id', '=', function (Builder $query) use ($equal): void {
+                        $query->from('vox_translations as latest')->selectRaw('MAX(latest.id)')
+                            ->whereColumn('latest.key', 'r.key')->whereRaw($equal('latest.key', 'r.key'))
+                            ->where(function (Builder $query) use ($equal): void {
+                                $query->whereRaw($equal('latest.group', 'r.group'))
+                                    ->orWhere(function (Builder $query): void {
+                                        $query->whereNull('latest.group')->where('r.group', 'json');
+                                    });
+                            });
+                    });
+            })
+            ->leftJoin('vox_translation_values as v', function (JoinClause $join) use ($equal): void {
+                $join->on('v.translation_id', '=', 't.id')->on('v.locale', '=', 'r.locale')
+                    ->whereRaw($equal('v.locale', 'r.locale'));
+            })
+            ->leftJoin('vox_translation_values as d', function (JoinClause $join) use ($defaultLocale): void {
+                $join->on('d.translation_id', '=', 't.id')->where('d.locale', $defaultLocale);
+            })
+            ->select([
+                'r.*', 'v.value as local_value', 'd.value as default_value', 't.id as translation_id',
+                't.is_orphan', 't.status', 'v.is_obsolete', 'v.is_pending_publish', 'v.is_approved',
+                'v.file_value', 'v.published_override',
+            ])
+            ->selectRaw("CASE
+                WHEN r.remote_present = FALSE THEN 'unavailable'
+                WHEN $sameRemote THEN 'reconciled'
+                WHEN r.has_baseline = FALSE THEN CASE WHEN v.value IS NULL THEN 'incoming' ELSE 'conflict' END
+                WHEN NOT $sameBase THEN CASE WHEN $sameLocalBase THEN 'incoming' ELSE 'conflict' END
+                WHEN $sameLocalBase THEN 'kept'
+                ELSE 'outgoing' END as state");
+        if ($environmentId === -1) {
+            $query->whereNull('r.environment_id');
+        } elseif ($environmentId !== null) {
+            $query->where('r.environment_id', $environmentId);
+        }
+
+        return $connection->query()->fromSub($query, 'review');
+    }
+
+    private function filterQuery(Builder $query, array $filters): Builder
+    {
+        if ($filters['state'] === 'review') {
+            $query->whereIn('state', ['incoming', 'conflict']);
+        } elseif ($filters['state'] !== 'all') {
+            $query->where('state', $filters['state']);
+        }
+        if ($filters['locale'] !== '') {
+            $query->where('locale', $filters['locale']);
+        }
+        if ($filters['search'] !== '') {
+            // Preserve Unicode case folding and literal substring matching across database drivers.
+            $ids = [];
+            foreach ((clone $query)->select(['id', 'group', 'key', 'local_value', 'remote_value'])->cursor() as $row) {
+                if (mb_stripos(implode(' ', [$row->group, $row->key, $row->local_value, $row->remote_value]), $filters['search']) !== false) {
+                    $ids[] = (int) $row->id;
+                }
+            }
+            $query->whereIntegerInRaw('id', $ids);
+        }
+
+        return $query;
+    }
+
+    /** @return array<string, mixed> */
+    private function reviewRow(object $record, array $locales, string $defaultLocale): array
+    {
+        $row = [
+            'id' => (int) $record->id,
+            'environment_id' => $record->environment_id === null ? null : (int) $record->environment_id,
+            'group' => $record->group,
+            'key' => $record->key,
+            'locale' => $record->locale,
+            'local_value' => $record->local_value,
+            'default_locale' => $defaultLocale,
+            'default_value' => $record->default_value,
+            'remote_value' => $record->remote_value,
+            'last_seen_value' => $record->last_seen_value,
+            'base_value' => $record->base_value,
+            'base_local_value' => $record->base_local_value,
+            'has_baseline' => (bool) $record->has_baseline,
+            'state' => $record->state,
+            'needs_review' => in_array($record->state, ['incoming', 'conflict'], true),
+            'actionable' => in_array($record->state, ['incoming', 'conflict', 'outgoing'], true),
+            'locale_available' => in_array($record->locale, $locales, true),
+            'translation_id' => $record->translation_id === null ? null : (int) $record->translation_id,
+            'is_orphan' => (bool) $record->is_orphan,
+            'pending_publish' => (bool) $record->is_pending_publish,
+            'revision' => (int) $record->revision,
+        ];
+        $row['token'] = $this->token([$row, $record->status,
+            $record->is_obsolete === null ? null : (bool) $record->is_obsolete,
+            $record->is_pending_publish === null ? null : (bool) $record->is_pending_publish,
+            $record->is_approved === null ? null : (bool) $record->is_approved,
+            $record->file_value, $record->published_override]);
+
+        return $row;
     }
 
     private function state(VoxRemoteTranslation $candidate, ?string $local): string
