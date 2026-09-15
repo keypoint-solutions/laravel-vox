@@ -90,7 +90,7 @@ class RemoteTranslationSnapshot
             Validator::make(['entry' => $value], [
                 'entry' => ['required', 'array:group,key,locale,value'],
                 'entry.group' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z0-9][A-Za-z0-9_.-]*(?:::[A-Za-z0-9][A-Za-z0-9_.-]*)?$/D'],
-                'entry.key' => ['required', 'string', 'max:255'],
+                'entry.key' => ['required', 'string'],
                 'entry.locale' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*$/D'],
                 'entry.value' => ['present', 'string', 'max:1000000'],
             ])->validate();

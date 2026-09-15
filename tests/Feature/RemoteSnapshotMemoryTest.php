@@ -58,3 +58,16 @@ it('rejects duplicate identities across a snapshot', function (): void {
 
     app(RemoteTranslationSnapshot::class)->validate([$entry, $entry]);
 })->throws(ValidationException::class);
+
+it('exports long translation keys without truncating their identity', function (): void {
+    $key = str_repeat('Long translation key ', 25);
+    $translation = VoxTranslation::factory()->create(['group' => 'labels', 'key' => $key]);
+    $translation->values()->create([
+        'locale' => 'en', 'value' => 'Draft wording', 'file_value' => 'Published wording',
+    ]);
+
+    $snapshot = app(RemoteTranslationSnapshot::class);
+
+    expect($snapshot->export()['values'][0]['key'])->toBe($key)
+        ->and($snapshot->export(true)['values'][0]['key'])->toBe($key);
+});

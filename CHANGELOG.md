@@ -4,6 +4,10 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.6 — 2026-09-15
+
+- Allow remote snapshots to preserve translation keys longer than 255 characters instead of rejecting the export with HTTP 422.
+
 ## 1.0.5 — 2026-09-15
 
 - Reduce remote translation snapshot memory usage by loading translations in batches and validating entries individually.
