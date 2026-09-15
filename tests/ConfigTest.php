@@ -73,12 +73,12 @@ it('uses a brief prompt with immutable Laravel value safeguards', function (): v
         ->not->toContain(':text');
 });
 
-it('keeps runtime frontend delivery opt in', function (): void {
+it('enables runtime frontend delivery by default', function (): void {
     $config = require __DIR__.'/../config/vox.php';
 
     expect($config['frontend']['runtime'])
         ->toMatchArray([
-            'enabled' => false,
+            'enabled' => true,
             'middleware' => [],
         ])
         ->and($config['frontend']['runtime']['path'])

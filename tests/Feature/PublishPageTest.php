@@ -145,7 +145,7 @@ it('publishes complete dynamic values while leaving orphans untouched', function
     $this->from('/vox/publish')
         ->post('/vox/publish')
         ->assertRedirect('/vox/publish')
-        ->assertInertiaFlash('success', 'Published 6 translation values across 4 files.');
+        ->assertInertiaFlash('success', 'Published 6 translation values across 4 files. Refreshed 2 frontend locale bundles.');
 
     $english = require $this->publishLangPath.'/en/messages.php';
     $englishJson = json_decode(File::get($this->publishLangPath.'/en.json'), true);
@@ -181,7 +181,7 @@ it('publishes approved complete values without overwriting pending values', func
     $this->from('/vox/publish')
         ->post('/vox/publish')
         ->assertRedirect('/vox/publish')
-        ->assertInertiaFlash('success', 'Published 5 translation values across 4 files.');
+        ->assertInertiaFlash('success', 'Published 5 translation values across 4 files. Refreshed 2 frontend locale bundles.');
 
     $english = require $this->publishLangPath.'/en/messages.php';
     $french = require $this->publishLangPath.'/fr/messages.php';

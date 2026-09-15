@@ -26,7 +26,7 @@ return [
         ],
         'manifest' => storage_path('vox/frontend.json'),
         'runtime' => [
-            'enabled' => env('VOX_FRONTEND_RUNTIME_ENABLED', false),
+            'enabled' => env('VOX_FRONTEND_RUNTIME_ENABLED', true),
             'path' => storage_path('vox/frontend-translations'),
             'middleware' => [],
         ],

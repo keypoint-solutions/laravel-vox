@@ -114,7 +114,7 @@ test('a real Vite build emits separate PHP locale chunks and retains JSON transl
     write('lang/en.json', '{"Welcome":"Welcome"}');
     write('main.js', "export { loadVoxLocale } from 'virtual:laravel-vox/translations';");
     const result = await build({
-        configFile: false, root, logLevel: 'silent', plugins: vox({ frontendGroups: ['*'] }),
+        configFile: false, root, logLevel: 'silent', plugins: vox({ runtime: false, frontendGroups: ['*'] }),
         build: { write: false, minify: false, rolldownOptions: { input: resolve(root, 'main.js'), preserveEntrySignatures: 'strict' } },
     });
     const chunks = result.output.filter(item => item.type === 'chunk');
@@ -129,7 +129,7 @@ test('Vite dev server sends accepted translation updates without a page reload',
     const { root, write } = fixture(t);
     write('main.js', "import { createVox } from '@laravel-vox/vue.js'; window.createVox = createVox;");
     const server = await createServer({
-        configFile: false, root, logLevel: 'silent', plugins: vox({ frontendGroups: ['*'] }),
+        configFile: false, root, logLevel: 'silent', plugins: vox({ runtime: false, frontendGroups: ['*'] }),
         server: { middlewareMode: true, hmr: true, ws: false, watch: null },
         optimizeDeps: { noDiscovery: true, include: [] },
     });
@@ -184,7 +184,7 @@ test('runtime mode resolves the existing Vue entry to runtime delivery without b
 });
 
 for (const scenario of [
-    { name: 'unset', value: undefined, expected: false },
+    { name: 'unset', value: undefined, expected: true },
     { name: 'enabled', value: 'true', expected: true },
     { name: 'disabled', value: 'false', expected: false },
     { name: 'explicit bundled override', value: 'true', runtime: false, expected: false },

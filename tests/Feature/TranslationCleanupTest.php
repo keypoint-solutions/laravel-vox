@@ -18,6 +18,7 @@ beforeEach(function (): void {
     app()->detectEnvironment(fn () => 'local');
     config()->set('vox.system.bypass_auth_in_local', true);
     prepareVoxFixtures();
+    config()->set('vox.frontend.runtime.enabled', false);
     config()->set('vox.frontend.runtime.path', $this->fixtureRoot.'/runtime');
 });
 

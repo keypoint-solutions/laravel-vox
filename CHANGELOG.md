@@ -4,6 +4,11 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.1 — 2026-09-15
+
+- Enable frontend runtime translation delivery by default in PHP and the Vite plugin. Set `VOX_FRONTEND_RUNTIME_ENABLED=false` to retain bundled delivery.
+- Existing published configuration is not overwritten: align its runtime setting with Vite, then restart Vite or rebuild when changing delivery modes.
+
 ## 1.0.0 — 2026-09-15
 
 Initial public release for Laravel 12 and 13.

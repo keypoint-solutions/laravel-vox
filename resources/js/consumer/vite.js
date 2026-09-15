@@ -20,7 +20,7 @@ function runtimeEnabled(options, config, environment) {
         config.envDir === false
             ? process.env
             : loadEnv(environment.mode, resolve(root, config.envDir ?? '.'), 'VOX_FRONTEND_RUNTIME_ENABLED');
-    return ['true', '(true)', '1'].includes((variables.VOX_FRONTEND_RUNTIME_ENABLED ?? '').toLowerCase());
+    return ['true', '(true)', '1'].includes((variables.VOX_FRONTEND_RUNTIME_ENABLED ?? 'true').toLowerCase());
 }
 const resolvedPhpModulePrefix = `\0${phpModulePrefix}`;
 

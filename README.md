@@ -249,12 +249,14 @@ Use `@keypoint-solutions/laravel-vox/vite` for the plugin and `@keypoint-solutio
 
 ### Delivery and exposed groups
 
-| Mode    | Configuration                       | After publishing                                                                          |
-| ------- | ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| Bundled | Default                             | Rebuild and deploy the application frontend                                               |
-| Runtime | `VOX_FRONTEND_RUNTIME_ENABLED=true` | Generated JSON is served without a frontend rebuild; reload already-open production pages |
+**By default, frontend translations are served from the server at runtime**, rather than included in the JavaScript build. Publishing translations does not require rebuilding the frontend; reload an already-open production page to load the updated wording. Vite hot reload updates translations during development.
 
-With Composer integration, `vox()` selects the matching `@laravel-vox/vue.js` implementation from that environment setting. Restart Vite or rebuild when changing modes; keep build and server settings aligned. Explicit `vox({ runtime: true })` affects Vite only.
+| Mode    | Configuration                                 | After publishing                                                                          |
+| ------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Bundled | `VOX_FRONTEND_RUNTIME_ENABLED=false`          | Rebuild and deploy the application frontend                                               |
+| Runtime | Default (`VOX_FRONTEND_RUNTIME_ENABLED=true`) | Generated JSON is served without a frontend rebuild; reload already-open production pages |
+
+With Composer integration, `vox()` selects the matching `@laravel-vox/vue.js` implementation from that environment setting. Restart Vite or rebuild when changing modes; keep build and server settings aligned. Explicit `vox({ runtime: true })` affects Vite only. Existing published `config/vox.php` files are not overwritten by upgrades: change their runtime default to `true` or set `VOX_FRONTEND_RUNTIME_ENABLED=true` to opt in.
 
 PHP groups are selected automatically from frontend calls. Selection includes the **whole group**, not individual keys. JSON translations are included. To expose runtime-only PHP groups, configure the complete list:
 

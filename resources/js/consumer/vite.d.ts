@@ -1,7 +1,7 @@
 import type { PluginOption } from 'vite';
 
 export interface LaravelVoxViteOptions {
-    /** Defaults to VOX_FRONTEND_RUNTIME_ENABLED from Vite's environment. Explicit values override it. */
+    /** Defaults to VOX_FRONTEND_RUNTIME_ENABLED from Vite's environment, or true when unset. Explicit values override it. */
     runtime?: boolean;
     /** Refresh frontend groups before builds and after source edits when Artisan exists at Vite's root. Defaults to true. */
     frontendDiscovery?: boolean;
