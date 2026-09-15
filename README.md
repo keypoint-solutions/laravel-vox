@@ -1,5 +1,9 @@
 # Laravel Vox
 
+[![Latest version](https://img.shields.io/github/v/tag/keypoint-solutions/laravel-vox?label=version)](https://github.com/keypoint-solutions/laravel-vox/tags)
+[![Tests](https://github.com/keypoint-solutions/laravel-vox/actions/workflows/run-tests.yml/badge.svg?branch=main)](https://github.com/keypoint-solutions/laravel-vox/actions/workflows/run-tests.yml)
+[![License](https://img.shields.io/github/license/keypoint-solutions/laravel-vox)](LICENSE.md)
+
 Laravel Vox brings source discovery, AI translation, remote review, and controlled publishing to Laravel, with a dedicated management UI and optional Vue integration.
 
 **Your Laravel translation files remain the source of truth for the running application.** Vox uses a separate database for drafts, approvals, and review history. Publish writes approved wording back to files; normal translation lookups never query the Vox database.
