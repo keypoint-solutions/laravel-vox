@@ -4,6 +4,10 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.10 — 2026-09-15
+
+- Batch remote snapshot imports, including existing comparisons and local translations, to bound memory use during first and repeated pulls. Preserve atomic imports, baseline updates, and detection of disappeared values.
+
 ## 1.0.9 — 2026-09-15
 
 - Skip unchanged remote comparison writes and revision bumps, preserving open reviews across identical pulls. Pull audits now include checked and changed counts; baseline and availability changes still update comparison records.

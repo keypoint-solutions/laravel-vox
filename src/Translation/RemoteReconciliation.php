@@ -39,54 +39,63 @@ class RemoteReconciliation
                 $this->stale();
             }
 
-            $existing = VoxRemoteTranslation::query()->where('environment_id', $environment->id)
-                ->orderBy('id')->lockForUpdate()->get()->keyBy('identity');
-            $local = $this->localTranslations(array_column($values, 'key'), true);
             $seen = [];
             $changed = 0;
 
-            foreach ($values as $value) {
-                $identity = RemoteTranslationSnapshot::identity($value['group'], $value['key'], $value['locale']);
-                $candidate = $existing->get($identity) ?? new VoxRemoteTranslation([
-                    'environment_id' => $environment->id,
-                    'identity' => $identity,
-                    'group' => $value['group'],
-                    'key' => $value['key'],
-                    'locale' => $value['locale'],
-                    'has_baseline' => false,
-                    'revision' => 0,
-                ]);
-                $translation = $local[RemoteTranslationSnapshot::identity($value['group'], $value['key'])] ?? null;
-                $localValue = $translation?->values->firstWhere('locale', $value['locale'])?->value;
+            foreach (array_chunk($values, 500) as $batch) {
+                $identities = array_map(
+                    fn (array $value): string => RemoteTranslationSnapshot::identity($value['group'], $value['key'], $value['locale']),
+                    $batch
+                );
+                $existing = VoxRemoteTranslation::query()->where('environment_id', $environment->id)
+                    ->whereIn('identity', $identities)->orderBy('id')->lockForUpdate()->get()->keyBy('identity');
+                $local = $this->localTranslations(array_column($batch, 'key'), true);
 
-                if ($candidate->exists && $candidate->remote_present && $localValue === $candidate->remote_value) {
-                    $candidate->base_value = $localValue;
-                    $candidate->base_local_value = $localValue;
-                    $candidate->has_baseline = true;
-                }
+                foreach ($batch as $value) {
+                    $identity = RemoteTranslationSnapshot::identity($value['group'], $value['key'], $value['locale']);
+                    $candidate = $existing->get($identity) ?? new VoxRemoteTranslation([
+                        'environment_id' => $environment->id,
+                        'identity' => $identity,
+                        'group' => $value['group'],
+                        'key' => $value['key'],
+                        'locale' => $value['locale'],
+                        'has_baseline' => false,
+                        'revision' => 0,
+                    ]);
+                    $translation = $local[RemoteTranslationSnapshot::identity($value['group'], $value['key'])] ?? null;
+                    $localValue = $translation?->values->firstWhere('locale', $value['locale'])?->value;
 
-                if ($candidate->exists && $candidate->remote_value !== $value['value']) {
-                    $candidate->last_seen_value = $candidate->remote_value;
-                }
-                $candidate->remote_value = $value['value'];
-                $candidate->remote_present = true;
+                    if ($candidate->exists && $candidate->remote_present && $localValue === $candidate->remote_value) {
+                        $candidate->base_value = $localValue;
+                        $candidate->base_local_value = $localValue;
+                        $candidate->has_baseline = true;
+                    }
 
-                if ($localValue === $value['value']) {
-                    $candidate->base_value = $localValue;
-                    $candidate->base_local_value = $localValue;
-                    $candidate->has_baseline = true;
-                }
+                    if ($candidate->exists && $candidate->remote_value !== $value['value']) {
+                        $candidate->last_seen_value = $candidate->remote_value;
+                    }
+                    $candidate->remote_value = $value['value'];
+                    $candidate->remote_present = true;
 
-                if (! $candidate->exists || $candidate->isDirty()) {
-                    $candidate->revision++;
-                    $candidate->save();
-                    $changed++;
+                    if ($localValue === $value['value']) {
+                        $candidate->base_value = $localValue;
+                        $candidate->base_local_value = $localValue;
+                        $candidate->has_baseline = true;
+                    }
+
+                    if (! $candidate->exists || $candidate->isDirty()) {
+                        $candidate->revision++;
+                        $candidate->save();
+                        $changed++;
+                    }
+                    $seen[$identity] = true;
                 }
-                $seen[$identity] = true;
             }
 
-            foreach ($existing as $identity => $candidate) {
-                if (! isset($seen[$identity]) && $candidate->remote_present) {
+            $remaining = VoxRemoteTranslation::query()->where('environment_id', $environment->id)
+                ->where('remote_present', true)->lockForUpdate()->lazyById(500);
+            foreach ($remaining as $candidate) {
+                if (! isset($seen[$candidate->identity])) {
                     $candidate->remote_present = false;
                     $candidate->revision++;
                     $candidate->save();

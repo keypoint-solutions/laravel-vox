@@ -1,5 +1,6 @@
 <?php
 
+use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Models\VoxRemoteTranslation;
 use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
@@ -48,4 +49,52 @@ it('renders a page of a large remote snapshot within bounded memory', function (
         ->and($filtered['data'][0]['key'])->toBe('key_49999')
         ->and($filtered['counts']['incoming'])->toBe(50000)
         ->and($filtered['actionable_count'])->toBe(1);
+});
+
+it('repeats a large pull without loading every existing comparison into memory', function (): void {
+    $environment = VoxEnvironment::query()->create([
+        'name' => 'Staging', 'type' => 'staging', 'url' => 'https://staging.example.test', 'secret_key' => 'test',
+    ]);
+    $values = [];
+    for ($batch = 0; $batch < 100; $batch++) {
+        $entries = [];
+        for ($index = 0; $index < 500; $index++) {
+            $key = 'key_'.($batch * 500 + $index);
+            $values[] = ['group' => 'messages', 'key' => $key, 'locale' => 'en', 'value' => 'Remote wording'];
+            $entries[] = [
+                'environment_id' => $environment->id,
+                'identity' => RemoteTranslationSnapshot::identity('messages', $key, 'en'),
+                'group' => 'messages', 'key' => $key, 'locale' => 'en', 'remote_value' => 'Remote wording',
+            ];
+        }
+        VoxRemoteTranslation::query()->insert($entries);
+    }
+
+    memory_reset_peak_usage();
+    $baseline = memory_get_usage(true);
+    $count = app(RemoteReconciliation::class)->ingest($environment, $values);
+    $extraMemory = memory_get_peak_usage(true) - $baseline;
+
+    expect($count)->toBe(50000)->and($extraMemory)->toBeLessThan(64 * 1024 * 1024);
+    expect(VoxAudit::query()->where('action', 'sync-remote')->latest('id')->first()->context['changed'])->toBe(0);
+});
+
+it('imports a new large snapshot and marks missing values across batches', function (): void {
+    $environment = VoxEnvironment::query()->create([
+        'name' => 'Staging', 'type' => 'staging', 'url' => 'https://staging.example.test', 'secret_key' => 'test',
+    ]);
+    $values = [];
+    for ($index = 0; $index < 50000; $index++) {
+        $values[] = ['group' => 'messages', 'key' => 'key_'.$index, 'locale' => 'en', 'value' => 'Remote wording'];
+    }
+
+    memory_reset_peak_usage();
+    $baseline = memory_get_usage(true);
+    $count = app(RemoteReconciliation::class)->ingest($environment, $values);
+    $extraMemory = memory_get_peak_usage(true) - $baseline;
+    expect($count)->toBe(50000)->and($extraMemory)->toBeLessThan(64 * 1024 * 1024);
+
+    app(RemoteReconciliation::class)->ingest($environment->fresh(), array_slice($values, 1100));
+    expect(VoxRemoteTranslation::query()->where('remote_present', false)->count())->toBe(1100)
+        ->and(VoxAudit::query()->where('action', 'sync-remote')->latest('id')->first()->context['changed'])->toBe(1100);
 });
