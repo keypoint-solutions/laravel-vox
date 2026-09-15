@@ -6,8 +6,7 @@ Laravel Vox discovers translation keys, reviews translations in a dedicated data
 
 ## Requirements
 
-- PHP 8.2+ (8.x) and Laravel 11, 12, or 13.
-- Inertia Laravel 2 or 3 for the management UI (installed through Composer).
+- PHP 8.2+ (8.x) and Laravel 12 or 13.
 - PDO SQLite for the default Vox database, or an application-configured database connection.
 - PHP Zip extension for translation archives and legacy ZIP synchronization.
 - Optional Vue integration: Vue 3.5+, Vite 8 for bundling/development, and a Node.js version supported by Vite.
@@ -20,6 +19,8 @@ composer require keypoint-solutions/laravel-vox
 php artisan vendor:publish --tag=vox-config
 php artisan vox:setup
 ```
+
+Composer automatically installs Inertia Laravel and the other PHP dependencies. Your application does not need its own Inertia setup.
 
 Setup creates `storage/vox/vox.sqlite` when needed, runs package migrations, and publishes the prebuilt manager assets. Open `/vox` in your application. The manager itself needs no application Vite integration.
 

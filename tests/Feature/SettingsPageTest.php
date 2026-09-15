@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Foundation\Auth\User;
-use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia;
@@ -9,7 +8,7 @@ use KeypointSolutions\LaravelVox\Models\VoxSetting;
 
 beforeEach(function (): void {
     $this->withoutVite();
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
     app()->detectEnvironment(fn () => 'local');
     config()->set('vox.system.bypass_auth_in_local', true);
     config()->set('vox.translate.providers.openai.api_key', 'test-key');

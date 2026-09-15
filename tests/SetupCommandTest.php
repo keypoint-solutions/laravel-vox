@@ -82,3 +82,12 @@ it('reports an unconfigured connection without creating files', function (): voi
 
     expect(File::exists($this->fixtureRoot))->toBeFalse();
 });
+
+it('keeps application migrations separate from Vox setup', function (): void {
+    $this->artisan('vox:setup', ['--force' => true])->assertSuccessful();
+    $migrations = DB::connection('vox_setup')->table('migrations')->count();
+
+    $this->artisan('migrate', ['--force' => true])->assertSuccessful();
+
+    expect(DB::connection('vox_setup')->table('migrations')->count())->toBe($migrations);
+});

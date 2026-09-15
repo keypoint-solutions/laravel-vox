@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -126,7 +125,7 @@ it('marks and filters dynamic and orphan translations separately', function (): 
 });
 
 it('creates concrete values covered by a dynamic pattern', function (): void {
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
     config()->set('vox.retained_keys', ['enums.user_roles.*']);
 
     $this->from('/vox/manage')
@@ -158,7 +157,7 @@ it('creates concrete values covered by a dynamic pattern', function (): void {
 });
 
 it('rejects dynamic values outside the selected pattern and duplicate keys', function (): void {
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
     config()->set('vox.retained_keys', ['enums.user_roles.*']);
 
     $this->from('/vox/manage')
@@ -236,7 +235,7 @@ it('uses the configured missing translation prefix', function (): void {
 });
 
 it('toggles approval without making translation content appear freshly updated', function (): void {
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
 
     $contentUpdatedAt = Carbon::now()->subDays(3)->startOfSecond();
     $translation = VoxTranslation::factory()
@@ -261,7 +260,7 @@ it('toggles approval without making translation content appear freshly updated',
 });
 
 it('bulk approves translations without changing their content timestamps', function (): void {
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
 
     $contentUpdatedAt = Carbon::now()->subDays(3)->startOfSecond();
     $translations = VoxTranslation::factory()
@@ -291,7 +290,7 @@ it('bulk approves translations without changing their content timestamps', funct
 });
 
 it('bulk translates only missing target values and returns affected translations to review', function (): void {
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
 
     config()->set('vox.translate.driver', 'openai');
     config()->set('vox.translate.providers.openai.api_key', 'test-key');
@@ -360,7 +359,7 @@ it('bulk translates only missing target values and returns affected translations
 });
 
 it('does not persist partial bulk translations when the AI provider fails', function (): void {
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
 
     config()->set('vox.translate.driver', 'openai');
     config()->set('vox.translate.providers.openai.api_key', 'test-key');
@@ -403,7 +402,7 @@ it('does not persist partial bulk translations when the AI provider fails', func
 });
 
 it('protects Laravel placeholders when translating from the management UI', function (): void {
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
 
     config()->set('vox.translate.driver', 'openai');
     config()->set('vox.translate.providers.openai.api_key', 'test-key');
@@ -440,7 +439,7 @@ it('protects Laravel placeholders when translating from the management UI', func
 });
 
 it('AI translates draft dynamic values before creating the translation', function (): void {
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
 
     config()->set('vox.translate.driver', LocaleProvisionTranslationDriver::class);
 
@@ -457,7 +456,7 @@ it('AI translates draft dynamic values before creating the translation', functio
 });
 
 it('returns a success flash after saving translation values', function (): void {
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
 
     $translation = VoxTranslation::factory()
         ->withValues(['en' => 'Hello', 'fr' => 'Bonjour'])
@@ -566,7 +565,7 @@ it('separates empty default wording from missing translations and counts groups 
 });
 
 it('skips unusable sources in bulk AI translation using the shared eligibility rules', function (): void {
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
     config()->set('vox.translate.driver', 'openai');
     config()->set('vox.translate.providers.openai.api_key', 'test-key');
     config()->set('vox.parse.missing_translation_prefix', 'TODO:');

@@ -3,6 +3,7 @@
 use KeypointSolutions\LaravelVox\Translation\FrontendTranslationArtifacts;
 
 beforeEach(function (): void {
+    config()->set('vox.translate.base_locale', 'en');
     app(FrontendTranslationArtifacts::class)->publish();
 });
 
@@ -47,6 +48,7 @@ it('renders Laravel translations in Blade for every demo locale', function (): v
 
 it('loads filtered Laravel translations from the runtime endpoint through the public Vue integration', function (): void {
     visit('/fr/vue')
+        ->assertNoJavaScriptErrors()
         ->assertSee('Vue consumer')
         ->assertSee('Traduction régulière')
         ->assertSeeIn('[data-test="php-translation"]', 'Fonctionne.')

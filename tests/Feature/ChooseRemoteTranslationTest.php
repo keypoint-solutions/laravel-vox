@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Http;
 use KeypointSolutions\LaravelVox\Database\Factories\VoxTranslationFactory;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
@@ -10,7 +9,7 @@ use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
 
 beforeEach(function (): void {
     $this->withoutVite();
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
     app()->detectEnvironment(fn () => 'local');
     config()->set('vox.system.bypass_auth_in_local', true);
     config()->set('vox.translate.driver', 'openai');

@@ -30,7 +30,7 @@ it('publishes complete approved values and reports success', function (): void {
 
     visit('/vox/publish')
         ->assertSee('Publish approved translations')
-        ->pressAndWaitFor('Publish approved')
+        ->pressAndWaitFor('Publish translations')
         ->assertSee('Published 2 translation values across 2 files.')
         ->assertNoJavaScriptErrors();
 

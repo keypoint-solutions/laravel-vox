@@ -154,9 +154,9 @@ it('pulls production candidates and accepts them without changing local files be
 
     $page = visit('/vox/sync')
         ->assertSee('Browser production')
-        ->pressAndWaitFor('Pull now')
+        ->pressAndWaitFor('Pull published')
         ->assertSee('Local translations and files were not changed')
-        ->assertSee('Review remote changes')
+        ->assertSee('Incoming translations')
         ->assertSee('Local stale value')
         ->assertSee('Production value')
         ->assertNoJavaScriptErrors();
@@ -170,13 +170,13 @@ it('pulls production candidates and accepts them without changing local files be
     $page->click('[data-test="review-select-all"]')
         ->assertSee('2 selected across all pages')
         ->click('[data-test="review-bulk-accept"]')
-        ->assertSee('Accepted 2 values into pending review')
-        ->assertSee('No remote changes match these filters')
+        ->assertSee('Accepted and approved 2 values')
+        ->assertSee('No incoming changes match these filters')
         ->assertNoJavaScriptErrors();
 
     expect((require lang_path('en/vox_browser_sync.php'))['message'])->toBe('Local stale value')
         ->and($translation->values()->where('locale', 'en')->first()->value)->toBe('Production value')
-        ->and($translation->fresh()->status)->toBe('pending');
+        ->and($translation->fresh()->status)->toBe('approved');
 });
 
 it('filters expected changes and accepts every matching value across pages without accepting conflicts', function (): void {
@@ -194,8 +194,8 @@ it('filters expected changes and accepts every matching value across pages witho
     $values[] = ['group' => 'bulk_review', 'key' => 'conflict', 'locale' => 'en', 'value' => 'Remote conflict'];
     app(RemoteReconciliation::class)->ingest($environment, $values);
 
-    visit('/vox/sync')
-        ->assertSee('Review remote changes')
+    visit('/vox/sync?per_page=50')
+        ->assertSee('Incoming translations')
         ->select('#review-state', 'incoming')
         ->pressAndWaitFor('Filter changes')
         ->assertSee('65 values')
@@ -203,7 +203,7 @@ it('filters expected changes and accepts every matching value across pages witho
         ->click('[data-test="review-select-all"]')
         ->assertSee('65 selected across all pages')
         ->click('[data-test="review-bulk-accept"]')
-        ->assertSee('Accepted 65 values into pending review')
+        ->assertSee('Accepted and approved 65 values')
         ->assertNoJavaScriptErrors();
 
     expect(VoxTranslation::query()->where('group', 'bulk_review')->where('key', 'like', 'expected_%')->count())->toBe(65)
@@ -256,7 +256,7 @@ it('retains individual selections across pages and clears them when filters chan
     }
     app(RemoteReconciliation::class)->ingest($environment, $values);
 
-    visit('/vox/sync')
+    visit('/vox/sync?per_page=50')
         ->click('button[aria-label="Select paged_review.key_0 en"]')
         ->assertSee('1 selected')
         ->pressAndWaitFor('Next')
@@ -264,7 +264,7 @@ it('retains individual selections across pages and clears them when filters chan
         ->click('button[aria-label="Select paged_review.key_50 en"]')
         ->assertSee('2 selected')
         ->click('[data-test="review-bulk-keep"]')
-        ->assertSee('Kept local values for 2 remote changes')
+        ->assertSee('Kept local values for 2 incoming changes')
         ->click('[data-test="review-select-all"]')
         ->assertSee('53 selected across all pages')
         ->fill('#review-search', 'key_54')

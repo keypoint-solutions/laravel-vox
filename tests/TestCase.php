@@ -3,6 +3,9 @@
 namespace KeypointSolutions\LaravelVox\Tests;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -45,7 +48,20 @@ class TestCase extends Orchestra
         DB::purge($connection);
         DB::reconnect($connection);
 
-        $this->artisan('migrate', ['--database' => $connection])->run();
+        $this->artisan('migrate', [
+            '--database' => $connection,
+            '--path' => realpath(__DIR__.'/../database/migrations'),
+            '--realpath' => true,
+        ])->run();
+    }
+
+    protected function withoutVoxCsrfMiddleware(): void
+    {
+        $this->withoutMiddleware([
+            PreventRequestForgery::class,
+            ValidateCsrfToken::class,
+            VerifyCsrfToken::class,
+        ]);
     }
 
     protected function tearDown(): void

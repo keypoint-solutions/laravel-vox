@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
@@ -15,7 +14,7 @@ use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
 
 beforeEach(function (): void {
     $this->withoutVite();
-    $this->withoutMiddleware(PreventRequestForgery::class);
+    $this->withoutVoxCsrfMiddleware();
     app()->detectEnvironment(fn () => 'local');
     config()->set('vox.system.bypass_auth_in_local', true);
     prepareVoxFixtures();
