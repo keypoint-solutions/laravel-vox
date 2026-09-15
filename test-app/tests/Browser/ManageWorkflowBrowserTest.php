@@ -25,9 +25,7 @@ it('creates a concrete dynamic translation from an open pattern', function (): v
         ->click('[data-test="add-dynamic-translation"]')
         ->assertVisible('[data-test="dynamic-create-panel"]')
         ->select('#new_dynamic_pattern', 'browser.dynamic.*')
-        ->click('[data-test="copy-dynamic-prefix"]')
-        ->waitForText('Dynamic key prefix copied.')
-        ->assertSeeIn('[data-test="success-toast"]', 'Dynamic key prefix copied.');
+        ->assertSee('Prefix: browser.dynamic.');
 
     $panelDimensions = $page->script(
         "() => {
@@ -43,7 +41,8 @@ it('creates a concrete dynamic translation from an open pattern', function (): v
     expect($panelDimensions['scrollWidth'])
         ->toBeLessThanOrEqual($panelDimensions['clientWidth']);
 
-    $page->fill('[data-test="new-dynamic-key"]', 'browser.dynamic.admin')
+    $page->fill('[data-test="new-dynamic-key"]', 'admin')
+        ->assertSeeIn('[data-test="new-dynamic-full-key"]', 'browser.dynamic.admin')
         ->fill('[data-test="new-dynamic-value-en"]', 'Administrator')
         ->pressAndWaitFor('AI fill missing')
         ->assertValue('[data-test="new-dynamic-value-fr"]', 'AI fr: Administrator')

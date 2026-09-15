@@ -8,7 +8,6 @@
         ChevronRight,
         CircleAlert,
         Code,
-        Copy,
         FileText,
         Laptop,
         Plus,
@@ -37,7 +36,6 @@
     import PageSizeSelect from '@/components/ui/PageSizeSelect.vue';
     import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
-    import { copyTextToClipboard } from '@/lib/clipboard';
     import { cn } from '@/lib/utils';
 
     defineOptions({
@@ -192,6 +190,7 @@
     const newDynamicValues = ref<Record<string, string>>({});
     const newDynamicError = ref<string | null>(null);
     const dynamicPatternPrefix = computed(() => newDynamicPattern.value.split('*', 1)[0] ?? '');
+    const newDynamicFullKey = computed(() => dynamicPatternPrefix.value + newDynamicKey.value.trim());
 
     const isCompactMode = ref(false);
     const showGroupsDropdown = ref(false);
@@ -464,7 +463,7 @@
             {
                 locales: missingDynamicTargetLocales.value,
                 base_value: newDynamicBaseValue.value,
-                key: newDynamicKey.value.trim(),
+                key: newDynamicFullKey.value,
             },
             {
                 preserveScroll: true,
@@ -500,7 +499,7 @@
             voxRoutes.value?.manage_translation_store ?? '',
             {
                 pattern: newDynamicPattern.value,
-                key: newDynamicKey.value.trim(),
+                key: newDynamicFullKey.value,
                 values: newDynamicValues.value,
             },
             {
@@ -548,20 +547,6 @@
             toast.value = null;
             toastTimer.value = null;
         }, 5000);
-    }
-
-    async function copyDynamicPatternPrefix(): Promise<void> {
-        if (dynamicPatternPrefix.value === '') {
-            return;
-        }
-
-        if (await copyTextToClipboard(dynamicPatternPrefix.value)) {
-            showToast('Dynamic key prefix copied.');
-
-            return;
-        }
-
-        showToast('Unable to copy the dynamic key prefix.', 'error');
     }
 
     function handleBulkError(errors: Record<string, string>): void {
@@ -1488,51 +1473,48 @@
         <div class="space-y-5">
             <FormField
                 id="new_dynamic_pattern"
-                description="Choose the active pattern that covers this concrete value. Copy its stable prefix to start the key."
+                description="Choose the pattern for the new translation. Its fixed prefix is added automatically."
                 label="Dynamic pattern"
             >
-                <div class="flex items-center gap-2">
-                    <div class="min-w-0 flex-1">
-                        <Select
-                            id="new_dynamic_pattern"
-                            v-model="newDynamicPattern"
-                            :options="dynamicPatternOptions"
-                            placeholder="Choose a pattern"
-                        />
-                    </div>
-                    <Tooltip
-                        text="Copy the pattern prefix"
-                        align="end"
-                    >
-                        <Button
-                            aria-label="Copy the pattern prefix"
-                            data-test="copy-dynamic-prefix"
-                            :disabled="!dynamicPatternPrefix"
-                            size="icon"
-                            variant="outline"
-                            @click="copyDynamicPatternPrefix"
-                        >
-                            <Copy class="size-4" />
-                        </Button>
-                    </Tooltip>
-                </div>
+                <Select
+                    id="new_dynamic_pattern"
+                    v-model="newDynamicPattern"
+                    :options="dynamicPatternOptions"
+                    placeholder="Choose a pattern"
+                />
             </FormField>
 
             <FormField
                 id="new_dynamic_key"
                 :description="
-                    newDynamicPattern
-                        ? `Enter the complete Laravel key matching ${newDynamicPattern}.`
-                        : 'Enter the complete Laravel translation key.'
+                    dynamicPatternPrefix
+                        ? 'Enter only the part after the fixed prefix.'
+                        : 'Enter a concrete key matching the selected pattern.'
                 "
-                label="Concrete translation key"
+                label="New key"
             >
+                <p
+                    v-if="dynamicPatternPrefix"
+                    class="text-muted-foreground font-mono text-xs break-all"
+                >
+                    Prefix: {{ dynamicPatternPrefix }}
+                </p>
                 <Input
                     id="new_dynamic_key"
                     v-model="newDynamicKey"
                     data-test="new-dynamic-key"
-                    placeholder="enums.user_roles.admin"
+                    :disabled="!newDynamicPattern"
+                    :placeholder="
+                        newDynamicPattern.slice(dynamicPatternPrefix.length).replaceAll('*', 'name') || 'name'
+                    "
                 />
+                <p
+                    v-if="newDynamicKey.trim()"
+                    data-test="new-dynamic-full-key"
+                    class="text-muted-foreground text-xs break-all"
+                >
+                    Full key: <span class="font-mono">{{ newDynamicFullKey }}</span>
+                </p>
             </FormField>
 
             <div class="border-t pt-5">
