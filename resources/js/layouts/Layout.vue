@@ -3,6 +3,7 @@
     import {
         FileText,
         GitBranch,
+        Heart,
         Home,
         Laptop,
         Layers,
@@ -177,6 +178,15 @@
                         >
                             <Mail class="size-3.5" />
                             Contact
+                        </a>
+                        <a
+                            class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
+                            href="https://github.com/sponsors/schniper"
+                            rel="noreferrer"
+                            target="_blank"
+                        >
+                            <Heart class="size-3.5" />
+                            Sponsor
                         </a>
                     </div>
                 </div>
@@ -368,6 +378,15 @@
                             >
                                 <Mail class="size-3.5" />
                                 Contact
+                            </a>
+                            <a
+                                class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
+                                href="https://github.com/sponsors/schniper"
+                                rel="noreferrer"
+                                target="_blank"
+                            >
+                                <Heart class="size-3.5" />
+                                Sponsor
                             </a>
                         </div>
                     </div>
