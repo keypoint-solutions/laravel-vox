@@ -4,6 +4,10 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.8 — 2026-09-15
+
+- Build remote review pages in batches to reduce memory usage for large snapshots while preserving filters, totals, and bulk-selection tokens.
+
 ## 1.0.7 — 2026-09-15
 
 - Speed up remote snapshot validation with direct format checks, preserving field, size, namespace, and duplicate checks without constructing a Laravel validator for every value.

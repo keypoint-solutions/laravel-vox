@@ -2,6 +2,7 @@
 
 namespace KeypointSolutions\LaravelVox\Translation;
 
+use Generator;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -135,23 +136,54 @@ class RemoteReconciliation
     {
         $perPage = in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
         $filters = $this->filters($filters);
-        $rows = $this->rows($filters['environment_id']);
-        $filtered = $this->filterRows($rows, $filters);
-        $actionable = $filtered->where('actionable', true)->values();
-        $lastPage = max(1, (int) ceil($filtered->count() / $perPage));
-        $page = min(max(1, $page), $lastPage);
+        $page = max(1, $page);
+        $total = 0;
+        $data = [];
+        $lastPageData = [];
+        $counts = [];
+        $locales = [];
+        $actionableTokens = [];
+
+        foreach ($this->rowBatches($filters['environment_id']) as $rows) {
+            foreach ($rows as $row) {
+                $counts[$row['state']] = ($counts[$row['state']] ?? 0) + 1;
+                $locales[$row['locale']] = true;
+            }
+
+            foreach ($this->filterRows($rows, $filters) as $row) {
+                if ($total % $perPage === 0) {
+                    $lastPageData = [];
+                }
+                $lastPageData[] = $row;
+
+                if (intdiv($total, $perPage) + 1 === $page) {
+                    $data[] = $row;
+                }
+
+                if ($row['actionable']) {
+                    $actionableTokens[] = $row['token'];
+                }
+                $total++;
+            }
+        }
+
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        if ($page > $lastPage) {
+            $page = $lastPage;
+            $data = $lastPageData;
+        }
 
         return [
-            'data' => $filtered->forPage($page, $perPage)->values()->all(),
-            'total' => $filtered->count(),
+            'data' => $data,
+            'total' => $total,
             'current_page' => $page,
             'last_page' => $lastPage,
             'per_page' => $perPage,
             'filters' => $filters,
-            'counts' => $rows->countBy('state')->all(),
-            'locales' => $this->locales->sortLocales($rows->pluck('locale')->all()),
-            'actionable_count' => $actionable->count(),
-            'selection_token' => $this->selectionToken($actionable),
+            'counts' => $counts,
+            'locales' => $this->locales->sortLocales(array_keys($locales)),
+            'actionable_count' => count($actionableTokens),
+            'selection_token' => $this->token($actionableTokens),
         ];
     }
 
@@ -364,6 +396,19 @@ class RemoteReconciliation
      */
     private function rows(?int $environmentId = null, bool $lock = false): Collection
     {
+        $rows = collect();
+        foreach ($this->rowBatches($environmentId, $lock) as $batch) {
+            $rows = $rows->concat($batch);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return Generator<int, Collection<int, array<string, mixed>>>
+     */
+    private function rowBatches(?int $environmentId = null, bool $lock = false): Generator
+    {
         $query = VoxRemoteTranslation::query()->orderBy('id');
 
         if ($environmentId === -1) {
@@ -376,44 +421,47 @@ class RemoteReconciliation
             $query->lockForUpdate();
         }
 
-        $candidates = $query->get();
-        $local = $this->localTranslations($candidates->pluck('key')->all(), $lock);
         $locales = $this->locales->resolveLocales();
         $defaultLocale = $this->locales->resolveBaseLocale($locales);
         $locales[] = $defaultLocale;
 
-        return $candidates->map(function (VoxRemoteTranslation $candidate) use ($local, $locales, $defaultLocale): array {
-            $translation = $local[RemoteTranslationSnapshot::identity($candidate->group, $candidate->key)] ?? null;
-            $value = $translation?->values->firstWhere('locale', $candidate->locale);
-            $localValue = $value?->value;
-            $state = $this->state($candidate, $localValue);
-            $row = [
-                'id' => $candidate->id,
-                'environment_id' => $candidate->environment_id,
-                'group' => $candidate->group,
-                'key' => $candidate->key,
-                'locale' => $candidate->locale,
-                'local_value' => $localValue,
-                'default_locale' => $defaultLocale,
-                'default_value' => $translation?->values->firstWhere('locale', $defaultLocale)?->value,
-                'remote_value' => $candidate->remote_value,
-                'last_seen_value' => $candidate->last_seen_value,
-                'base_value' => $candidate->base_value,
-                'base_local_value' => $candidate->base_local_value,
-                'has_baseline' => $candidate->has_baseline,
-                'state' => $state,
-                'needs_review' => in_array($state, ['incoming', 'conflict'], true),
-                'actionable' => ! in_array($state, ['kept', 'reconciled', 'unavailable'], true),
-                'locale_available' => in_array($candidate->locale, $locales, true),
-                'translation_id' => $translation?->id,
-                'is_orphan' => $translation?->is_orphan ?? false,
-                'pending_publish' => $value?->is_pending_publish ?? false,
-                'revision' => $candidate->revision,
-            ];
-            $row['token'] = $this->token([$row, $translation?->status, $value?->is_obsolete, $value?->is_pending_publish, $value?->is_approved, $value?->file_value, $value?->published_override]);
+        foreach ($query->lazyById(500)->chunk(500) as $chunk) {
+            $candidates = collect($chunk->all());
+            $local = $this->localTranslations($candidates->pluck('key')->all(), $lock);
 
-            return $row;
-        });
+            yield $candidates->map(function (VoxRemoteTranslation $candidate) use ($local, $locales, $defaultLocale): array {
+                $translation = $local[RemoteTranslationSnapshot::identity($candidate->group, $candidate->key)] ?? null;
+                $value = $translation?->values->firstWhere('locale', $candidate->locale);
+                $localValue = $value?->value;
+                $state = $this->state($candidate, $localValue);
+                $row = [
+                    'id' => $candidate->id,
+                    'environment_id' => $candidate->environment_id,
+                    'group' => $candidate->group,
+                    'key' => $candidate->key,
+                    'locale' => $candidate->locale,
+                    'local_value' => $localValue,
+                    'default_locale' => $defaultLocale,
+                    'default_value' => $translation?->values->firstWhere('locale', $defaultLocale)?->value,
+                    'remote_value' => $candidate->remote_value,
+                    'last_seen_value' => $candidate->last_seen_value,
+                    'base_value' => $candidate->base_value,
+                    'base_local_value' => $candidate->base_local_value,
+                    'has_baseline' => $candidate->has_baseline,
+                    'state' => $state,
+                    'needs_review' => in_array($state, ['incoming', 'conflict'], true),
+                    'actionable' => ! in_array($state, ['kept', 'reconciled', 'unavailable'], true),
+                    'locale_available' => in_array($candidate->locale, $locales, true),
+                    'translation_id' => $translation?->id,
+                    'is_orphan' => $translation?->is_orphan ?? false,
+                    'pending_publish' => $value?->is_pending_publish ?? false,
+                    'revision' => $candidate->revision,
+                ];
+                $row['token'] = $this->token([$row, $translation?->status, $value?->is_obsolete, $value?->is_pending_publish, $value?->is_approved, $value?->file_value, $value?->published_override]);
+
+                return $row;
+            });
+        }
     }
 
     private function state(VoxRemoteTranslation $candidate, ?string $local): string
