@@ -1,35 +1,49 @@
 # Changelog
 
-All notable changes to `laravel-vox` will be documented in this file.
+Notable changes to Laravel Vox are documented here. See the [README](README.md) for installation, configuration, and command examples.
 
 ## Unreleased
 
-### Added
+## 1.0.0 — 2026-09-15
 
-- Separate source usage from configured retention, with exact occurrences and possible dynamic matches.
-- Confirmed deletion for any key, cancellation before publishing, empty-file removal, and backward-compatible `retained_keys` configuration. Previously ignored keys migrate to pending deletion.
+Initial public release for Laravel 12 and 13.
 
-- Live translation text updates in the Vox Vue integration, preserving mounted components and unsaved form state during translation HMR.
-- Incremental Vite translation reloads with per-file PHP parsing caches and separate locale modules, avoiding recompilation of other languages and generated `php_*.json` files.
+### Translation discovery and storage
 
-- Destructive translation-only and full-data resets in Settings and `vox:reset`, with typed confirmations, transactional deletion, audit recording, and published language file preservation.
+- Scan PHP, Blade, JavaScript, TypeScript, and Vue for translation usage, including supported dynamic expressions and plural helpers.
+- Bind dynamic key patterns to enums, explicit lists, provider classes, or callbacks; protect key families through retention rules.
+- Support PHP and JSON translations, flat or nested PHP arrays, nested group folders, and vendor namespaces across parsing, synchronization, and publication.
+- Keep application translations file-based, with a separate SQLite database by default for drafts, approvals, and reconciliation. Existing Laravel database connections are also supported.
 
-- Initial Laravel translation management package with automatic service-provider discovery, configurable routes, and a gate-protected Inertia/Vue dashboard.
-- Static translation scanning for PHP, Blade, JavaScript, TypeScript, and Vue, with configurable dynamic-key patterns.
-- Translation import, local and remote synchronization, reconciliation, validation, and publishing to Laravel language files.
-- AI-assisted translation, locale provisioning, settings management, and audit history.
-- Dedicated SQLite storage by default, with support for existing configured database connections.
-- `vox:setup` to prepare the database, run package migrations, and publish dashboard assets; `vox:install` remains a compatibility alias.
-- Optional bundled or runtime-loaded Vue translations with asynchronous initialization, ordered locale preferences, reactive locale switching, and opt-in local/session storage persistence.
-- Composer and npm frontend entry points, automatic Vite aliases, and TypeScript declarations.
-- Testbench/Pest package tests, frontend consumer tests, and a Laravel consumer application with browser integration tests.
+### Management and review
 
-### Maintenance
+- Provide a responsive, gate-protected Inertia/Vue manager with light/dark themes, search, group pills, status-aware counts, and separate Missing and Empty filters.
+- Edit and approve values per locale, translate missing wording with AI, or explicitly retranslate existing wording. Protect Laravel placeholders and skip unusable source values.
+- Add languages and concrete dynamic keys, automatically supplying the selected pattern's fixed prefix.
+- Pull published or draft wording from remote environments and review differences alongside current values and the configured default-locale reference.
+- Edit either comparison, confirm the final selection, or ask AI to suggest a choice. Support page-level bulk AI choices and confirmation, plus acceptance or retention of all matching values.
+- Preserve resolved decisions across unchanged syncs and reject stale review submissions.
+- Offer translation ZIP import/export, structured audit history, and translation-only or full-data resets that preserve published files.
 
-- Accept literal string concatenation in translation files while rejecting executable expressions.
-- Ignore translation-like calls inside PHP strings and comments, and avoid registering interpolated PHP strings as static keys.
-- Separate connection registration from filesystem initialization so application boot does not create database files.
-- Exclude the consumer application and development tooling from package archives.
-- Separate npm consumer dependencies from dashboard build dependencies and declare Vue/Vite peer requirements.
-- Restore automated package compatibility checks and frontend consumer tests.
-- Remove the unused skeleton migration stub.
+### Publication and deployment
+
+- Publish approved locale values independently while preserving unapproved drafts; support restoring application wording without discarding a draft.
+- Schedule deletion of any key, cancel before publication, and remove translation files left empty.
+- Use consistent flat/nested formatting, preserve existing file permissions, roll back failed file operations, and reject invalid JSON encoding without overwriting files.
+- Reconcile fresh deployment defaults with published overrides and unpublished drafts through `vox:deploy`.
+- Emit `TranslationsPublished` after successful publication for application-owned frontend build hooks.
+- Keep Vox migration history separate from application migrations through `vox:setup`.
+
+### Frontend and developer tools
+
+- Deliver translations as bundled assets or generated runtime catalogues, with file-backed HTTP endpoints and cache revalidation.
+- Provide asynchronous Vue initialization, locale discovery and fallback, reactive switching, pluralization, and optional locale persistence.
+- Automatically discover frontend groups and hot-reload translation changes through Vite, including PHP-served runtime translations, while preserving mounted component state.
+- Expose Composer and npm frontend entry points, TypeScript declarations, and Artisan commands for setup, parsing, translation, synchronization, review, publication, compilation, and maintenance.
+- Include PHP compatibility checks, JavaScript consumer tests, and a browser-tested demo application. Exclude development tooling and the demo application from Composer archives.
+
+### Notes for early development installations
+
+- Run `php artisan vox:setup --force` after upgrading to apply Vox migrations and refresh manager assets. `vox:install` remains a compatibility alias.
+- The former Ignore feature is replaced by pending deletion. Previously ignored keys migrate to pending deletion; review them before publishing.
+- Laravel 11 is no longer supported. Inertia Laravel requires `^2.0.20` or `^3.0` and is installed automatically through Composer.
