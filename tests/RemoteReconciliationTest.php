@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -327,4 +328,50 @@ it('refreshes stale file comparisons matching a published override without chang
     $value->refresh()->saveDraft('Next draft');
     app(TranslationDatabaseSynchronizer::class)->sync();
     expect($value->fresh()->value)->toBe('Next draft')->and($value->fresh()->is_pending_publish)->toBeTrue();
+});
+
+it('skips unchanged candidate writes and keeps open reviews valid', function (): void {
+    $values = [incomingVoxValue('Original'), incomingVoxValue('New wording', 'new_key')];
+    pullVoxValues($this, $values);
+    $before = VoxRemoteTranslation::query()->orderBy('id')->get()->toArray();
+    $review = $this->reconciliation->page(['state' => 'all']);
+    $environmentRevision = $this->environment->fresh()->sync_revision;
+    $writes = [];
+    DB::connection('vox')->listen(function ($query) use (&$writes): void {
+        if (str_starts_with(strtolower($query->sql), 'update "vox_remote_translations"')) {
+            $writes[] = $query->sql;
+        }
+    });
+    $this->travel(1)->minutes();
+    pullVoxValues($this, $values);
+
+    expect($writes)->toBeEmpty()
+        ->and(VoxRemoteTranslation::query()->orderBy('id')->get()->toArray())->toBe($before)
+        ->and($this->reconciliation->page(['state' => 'all'])['selection_token'])->toBe($review['selection_token'])
+        ->and($this->environment->fresh()->sync_revision)->toBe($environmentRevision + 1);
+    $audit = VoxAudit::query()->where('action', 'sync-remote')->latest('id')->first();
+    expect($audit->context['checked'])->toBe(2)->and($audit->context['changed'])->toBe(0);
+
+    expect($this->reconciliation->resolve([
+        'action' => 'accept', 'all_matching' => true,
+        'filters' => $review['filters'], 'selection_token' => $review['selection_token'],
+    ]))->toBe(1);
+});
+
+it('updates baselines when local wording catches up and counts real remote changes', function (): void {
+    pullVoxValues($this, [incomingVoxValue('Remote edit')]);
+    $this->translation->values()->first()->update(['value' => 'Remote edit']);
+    pullVoxValues($this, [incomingVoxValue('Remote edit')]);
+    $candidate = VoxRemoteTranslation::query()->first();
+    expect($candidate->base_value)->toBe('Remote edit')->and($candidate->has_baseline)->toBeTrue()
+        ->and(VoxAudit::query()->where('action', 'sync-remote')->latest('id')->first()->context['changed'])->toBe(1);
+
+    pullVoxValues($this, []);
+    expect($candidate->fresh()->remote_present)->toBeFalse()
+        ->and(VoxAudit::query()->where('action', 'sync-remote')->latest('id')->first()->context['changed'])->toBe(1);
+    pullVoxValues($this, []);
+    expect(VoxAudit::query()->where('action', 'sync-remote')->latest('id')->first()->context['changed'])->toBe(0);
+    pullVoxValues($this, [incomingVoxValue('Remote edit')]);
+    expect($candidate->fresh()->remote_present)->toBeTrue()
+        ->and(VoxAudit::query()->where('action', 'sync-remote')->latest('id')->first()->context['changed'])->toBe(1);
 });

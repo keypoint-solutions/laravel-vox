@@ -4,6 +4,10 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.9 — 2026-09-15
+
+- Skip unchanged remote comparison writes and revision bumps, preserving open reviews across identical pulls. Pull audits now include checked and changed counts; baseline and availability changes still update comparison records.
+
 ## 1.0.8 — 2026-09-15
 
 - Build remote review pages in batches to reduce memory usage for large snapshots while preserving filters, totals, and bulk-selection tokens.

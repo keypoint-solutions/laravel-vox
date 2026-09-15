@@ -323,7 +323,7 @@ Static usage, dynamic matches, retention, and orphan status describe source usag
 | Matching             | Current values agree                                                 |
 | No longer in source  | Source omitted the value; no automatic local deletion                |
 
-Repeated unchanged syncs do not reopen decisions. Changes since loading a review invalidate its selection token; refresh before retrying. Local-file comparisons refresh when files match published overrides.
+Repeated unchanged syncs preserve comparison records and open review tokens. Each pull records one audit summary with checked and changed counts; changed counts include new records, baseline updates, and values becoming unavailable. Actual comparison changes since loading a review invalidate its selection token; refresh before retrying. Local-file comparisons refresh when files match published overrides.
 
 ### Add or delete keys and languages
 

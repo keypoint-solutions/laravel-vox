@@ -43,6 +43,7 @@ class RemoteReconciliation
                 ->orderBy('id')->lockForUpdate()->get()->keyBy('identity');
             $local = $this->localTranslations(array_column($values, 'key'), true);
             $seen = [];
+            $changed = 0;
 
             foreach ($values as $value) {
                 $identity = RemoteTranslationSnapshot::identity($value['group'], $value['key'], $value['locale']);
@@ -64,10 +65,11 @@ class RemoteReconciliation
                     $candidate->has_baseline = true;
                 }
 
-                $candidate->last_seen_value = $candidate->exists ? $candidate->remote_value : null;
+                if ($candidate->exists && $candidate->remote_value !== $value['value']) {
+                    $candidate->last_seen_value = $candidate->remote_value;
+                }
                 $candidate->remote_value = $value['value'];
                 $candidate->remote_present = true;
-                $candidate->revision++;
 
                 if ($localValue === $value['value']) {
                     $candidate->base_value = $localValue;
@@ -75,7 +77,11 @@ class RemoteReconciliation
                     $candidate->has_baseline = true;
                 }
 
-                $candidate->save();
+                if (! $candidate->exists || $candidate->isDirty()) {
+                    $candidate->revision++;
+                    $candidate->save();
+                    $changed++;
+                }
                 $seen[$identity] = true;
             }
 
@@ -84,6 +90,7 @@ class RemoteReconciliation
                     $candidate->remote_present = false;
                     $candidate->revision++;
                     $candidate->save();
+                    $changed++;
                 }
             }
 
@@ -94,6 +101,8 @@ class RemoteReconciliation
                 'environment_id' => $environment->id,
                 'environment_name' => $environment->name,
                 'values' => count($values),
+                'checked' => count($values),
+                'changed' => $changed,
                 'mode' => 'reconciliation',
             ]);
 
