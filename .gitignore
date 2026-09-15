@@ -50,5 +50,4 @@ _internal/
 
 # Local editor preferences and inactive workflow archive
 /.junie/
-/boost.json
 /.github-disabled/
