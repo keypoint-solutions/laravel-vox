@@ -21,6 +21,9 @@ _ide_helper.php
 _ide_helper_models.php
 .phpstorm.meta.php
 
+# Local AI tooling
+/.ai/mcp/
+
 # Editors
 /.idea
 /.fleet
@@ -41,3 +44,11 @@ tests/.tmp/
 test-app/storage/vox/vox.sqlite
 
 _internal/
+
+# Private project specification
+/SPEC.md
+
+# Local editor preferences and inactive workflow archive
+/.junie/
+/boost.json
+/.github-disabled/
