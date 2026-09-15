@@ -231,3 +231,25 @@ it('rewrites frontend artifacts from live wording without publishing newer draft
         ->and($value->fresh()->value)->toBe('Next draft')
         ->and($value->fresh()->is_pending_publish)->toBeTrue();
 });
+
+it('reconciles seen values and orphans across batches with bounded SQL bindings', function (): void {
+    $entries = [];
+    for ($index = 0; $index < 450; $index++) {
+        $entries['key_'.$index] = 'Shipped '.$index;
+        VoxTranslation::factory()->withValues(['en' => 'Old'])->create([
+            'group' => 'removed', 'key' => 'old_'.$index,
+        ]);
+    }
+    File::put($this->fixtureRoot.'/lang/en/messages.php', '<?php return '.var_export($entries, true).';');
+    $connection = DB::connection(config('vox.database.connection'));
+    $connection->beforeExecuting(function (string $query, array $bindings): void {
+        expect(count($bindings))->toBeLessThanOrEqual(500);
+    });
+
+    app(TranslationDeployment::class)->deploy();
+    app(TranslationDeployment::class)->deploy();
+
+    expect(VoxTranslation::where('group', 'messages')->where('is_orphan', false)->count())->toBe(450)
+        ->and(VoxTranslation::where('group', 'removed')->where('is_orphan', true)->count())->toBe(450)
+        ->and(require $this->fixtureRoot.'/lang/en/messages.php')->toBe($entries);
+});

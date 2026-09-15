@@ -55,7 +55,7 @@ class TranslationSyncer
                 'group' => $payload['group'],
             ]);
             if ($translation->exists && $translation->is_pending_delete) {
-                $seenTranslationIds[] = $translation->id;
+                $seenTranslationIds[$translation->id] = true;
 
                 continue;
             }
@@ -102,7 +102,7 @@ class TranslationSyncer
                 );
 
                 if ($translationValue->exists) {
-                    $seenValueIds[] = $translationValue->id;
+                    $seenValueIds[$translationValue->id] = true;
                 }
                 $oldFileValue = $translationValue->file_value;
                 $current = $translationValue->value;
@@ -139,7 +139,7 @@ class TranslationSyncer
 
                 $contentChanged = $contentChanged || $oldFileValue !== $value;
                 $translationValue->save();
-                $seenValueIds[] = $translationValue->id;
+                $seenValueIds[$translationValue->id] = true;
             }
 
             if (! $isNew && $contentChanged) {
@@ -162,14 +162,18 @@ class TranslationSyncer
                 ]);
             }
 
-            $seenTranslationIds[] = $translation->id;
+            $seenTranslationIds[$translation->id] = true;
             $result->incrementTranslations();
         }
 
         if ($deployment) {
-            $absent = VoxTranslationValue::query()->whereNotIn('id', $seenValueIds)
-                ->whereHas('translation', fn ($query) => $query->where('is_pending_delete', false))->lockForUpdate()->get();
+            $absent = VoxTranslationValue::query()
+                ->whereHas('translation', fn ($query) => $query->where('is_pending_delete', false))->lockForUpdate()->lazyById(200);
             foreach ($absent as $value) {
+                if (isset($seenValueIds[$value->id])) {
+                    continue;
+                }
+
                 $value->file_value = null;
                 $value->is_obsolete = $value->published_override === null && ! $value->is_pending_publish;
                 $value->save();
@@ -178,15 +182,16 @@ class TranslationSyncer
 
         $orphanQuery = VoxTranslation::query()->where('is_pending_delete', false);
 
-        if ($seenTranslationIds !== []) {
-            $orphanQuery->whereNotIn('id', $seenTranslationIds);
-        }
-
-        $orphanIds = $orphanQuery
+        $orphanCount = 0;
+        $orphans = $orphanQuery
             ->lockForUpdate()
             ->with('values')
-            ->get()
-            ->filter(function (VoxTranslation $translation) use ($deployment): bool {
+            ->lazyById(200)
+            ->filter(function (VoxTranslation $translation) use ($deployment, $seenTranslationIds): bool {
+                if (isset($seenTranslationIds[$translation->id])) {
+                    return false;
+                }
+
                 if (! $translation->is_orphan && $translation->values->contains(
                     fn ($value): bool => $value->is_pending_publish && $value->file_value === null && $value->published_override === null
                 )) {
@@ -214,12 +219,12 @@ class TranslationSyncer
                 $translation->timestamps = true;
 
                 return false;
-            })
-            ->pluck('id');
+            });
 
-        if ($orphanIds->isNotEmpty()) {
+        foreach ($orphans as $translation) {
+            $orphanCount++;
             VoxTranslation::query()
-                ->whereIn('id', $orphanIds)
+                ->whereKey($translation->id)
                 ->toBase()
                 ->update([
                     'is_frontend' => false,
@@ -228,11 +233,11 @@ class TranslationSyncer
                 ]);
 
             VoxTranslationOccurrence::query()
-                ->whereIn('translation_id', $orphanIds)
+                ->where('translation_id', $translation->id)
                 ->delete();
         }
 
-        $result->setOrphanTranslations($orphanIds->count());
+        $result->setOrphanTranslations($orphanCount);
 
         return $result;
     }

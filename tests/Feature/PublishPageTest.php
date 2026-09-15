@@ -267,3 +267,23 @@ it('publishes approved wording over a flagged default and removes its flat dupli
     expect($files->loadGroup('fr', 'labels'))->toBe(['promo' => ['line' => 'Texte approuvé']]);
     expect(app(TranslationPublisher::class)->publish()->values())->toBe(0);
 });
+
+it('preserves all updates when one language file spans multiple query batches', function (): void {
+    config()->set('vox.frontend.runtime.enabled', false);
+    $expected = ['retained' => 'Existing'];
+    File::ensureDirectoryExists($this->publishLangPath.'/en');
+    File::put($this->publishLangPath.'/en/messages.php', "<?php return ['retained' => 'Existing'];");
+    for ($index = 0; $index < 450; $index++) {
+        $key = sprintf('key_%03d', $index);
+        $expected[$key] = 'Published '.$index;
+        VoxTranslation::factory()->approved()->withValues(['en' => $expected[$key]])
+            ->create(['group' => 'messages', 'key' => $key]);
+    }
+
+    app(TranslationPublisher::class)->publish();
+
+    $actual = require $this->publishLangPath.'/en/messages.php';
+    ksort($actual);
+    ksort($expected);
+    expect($actual)->toBe($expected);
+});

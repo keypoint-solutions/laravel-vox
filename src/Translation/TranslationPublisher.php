@@ -179,7 +179,8 @@ class TranslationPublisher
             ->with('values')
             ->orderBy('group')
             ->orderBy('key')
-            ->get();
+            ->orderBy('id')
+            ->lazy(200);
 
         foreach ($translations as $translation) {
             if ($translation->is_orphan) {

@@ -4,6 +4,10 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.3 — 2026-09-15
+
+- Batch synchronization and publishing queries to avoid oversized SQLite parameter lists and reduce model memory usage. File updates remain accumulated across batches before writing.
+
 ## 1.0.2 — 2026-09-15
 
 - Allow `vox:compile` to build frontend translations before the Vox database exists, using application locale configuration and language files.
