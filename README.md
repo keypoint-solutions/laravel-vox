@@ -1,8 +1,48 @@
 # Laravel Vox
 
-Laravel Vox discovers translation keys, reviews translations in a dedicated database, and publishes approved wording to Laravel language files. It includes a management UI, optional AI translation, and a Vue integration.
+Laravel Vox brings source discovery, AI translation, remote review, and controlled publishing to Laravel, with a dedicated management UI and optional Vue integration.
 
-**Application translations remain file-based.** Vox's database stores drafts, approvals, published overrides, and review decisions; normal Laravel translation lookups do not query it.
+**Your Laravel translation files remain the source of truth for the running application.** Vox uses a separate database for drafts, approvals, and review history. Publish writes approved wording back to files; normal translation lookups never query the Vox database.
+
+Vox defaults to a **standalone SQLite database** at `storage/vox/vox.sqlite` and keeps its generated data in the consuming application's `storage/vox` directory. You can select another configured Laravel database connection instead.
+
+## Features
+
+### Laravel files, from discovery to publication
+
+- **Flat or nested translations.** Work with PHP arrays, dotted keys, JSON translations, vendor namespaces, and groups in nested folders. Parse and Publish share the same format rules, with an option to preserve existing PHP layout.
+- **Source-aware parsing.** Discover translation calls in PHP, Blade, JavaScript, TypeScript, and Vue; record where keys are used; and update language files. Command output ends with a summary, with detailed occurrences available when needed.
+- **Dynamic-key detection and protection.** Detect supported expressions that assemble translation keys at runtime. Review their patterns and retain whole key families, such as `roles.*`, when static scanning cannot prove their usage.
+- **Deliberate cleanup.** Identify orphaned keys, schedule any key for deletion, or cancel before publishing. Parse's obsolete-key policy controls source cleanup; publishing also removes files left empty.
+- **Safe file updates.** Preserve existing file permissions, support readable Unicode, and roll back failed file operations. Unapproved drafts stay unpublished, and approval is tracked independently for each locale.
+
+### A focused translation management UI
+
+- **Find the work that matters.** Search keys and wording, filter by group and status, and use status-aware group counts. Missing translations and keys with empty default wording have separate views.
+- **Edit and translate efficiently.** Edit individual values, approve in bulk, AI-translate only missing values, or deliberately retranslate existing wording. AI translation protects Laravel placeholders and skips unusable source wording.
+- **Review differences side by side.** Edit either the current or incoming value, select the version to keep, and confirm the final wording. Expand the default-language reference without leaving the comparison.
+- **Let AI help choose.** Ask AI to compare the alternatives against the configured default locale, then adjust its suggestion before confirming. Bulk AI choices and confirmation work on checked rows on the current page.
+- **Keep control of publication.** Accept changes now and publish when ready. Inspect audit activity, add languages, manage remote environments, and review pending deletions from the same interface.
+- **Comfortable on smaller screens.** Responsive layouts, compact group pills, wrapping controls, and light/dark themes keep everyday management usable across screen sizes.
+
+### Bring translations back from remote environments
+
+Pull published translations from production or staging to recover the latest wording edited by key users. Review incoming changes and conflicts before accepting them; pulling alone does not replace local wording. Drafts can be pulled explicitly.
+
+Repeated unchanged syncs preserve resolved decisions. Stale review submissions are rejected rather than silently overwriting newer work. ZIP import/export is also available for transferring language files.
+
+### Choose how the frontend receives translations
+
+| Delivery    | When translations change                                                                                                    |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Bundled** | Include discovered frontend groups in your JavaScript build; rebuild assets to distribute new wording.                      |
+| **Runtime** | Fetch generated catalogues from the server; refresh them through Publish or Compile **without rebuilding frontend assets**. |
+
+The Vue integration supports locale discovery, fallback, pluralization, and reactive translations. Frontend group discovery helps limit the PHP groups exposed to the browser. Runtime endpoints serve generated files with cache revalidation, without reading the Vox database.
+
+For custom build pipelines, the [`TranslationsPublished` event](#publication-events) lets your application queue its own asset rebuild after successful publication. Deployment reconciliation preserves published management overrides and unpublished drafts when fresh application files arrive.
+
+**Start here:** [Installation](#installation) · [Configuration](#configuration) · [Backend Use](#backend-use) · [Frontend Use](#frontend-use) · [Translation Management](#translation-management)
 
 ## Requirements
 
@@ -54,6 +94,8 @@ VOX_TRANSLATE_BASE_LOCALE=en
 VOX_TRANSLATE_DRIVER=openai
 OPENAI_API_KEY=your-api-key
 ```
+
+To use another database, define a connection in `config/database.php` and set `VOX_DB_CONNECTION` to its name. To relocate the default SQLite file, set `VOX_DB_PATH`. Changing connections does not transfer existing Vox data.
 
 The base locale defaults to `app.locale`; it does not have to be English. Locale and frontend-group lists use `mode: auto|configured` and `values`. In PHP config, `values` may be an array; environment values are comma-separated. `configured` replaces automatic discovery.
 
@@ -286,7 +328,7 @@ php artisan vox:review
 
 ## Remote Sync and Archives
 
-On the source application, run `php artisan vox:generate-sync-key`. Add its URL and key under Sync → **Configured environments**, then pull published values for review. Pulling drafts is explicit. Current endpoints exchange published snapshots; legacy ZIP sources are also supported.
+On the source application, run `php artisan vox:generate-sync-key`. Add its URL and key under Sync → **Remote environments**, then pull published values for review. Pulling drafts is explicit. Current endpoints exchange published snapshots; legacy ZIP sources are also supported.
 
 ```bash
 php artisan vox:sync-remote --environment=1 --check --no-interaction
