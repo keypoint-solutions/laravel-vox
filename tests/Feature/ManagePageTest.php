@@ -514,3 +514,38 @@ it('allows published dynamic keys without direct source usage to be deleted', fu
     $this->get('/vox/manage')->assertInertia(fn (AssertableInertia $page) => $page
         ->where('translations.data.0.deletion_unavailable_reason', null));
 });
+
+it('counts every group by status independently of the selected group and search', function (?string $status): void {
+    config()->set('vox.parse.missing_translation_prefix', 'TODO:');
+
+    VoxTranslation::factory()->orphan()->withValues(['en' => 'One', 'fr' => 'Un'])->create(['group' => 'json']);
+    VoxTranslation::factory()->orphan()->withValues(['en' => 'Two', 'fr' => 'Deux'])->create(['group' => null]);
+    VoxTranslation::factory()->approved()->withValues(['en' => 'Three', 'fr' => 'Trois'])->create(['group' => 'json']);
+    VoxTranslation::factory()->withValues(['en' => 'Four', 'fr' => 'TODO:Four'])->create(['group' => 'messages']);
+    VoxTranslation::factory()->withValues(['en' => 'Five', 'fr' => 'Cinq'])->create(['group' => 'ignored', 'is_ignored' => true]);
+    VoxTranslation::factory()->withValues(['en' => 'Six', 'fr' => 'Six'])->create(['group' => 'deleted', 'is_pending_delete' => true]);
+
+    $response = $this->get('/vox/manage?'.http_build_query(['status' => $status]));
+    $response->assertOk();
+    $props = $response->inertiaPage()['props'];
+    $counts = collect($props['groups'])->pluck('total', 'name');
+    $expected = collect($props['translations']['data'])->countBy(fn (array $translation): string => $translation['group'] ?? 'default');
+
+    expect($counts)->toHaveCount(5)
+        ->and($counts->sum())->toBe($props['translations']['total']);
+
+    foreach ($counts as $group => $count) {
+        expect($count)->toBe($expected->get($group, 0));
+    }
+
+    $filtered = $this->get('/vox/manage?'.http_build_query([
+        'status' => $status,
+        'group' => 'json',
+        'scope' => 'group',
+        'search' => 'no matching key',
+    ]));
+    $filtered->assertOk();
+
+    expect($filtered->inertiaPage()['props']['groups'])->toBe($props['groups'])
+        ->and($filtered->inertiaPage()['props']['translations']['total'])->toBe(0);
+})->with([null, 'orphan', 'missing', 'approved', 'pending', 'ignored', 'pending-deletion']);

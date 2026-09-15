@@ -108,6 +108,7 @@
         groups: GroupItem[];
         translations: TranslationsPayload;
         locales: string[];
+        missingTranslationPrefix: string;
         baseLocale: string;
         filters: ManageFilters;
         statusOptions: SelectOption[];
@@ -130,6 +131,7 @@
     const { formatDateTime } = useDateTime();
 
     const groups = computed(() => page.props.groups ?? []);
+    const filteredGroupsTotal = computed(() => groups.value.reduce((total, group) => total + group.total, 0));
     const translations = computed(
         () => page.props.translations ?? { data: [], current_page: 1, last_page: 1, per_page: 25, total: 0 }
     );
@@ -192,32 +194,16 @@
     const newDynamicError = ref<string | null>(null);
     const dynamicPatternPrefix = computed(() => newDynamicPattern.value.split('*', 1)[0] ?? '');
 
-    // Compact sticky header state
     const isCompactMode = ref(false);
     const showGroupsDropdown = ref(false);
+    const filtersElement = ref<HTMLElement | null>(null);
+    let filtersObserver: ResizeObserver | null = null;
 
-    function handleScroll(): void {
-        // Only enable compact mode if page is tall enough to avoid bouncing
-        // Use different thresholds for enabling vs disabling (hysteresis) to prevent flickering
-        const enableThreshold = 200;
-        const disableThreshold = 150; // Lower threshold to disable, creates hysteresis
-        const stickyHeaderHeight = 150; // Conservative estimate for 3-row mobile header
-        const safetyBuffer = 100; // Extra buffer to prevent edge cases
-
-        const minPageHeight = window.innerHeight + enableThreshold + stickyHeaderHeight + safetyBuffer;
-        const pageIsTallEnough = document.documentElement.scrollHeight >= minPageHeight;
+    function updateCompactHeader(): void {
+        isCompactMode.value = (filtersElement.value?.getBoundingClientRect().bottom ?? 1) <= 0;
 
         if (!isCompactMode.value) {
-            // Not in compact mode - check if we should enable it
-            if (pageIsTallEnough && window.scrollY > enableThreshold) {
-                isCompactMode.value = true;
-            }
-        } else {
-            // In compact mode - check if we should disable it
-            if (window.scrollY <= disableThreshold) {
-                isCompactMode.value = false;
-                showGroupsDropdown.value = false;
-            }
+            showGroupsDropdown.value = false;
         }
     }
 
@@ -227,11 +213,20 @@
     ]);
 
     onMounted(() => {
-        window.addEventListener('scroll', handleScroll, { passive: true });
+        window.addEventListener('scroll', updateCompactHeader, { passive: true });
+        window.addEventListener('resize', updateCompactHeader);
+        filtersObserver = new ResizeObserver(updateCompactHeader);
+        updateCompactHeader();
+
+        if (filtersElement.value) {
+            filtersObserver.observe(filtersElement.value);
+        }
     });
 
     onUnmounted(() => {
-        window.removeEventListener('scroll', handleScroll);
+        window.removeEventListener('scroll', updateCompactHeader);
+        window.removeEventListener('resize', updateCompactHeader);
+        filtersObserver?.disconnect();
 
         if (searchDebounceTimer.value) {
             clearTimeout(searchDebounceTimer.value);
@@ -274,6 +269,14 @@
     });
 
     const targetLocales = computed(() => locales.value.filter((locale) => locale !== baseLocale.value));
+    const missingTargetLocales = computed(() =>
+        targetLocales.value.filter((locale) => {
+            const value = editValues.value[locale] ?? '';
+            const prefix = page.props.missingTranslationPrefix ?? '🚩';
+
+            return value === '' || (prefix !== '' && value.startsWith(prefix));
+        })
+    );
     const newDynamicBaseValue = computed(() => newDynamicValues.value[baseLocale.value] ?? '');
     const missingDynamicTargetLocales = computed(() =>
         targetLocales.value.filter((locale) => (newDynamicValues.value[locale] ?? '').trim() === '')
@@ -385,7 +388,7 @@
             preserveState: true,
             preserveScroll: true,
             replace: true,
-            only: ['translations', 'filters'],
+            only: ['translations', 'filters', 'groups'],
         });
     }
 
@@ -822,12 +825,20 @@
     function translateAll(): void {
         translateLocales(targetLocales.value);
     }
+
+    function translateMissing(): void {
+        if (missingTargetLocales.value.length === 0) {
+            return;
+        }
+
+        translateLocales(missingTargetLocales.value);
+    }
 </script>
 
 <template>
     <Head title="Manage" />
 
-    <div :class="['space-y-4', isCompactMode ? 'pt-32 sm:pt-14' : '']">
+    <div class="space-y-4">
         <!-- Page Header -->
         <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -871,11 +882,11 @@
             v-if="isCompactMode"
             class="bg-background/95 supports-backdrop-filter:bg-background/60 fixed inset-x-0 top-0 z-50 border-b backdrop-blur"
         >
-            <div class="mx-auto max-w-7xl space-y-2 px-4 py-2 sm:space-y-0 sm:px-4 lg:px-8">
+            <div class="mx-auto max-w-7xl space-y-3 px-4 py-3 lg:px-8">
                 <!-- Row 1: Groups + Search + Reset -->
                 <div class="flex items-center gap-2 sm:gap-3">
                     <!-- Groups Dropdown -->
-                    <div class="relative">
+                    <div class="relative shrink-0">
                         <button
                             class="bg-card hover:bg-muted flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors"
                             type="button"
@@ -904,7 +915,9 @@
                                 "
                             >
                                 <span>All groups</span>
-                                <span class="text-muted-foreground text-xs tabular-nums">{{ totalTranslations }}</span>
+                                <span class="text-muted-foreground text-xs tabular-nums">{{
+                                    filteredGroupsTotal
+                                }}</span>
                             </button>
                             <button
                                 v-for="group in groups"
@@ -940,7 +953,7 @@
                     <!-- Search -->
                     <SearchInput
                         v-model="search"
-                        class="min-w-0 flex-1 sm:max-w-xs"
+                        class="min-w-0 flex-1"
                         placeholder="Search..."
                         @clear="
                             () => {
@@ -950,39 +963,22 @@
                         "
                     />
 
-                    <!-- Reset (visible on mobile, hidden on desktop where it's in row with filters) -->
-                    <span class="sm:hidden">
-                        <Tooltip text="Reset all filters">
-                            <Button
-                                aria-label="Reset all filters"
-                                class="shrink-0"
-                                size="icon"
-                                variant="ghost"
-                                @click="clearFilters"
-                            >
-                                <RotateCcw class="size-4" />
-                            </Button>
-                        </Tooltip>
-                    </span>
-
-                    <!-- Desktop: Status Toggle + Sort + Reset -->
-                    <div class="hidden items-center gap-4 sm:flex">
-                        <ToggleGroup
-                            v-model="status"
-                            :options="statusToggleOptions"
-                            size="sm"
-                            @update:model-value="applyFilters(1)"
-                        />
+                    <div class="hidden shrink-0 items-center gap-2 sm:flex">
+                        <label
+                            class="sr-only"
+                            for="sticky-sort-desktop"
+                            >Sort translations</label
+                        >
                         <Select
+                            id="sticky-sort-desktop"
                             v-model="sort"
                             :options="sortOptions"
-                            class="w-36"
+                            class="w-44 lg:w-56"
                             @update:model-value="applyFilters(1)"
                         />
                         <Tooltip text="Reset all filters">
                             <Button
                                 aria-label="Reset all filters"
-                                class="shrink-0"
                                 size="icon"
                                 variant="ghost"
                                 @click="clearFilters"
@@ -993,24 +989,55 @@
                     </div>
                 </div>
 
-                <!-- Row 2: Status Toggle (mobile only) -->
-                <div class="sm:hidden">
+                <div class="hidden overflow-x-auto pb-1 sm:block">
                     <ToggleGroup
                         v-model="status"
                         :options="statusToggleOptions"
+                        class="whitespace-nowrap"
                         size="sm"
+                        aria-label="Filter translations by status"
                         @update:model-value="applyFilters(1)"
                     />
                 </div>
 
-                <!-- Row 3: Sort (mobile only) -->
-                <div class="flex items-center gap-2 sm:hidden">
+                <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 sm:hidden">
+                    <label
+                        class="sr-only"
+                        for="sticky-status"
+                        >Filter translations by status</label
+                    >
                     <Select
-                        v-model="sort"
-                        :options="sortOptions"
-                        class="flex-1"
+                        id="sticky-status"
+                        v-model="status"
+                        :options="statusToggleOptions"
                         @update:model-value="applyFilters(1)"
                     />
+                    <label
+                        class="sr-only"
+                        for="sticky-sort-mobile"
+                        >Sort translations</label
+                    >
+                    <Select
+                        id="sticky-sort-mobile"
+                        v-model="sort"
+                        :options="
+                            sortOptions.map((option) => ({
+                                ...option,
+                                label: option.value === 'updated_desc' ? 'Newest' : option.label,
+                            }))
+                        "
+                        @update:model-value="applyFilters(1)"
+                    />
+                    <Tooltip text="Reset all filters">
+                        <Button
+                            aria-label="Reset all filters"
+                            size="icon"
+                            variant="ghost"
+                            @click="clearFilters"
+                        >
+                            <RotateCcw class="size-4" />
+                        </Button>
+                    </Tooltip>
                 </div>
             </div>
         </div>
@@ -1023,12 +1050,9 @@
         />
 
         <!-- Main Content -->
-        <div :class="['grid gap-4', isCompactMode ? '' : 'lg:grid-cols-[240px,1fr]']">
-            <!-- Sidebar: Groups (hidden in compact mode) -->
-            <aside
-                v-if="!isCompactMode"
-                class="space-y-4"
-            >
+        <div class="grid gap-4">
+            <!-- Group filters -->
+            <aside class="space-y-4">
                 <section class="bg-card rounded-xl border p-4">
                     <div class="flex items-center justify-between">
                         <h2 class="text-sm font-semibold">Groups</h2>
@@ -1040,34 +1064,37 @@
                         placeholder="Filter groups..."
                         @clear="groupSearch = ''"
                     />
-                    <div class="mt-3 max-h-80 space-y-0.5 overflow-y-auto">
+                    <div class="mt-3 flex max-h-64 flex-wrap gap-2 overflow-y-auto">
                         <button
                             :class="
                                 cn(
-                                    'flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
+                                    'inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors',
                                     selectedGroup === null
-                                        ? 'bg-primary/10 text-primary font-medium'
-                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                        ? 'border-primary/30 bg-primary/10 text-primary font-medium'
+                                        : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
                                 )
                             "
                             type="button"
+                            :aria-pressed="selectedGroup === null"
                             @click="selectGroup(null)"
                         >
                             <span>All groups</span>
-                            <span class="text-xs tabular-nums">{{ pagination.total }}</span>
+                            <span class="shrink-0 text-xs tabular-nums opacity-70">{{ filteredGroupsTotal }}</span>
                         </button>
                         <button
                             v-for="group in filteredGroups"
                             :key="group.name"
                             :class="
                                 cn(
-                                    'flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
+                                    'inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors',
                                     selectedGroup === group.name
-                                        ? 'bg-primary/10 text-primary font-medium'
-                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                        ? 'border-primary/30 bg-primary/10 text-primary font-medium'
+                                        : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
                                 )
                             "
                             type="button"
+                            :aria-pressed="selectedGroup === group.name"
+                            :title="group.name"
                             @click="selectGroup(group.name)"
                         >
                             <span class="flex min-w-0 items-center gap-1.5">
@@ -1087,7 +1114,7 @@
                                     JSON
                                 </Badge>
                             </span>
-                            <span class="text-xs tabular-nums">{{ group.total }}</span>
+                            <span class="shrink-0 text-xs tabular-nums opacity-70">{{ group.total }}</span>
                         </button>
                     </div>
                 </section>
@@ -1095,9 +1122,9 @@
 
             <!-- Main: Translations List -->
             <div class="min-w-0 space-y-4">
-                <!-- Filters (hidden in compact mode - shown in sticky header instead) -->
+                <!-- Keep filters in flow so the compact header cannot change the scroll range. -->
                 <section
-                    v-if="!isCompactMode"
+                    ref="filtersElement"
                     class="bg-card rounded-xl border p-4"
                 >
                     <div class="flex flex-col gap-4">
@@ -1118,7 +1145,7 @@
                                 <Select
                                     v-model="sort"
                                     :options="sortOptions"
-                                    class="w-40"
+                                    class="w-40 lg:w-56"
                                     @update:model-value="applyFilters(1)"
                                 />
                                 <Tooltip text="Reset all filters">
@@ -1139,6 +1166,7 @@
                         <div class="flex flex-wrap items-center gap-4">
                             <ToggleGroup
                                 v-model="status"
+                                class="max-w-full flex-wrap"
                                 :options="statusToggleOptions"
                                 size="sm"
                                 @update:model-value="applyFilters(1)"
@@ -1647,21 +1675,38 @@
 
         <!-- Locale Values -->
         <div class="space-y-4">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <p class="text-sm font-semibold">Translations</p>
                     <p class="text-muted-foreground text-xs">Edit values for each locale.</p>
                 </div>
-                <Button
+                <div
                     v-if="aiStatus.available"
-                    :disabled="!canTranslate || isTranslating"
-                    size="sm"
-                    variant="outline"
-                    @click="translateAll"
+                    class="flex w-full flex-wrap gap-2 sm:w-auto"
                 >
-                    <Sparkles class="size-4" />
-                    Translate all
-                </Button>
+                    <Button
+                        :disabled="!canTranslate || isTranslating || missingTargetLocales.length === 0"
+                        class="flex-auto sm:flex-none"
+                        size="sm"
+                        variant="outline"
+                        title="Fill empty or flagged locale values using the base locale."
+                        @click="translateMissing"
+                    >
+                        <Sparkles class="size-4" />
+                        AI translate missing
+                    </Button>
+                    <Button
+                        :disabled="!canTranslate || isTranslating"
+                        class="flex-auto sm:flex-none"
+                        size="sm"
+                        variant="outline"
+                        title="Replace all target locale values using the base locale."
+                        @click="translateAll"
+                    >
+                        <Sparkles class="size-4" />
+                        AI retranslate
+                    </Button>
+                </div>
             </div>
 
             <div

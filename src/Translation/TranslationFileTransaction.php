@@ -9,7 +9,7 @@ use Throwable;
 
 class TranslationFileTransaction
 {
-    /** @var array<string, string|null> */
+    /** @var array<string, array{contents: string, mode: int}|null> */
     private array $originals = [];
 
     private bool $active = false;
@@ -27,11 +27,11 @@ class TranslationFileTransaction
             $result = $callback();
             $afterCommit = $this->afterCommit;
         } catch (Throwable $exception) {
-            foreach (array_reverse($this->originals, true) as $path => $contents) {
-                if ($contents === null) {
+            foreach (array_reverse($this->originals, true) as $path => $original) {
+                if ($original === null) {
                     File::delete($path);
                 } else {
-                    File::replace($path, $contents);
+                    File::replace($path, $original['contents'], $original['mode']);
                 }
             }
             throw $exception;
@@ -61,7 +61,7 @@ class TranslationFileTransaction
     {
         $this->remember($path);
         File::ensureDirectoryExists(dirname($path));
-        File::replace($path, $contents);
+        File::replace($path, $contents, $this->permissions($path));
         if (! File::exists($path) || File::get($path) !== $contents) {
             throw new RuntimeException('Unable to write translation file: '.$path);
         }
@@ -78,7 +78,27 @@ class TranslationFileTransaction
     private function remember(string $path): void
     {
         if ($this->active && ! array_key_exists($path, $this->originals)) {
-            $this->originals[$path] = File::exists($path) ? File::get($path) : null;
+            $this->originals[$path] = File::exists($path) ? [
+                'contents' => File::get($path),
+                'mode' => $this->permissions($path),
+            ] : null;
         }
+    }
+
+    private function permissions(string $path): int
+    {
+        clearstatcache(true, $path);
+
+        if (! File::exists($path)) {
+            return 0666 & ~umask();
+        }
+
+        $permissions = fileperms($path);
+
+        if ($permissions === false) {
+            throw new RuntimeException('Unable to read translation file permissions: '.$path);
+        }
+
+        return $permissions & 07777;
     }
 }

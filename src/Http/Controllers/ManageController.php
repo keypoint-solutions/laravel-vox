@@ -41,10 +41,11 @@ class ManageController
         $totalTranslations = VoxTranslation::query()->count();
 
         return Inertia::render('Manage', [
-            'groups' => $this->loadGroups(),
+            'groups' => $this->loadGroups($filters['status'], $locales, $lastSyncBoundary),
             'translations' => $this->loadTranslations($request, $filters, $locales, $lastSyncBoundary),
             'locales' => $locales,
             'baseLocale' => $baseLocale,
+            'missingTranslationPrefix' => (string) config('vox.parse.missing_translation_prefix', '🚩'),
             'filters' => $filters,
             'statusOptions' => $this->statusOptions(),
             'sortOptions' => $this->sortOptions(),
@@ -121,28 +122,36 @@ class ManageController
     }
 
     /**
+     * @param  array<int, string>  $locales
      * @return array<int, array{name: string, total: int, is_frontend_exported: bool, frontend_export_source: string|null, is_json: bool}>
      */
-    private function loadGroups(): array
+    private function loadGroups(?string $status, array $locales, ?CarbonInterface $lastSyncAt): array
     {
         $frontendGroups = $this->frontendManifest->groups();
         $frontendSource = $this->frontendManifest->usesConfiguredGroups() ? 'configured' : 'detected';
-        $groups = VoxTranslation::query()
+        $countQuery = VoxTranslation::query();
+        $this->applyStatusFilter($countQuery, $status, $lastSyncAt, $locales);
+        $counts = $countQuery
             ->select('group')
             ->selectRaw('count(*) as total')
+            ->groupBy('group')
+            ->pluck('total', 'group');
+
+        $groups = VoxTranslation::query()
+            ->select('group')
             ->groupBy('group')
             ->orderBy('group')
             ->get();
 
         return $groups
-            ->map(function (VoxTranslation $group) use ($frontendGroups, $frontendSource): array {
+            ->map(function (VoxTranslation $group) use ($frontendGroups, $frontendSource, $counts): array {
                 $name = $group->group ?? 'default';
                 $isJson = $name === 'json';
                 $isFrontendExported = $isJson || in_array($name, $frontendGroups, true);
 
                 return [
                     'name' => $name,
-                    'total' => (int) $group->total,
+                    'total' => (int) $counts->get($group->group ?? '', 0),
                     'is_frontend_exported' => $isFrontendExported,
                     'frontend_export_source' => $isFrontendExported
                         ? ($isJson ? 'json' : $frontendSource)
