@@ -13,6 +13,7 @@ Vox defaults to a **standalone SQLite database** at `storage/vox/vox.sqlite` and
 - **Flat or nested translations.** Work with PHP arrays, dotted keys, JSON translations, vendor namespaces, and groups in nested folders. Parse and Publish share the same format rules, with an option to preserve existing PHP layout.
 - **Source-aware parsing.** Discover translation calls in PHP, Blade, JavaScript, TypeScript, and Vue; record where keys are used; and update language files. Command output ends with a summary, with detailed occurrences available when needed.
 - **Dynamic-key detection and protection.** Detect supported expressions that assemble translation keys at runtime. Review their patterns and retain whole key families, such as `roles.*`, when static scanning cannot prove their usage.
+- **Enum and custom dynamic bindings.** Bind a key pattern such as `enums.roles.*` to a PHP enum, an explicit list, a provider class, or a callback returning an iterable. Vox expands the binding into concrete keys; backed enums supply their values and unit enums their case names. See [Dynamic keys and retention](#dynamic-keys-and-retention) for examples.
 - **Deliberate cleanup.** Identify orphaned keys, schedule any key for deletion, or cancel before publishing. Parse's obsolete-key policy controls source cleanup; publishing also removes files left empty.
 - **Safe file updates.** Preserve existing file permissions, support readable Unicode, and roll back failed file operations. Unapproved drafts stay unpublished, and approval is tracked independently for each locale.
 
@@ -42,7 +43,14 @@ The Vue integration supports locale discovery, fallback, pluralization, and reac
 
 For custom build pipelines, the [`TranslationsPublished` event](#publication-events) lets your application queue its own asset rebuild after successful publication. Deployment reconciliation preserves published management overrides and unpublished drafts when fresh application files arrive.
 
-**Start here:** [Installation](#installation) · [Configuration](#configuration) · [Backend Use](#backend-use) · [Frontend Use](#frontend-use) · [Translation Management](#translation-management)
+### Built for developer workflows
+
+- **A complete CLI alongside the UI.** Discover, sync, translate, review, publish, and compile translations through Artisan. Use explicit environment IDs and non-interactive options in scripts, or integrate `vox:deploy` into your release process. See the [command reference](#commands) for examples.
+- **Hot reload, including PHP-served translations.** With the Vox Vite plugin running, edits to PHP or JSON language files update reactive frontend translations without a manual page refresh. In runtime mode, the plugin runs `vox:compile`, notifies the browser, and reloads its dictionaries—even though PHP serves the translation catalogues instead of bundling them into JavaScript.
+- **Automatic frontend discovery during development.** Supported translation calls update the frontend group manifest as source files change, keeping the browser's translation catalogue aligned with the code.
+- **Fits existing applications.** Keep Laravel's translation helpers and language files, install the prebuilt manager without adding an application Inertia setup, and use the publication event for custom asset pipelines.
+
+**Start here:** [Installation](#installation) · [Configuration](#configuration) · [Backend Use](#backend-use) · [Frontend Use](#frontend-use) · [Translation Management](#translation-management) · [Developer Workflow](#typical-developer-workflow)
 
 ## Requirements
 
@@ -301,30 +309,129 @@ Delete any key from Manage, then Publish to remove all its locale values. Cancel
 
 In Sync, **Application languages** creates a locale from the configured base locale, including nested PHP groups and vendor JSON. Without AI, nonempty source wording receives the missing marker. Optional AI skips unusable sources. These generated files become live application defaults immediately; this is different from Manage's AI draft workflow.
 
-## Commands
+## Typical Developer Workflow
 
-| Command                        | Effect                                                                                          |
-| ------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `vox:setup --force`            | Initialize/migrate Vox and publish manager assets                                               |
-| `vox:parse`                    | Scan and update language files; no database translation import. `-v` shows detailed occurrences |
-| `vox:sync`                     | Compare local files with database wording and refresh source metadata                           |
-| `vox:sync --parse`             | Parse before syncing using the same scan                                                        |
-| `vox:translate`                | AI-translate missing values **directly in files**                                               |
-| `vox:publish`                  | Publish approved changes and pending deletions                                                  |
-| `vox:publish --published-only` | Regenerate recorded defaults/overrides; do not publish drafts or deletions                      |
-| `vox:compile`                  | Rebuild frontend JSON from current files; no database import or source-file changes             |
-| `vox:frontend-discover`        | Refresh frontend group discovery                                                                |
-| `vox:deploy`                   | Setup, import fresh release defaults, and restore published overrides                           |
+After [installation and configuration](#installation), the usual loop is:
 
-Examples:
-
-```bash
-php artisan vox:translate --path=en/admin/messages.php
-php artisan vox:translate --key=messages.welcome --force
-php artisan vox:review
+```mermaid
+flowchart LR
+    A[Edit application code] --> B[vox:sync --parse]
+    B --> C[Translate and review in Vox]
+    C --> D[vox:publish]
+    D --> E[Check and commit language files]
 ```
 
-`--force` retranslates completed targets but still requires usable source wording. CLI translation and Manage share eligibility rules, but CLI writes files while Manage saves drafts. Use `php artisan help COMMAND` for complete options.
+Run these commands from the consuming application:
+
+| When                                       | What to run or do                                                                                                                                                                                   |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Starting frontend development              | `npm run dev` with the Vox Vite plugin configured. It handles frontend discovery and translation hot reload.                                                                                        |
+| After adding or removing translation calls | `php artisan vox:sync --parse` to update language files and refresh the manager. Configure retention for runtime-only key families first.                                                           |
+| Filling missing translations               | Use **AI translate missing** or edit values in Manage, then approve the wording you want to publish.                                                                                                |
+| Ready to make approved wording live        | `php artisan vox:publish`. Runtime catalogues are refreshed automatically; bundled delivery needs `npm run build` for the distributable assets.                                                     |
+| Before committing                          | Review the language-file diff, including deletions, then commit the intended files.                                                                                                                 |
+| Deploying fresh release files              | `php artisan vox:deploy --no-interaction`, before activating the release. For bundled delivery, build frontend assets afterward. See [Deployment](#deployment) for ordering and retry requirements. |
+
+### Variations
+
+- **Prefer translating through the CLI?** Run `php artisan vox:translate` after parsing, inspect its changes, then run `php artisan vox:sync` to bring the file wording into the manager. CLI translation writes directly to files; it does not create drafts awaiting publication.
+- **Edited language files directly?** Run `php artisan vox:sync` to review them in the manager. Outside Vite development, run `php artisan vox:compile` to refresh runtime catalogues, or rebuild bundled assets.
+- **Need the latest production wording?** Run `php artisan vox:sync-remote --environment=1`, replacing `1` with the configured environment ID. Review incoming changes in Sync, accept the desired wording, then publish. Pulling alone does not replace local files.
+- **Only need file discovery, without the manager?** Run `php artisan vox:parse` instead of `vox:sync --parse`.
+
+You normally do not run `vox:frontend-discover` manually, or run `vox:compile` immediately after Publish: those steps are already handled by the Vite plugin and publication workflow respectively.
+
+## Commands
+
+Run commands from the consuming Laravel application. Use `php artisan help vox:COMMAND` for the complete option list.
+
+### Setup and configuration
+
+| Command                    | Description and usage                                                                                                                         |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `php artisan vox:setup`    | Create the default database when needed, run Vox migrations, and publish manager assets. Add `--force` for production. Rerun after upgrading. |
+| `php artisan vox:install`  | Compatibility alias for `vox:setup`; prefer `vox:setup` in new scripts.                                                                       |
+| `php artisan vox:settings` | Display key configuration values, including the database, parsing rules, locales, and AI model.                                               |
+
+Vox migrations are managed by `vox:setup` (also called by `vox:deploy`), separately from the application's normal `migrate` command.
+
+### Discover, sync, and translate
+
+| Command                     | Description and usage                                                                                                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `php artisan vox:parse`     | Scan source usage and update language files according to the configured format, retention, and obsolete-key rules. Does not import translations into the database. Add `-v` for detailed occurrences.                           |
+| `php artisan vox:sync`      | Compare current language files with Vox's database and refresh usage metadata. Existing edits go through reconciliation. Add `--parse` to update language files first.                                                          |
+| `php artisan vox:translate` | Translate missing values using the configured AI driver, writing **directly to language files**. Restrict work with `--path` or `--key`; use `--force` to retranslate existing wording. Unusable base wording is still skipped. |
+
+```bash
+# Discover keys, update files, and bring the results into the manager.
+php artisan vox:sync --parse
+
+# Translate one file (path relative to the language directory).
+php artisan vox:translate --path=en/admin/messages.php
+
+# Retranslate one key across the applicable target locales.
+php artisan vox:translate --key=messages.welcome --force
+```
+
+Configure retained key families before parsing: the default obsolete policy discards undiscovered keys and removes files left empty. CLI translation and Manage share eligibility rules, but Manage saves drafts while the CLI changes live files.
+
+### Remote pulls and review
+
+| Command                             | Description and usage                                                                                                                                                                                                                                                         |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `php artisan vox:generate-sync-key` | Generate and save the source application's sync key to `.env`. Add `--force` to replace an existing key, then update environments that use it.                                                                                                                                |
+| `php artisan vox:sync-remote`       | Select a configured environment interactively and pull wording for review. Use `--environment=1` for a specific source, `--include-drafts` to fetch editable wording, and `--check` to fail when review or publication is still needed. Does not change local language files. |
+| `php artisan vox:review`            | Inspect previously imported local-file changes. Select a remote source with `--environment=1`, or every source with `--environment=all`; the default is `files`. Displays the first page; use the UI for individual decisions.                                                |
+
+```bash
+# Pull a configured source without prompting, and check for outstanding work.
+php artisan vox:sync-remote --environment=1 --check --no-interaction
+php artisan vox:review --environment=1
+
+# After inspection, choose ONE batch action for the source.
+php artisan vox:review --environment=1 --accept-all
+# Alternatively: php artisan vox:review --environment=1 --keep-all
+
+# Publish approved wording separately when ready.
+php artisan vox:publish
+```
+
+Review's batch actions apply to all matching actionable values, beyond the displayed page. `--accept-all` approves incoming wording; `--keep-all` acknowledges the current wording. They cannot be combined. Adding `--publish` to `--accept-all` publishes the accepted selection immediately.
+
+### Publish, compile, and deploy
+
+| Command                             | Description and usage                                                                                                                                                                                                                              |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `php artisan vox:publish`           | Write approved changes, refresh previously published wording, and apply pending deletions. Also refresh frontend catalogues. Add `--published-only` to regenerate recorded defaults and overrides without applying drafts or pending deletions.    |
+| `php artisan vox:frontend-discover` | **Advanced; normally automatic.** The Vox Vite plugin runs this at startup, on relevant source changes during development, and before production builds. Refreshes the frontend group manifest without changing language files or database values. |
+| `php artisan vox:compile`           | Generate frontend translation JSON from current language files. Does not import database values, publish drafts, or run a JavaScript build.                                                                                                        |
+| `php artisan vox:deploy`            | Run setup, import freshly installed release defaults, and restore published management overrides while preserving drafts. Use only after installing fresh release language files; see [Deployment](#deployment).                                   |
+
+```bash
+# Refresh runtime catalogues after editing language files directly.
+php artisan vox:compile
+
+# Restore recorded published wording without importing new defaults.
+php artisan vox:publish --published-only
+
+# Reconcile translations during deployment, before activating the release.
+php artisan vox:deploy --no-interaction
+```
+
+Run `vox:frontend-discover` manually only for a custom build pipeline or when automatic discovery is disabled with `frontendDiscovery: false`.
+
+Runtime delivery needs no frontend rebuild after refreshing catalogues. Bundled delivery requires your normal frontend build afterward.
+
+### Maintenance and reset
+
+| Command                             | Description and usage                                                                                                        |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `php artisan vox:cleanup`           | Delete audit records older than 90 days. This does **not** delete translation keys or clean language files.                  |
+| `php artisan vox:reset`             | Permanently clear database translation work while keeping settings, environments, and audits. Published files remain intact. |
+| `php artisan vox:reset --scope=all` | Also delete settings, environments, and audit history. Published files remain intact.                                        |
+
+Reset asks for typed confirmation. `--force` skips it for intentional automation; back up Vox's database first. Sync can recover file values afterward, but cannot recover unpublished drafts.
 
 ## Remote Sync and Archives
 
