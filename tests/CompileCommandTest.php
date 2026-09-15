@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 
@@ -65,4 +66,18 @@ it('does not compile while another translation writer holds the lock', function 
         flock($handle, LOCK_UN);
         fclose($handle);
     }
+});
+
+it('compiles release language files without an initialized Vox database', function (): void {
+    File::put($this->fixtureRoot.'/lang/en/messages.php', "<?php return ['greeting' => 'Release hello'];");
+    File::put($this->fixtureRoot.'/lang/fr/messages.php', "<?php return ['greeting' => 'Release bonjour'];");
+    $connection = config('vox.database.connection');
+    DB::purge($connection);
+    config()->set("database.connections.{$connection}.database", $this->fixtureRoot.'/missing/vox.sqlite');
+
+    $this->artisan('vox:compile')->assertSuccessful();
+
+    expect(json_decode(File::get($this->fixtureRoot.'/compiled/en.json'), true))
+        ->toBe(['messages.greeting' => 'Release hello'])
+        ->and(File::exists($this->fixtureRoot.'/missing/vox.sqlite'))->toBeFalse();
 });

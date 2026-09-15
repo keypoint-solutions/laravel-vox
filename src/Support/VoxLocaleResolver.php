@@ -24,6 +24,14 @@ class VoxLocaleResolver
     }
 
     /** @return array<int, string> */
+    public function resolveFileLocales(): array
+    {
+        $locales = $this->applicationLocales();
+
+        return $this->sortLocales(array_merge([$this->resolveBaseLocale($locales)], $locales));
+    }
+
+    /** @return array<int, string> */
     public function resolveRuntimeLocales(): array
     {
         $locales = $this->applicationLocales();

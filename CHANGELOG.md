@@ -4,6 +4,10 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.2 — 2026-09-15
+
+- Allow `vox:compile` to build frontend translations before the Vox database exists, using application locale configuration and language files.
+
 ## 1.0.1 — 2026-09-15
 
 - Enable frontend runtime translation delivery by default in PHP and the Vite plugin. Set `VOX_FRONTEND_RUNTIME_ENABLED=false` to retain bundled delivery.

@@ -269,7 +269,7 @@ Use `*` to include every PHP group, including nested folders and namespaces. `fr
 
 Vite runs `vox:frontend-discover` when an `artisan` file is available at its root. It refreshes group discovery on source edits and before builds. PHP edits reparse only the affected file and hot-reload its locale without remounting Vue. Runtime development recompiles catalogues with `vox:compile`. Set `frontendDiscovery: false` on the plugin if another process manages discovery.
 
-Runtime files live in `storage/vox/frontend-translations`. Their HTTP endpoints read generated files, not the Vox database, and support cache revalidation. Run `php artisan vox:compile` to prepare them from current language files. For custom mounts, runtime initialization accepts `baseUrl: '/admin/translations'`; cross-origin authentication and CORS belong to the application.
+Runtime files live in `storage/vox/frontend-translations`. Their HTTP endpoints read generated files, not the Vox database, and support cache revalidation. Run `php artisan vox:compile` to prepare them from current language files. Compilation works without a Vox database, including in clean deployment build directories. It uses configured or file-discovered locales plus the default locale; locales stored only in the manager database must first have language files or explicit locale configuration. For custom mounts, runtime initialization accepts `baseUrl: '/admin/translations'`; cross-origin authentication and CORS belong to the application.
 
 ## Translation Management
 
