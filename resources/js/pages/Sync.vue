@@ -496,7 +496,7 @@
         <section class="bg-card rounded-xl border">
             <div class="flex flex-col gap-2 border-b p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 class="text-sm font-semibold">Configured environments</h2>
+                    <h2 class="text-sm font-semibold">Remote environments</h2>
                     <p class="text-muted-foreground mt-1 text-xs">
                         Pull published production or staging values for review. Pull drafts also includes unpublished
                         wording. Last successful sync:
@@ -512,14 +512,16 @@
             >
                 <Server class="text-muted-foreground/50 mx-auto size-9" />
                 <p class="mt-3 text-sm font-medium">No remote environments yet</p>
-                <p class="text-muted-foreground mt-1 text-xs">Add the headless demo fixture or another Vox endpoint.</p>
+                <p class="text-muted-foreground mt-1 text-xs">
+                    Add a production or staging environment below to pull its translations for review.
+                </p>
             </div>
 
             <div
                 v-for="environment in environments"
                 v-else
                 :key="environment.id"
-                class="flex flex-col gap-4 border-b p-4 last:border-b-0 sm:flex-row sm:items-center"
+                class="flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-center"
             >
                 <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
@@ -574,6 +576,109 @@
                     </Tooltip>
                 </div>
             </div>
+
+            <div :class="['p-5', environments.length === 0 && 'border-t']">
+                <div class="mb-5 flex items-start gap-3">
+                    <div class="bg-primary/10 text-primary flex size-9 items-center justify-center rounded-lg">
+                        <Plus class="size-4" />
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-semibold">
+                            {{ editingId === null ? 'Add an environment' : 'Edit environment' }}
+                        </h2>
+                        <p class="text-muted-foreground mt-1 text-xs">
+                            Use either the application URL or its complete Vox sync endpoint.
+                        </p>
+                    </div>
+                </div>
+
+                <form
+                    class="grid gap-4 sm:grid-cols-2"
+                    @submit.prevent="submit"
+                >
+                    <div class="space-y-1.5">
+                        <Label for="sync-name">Name</Label>
+                        <Input
+                            id="sync-name"
+                            v-model="form.name"
+                            autocomplete="off"
+                            placeholder="Production or staging"
+                        />
+                        <p
+                            v-if="form.errors.name"
+                            class="text-destructive text-xs"
+                        >
+                            {{ form.errors.name }}
+                        </p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="sync-type">Environment type</Label>
+                        <select
+                            id="sync-type"
+                            v-model="form.type"
+                            class="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                        >
+                            <option value="testing">Testing</option>
+                            <option value="staging">Staging</option>
+                            <option value="production">Production</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5 sm:col-span-2">
+                        <Label for="sync-url">URL</Label>
+                        <Input
+                            id="sync-url"
+                            v-model="form.url"
+                            inputmode="url"
+                            placeholder="https://staging.example.com"
+                        />
+                        <p
+                            v-if="form.errors.url"
+                            class="text-destructive text-xs"
+                        >
+                            {{ form.errors.url }}
+                        </p>
+                    </div>
+                    <div class="space-y-1.5 sm:col-span-2">
+                        <Label for="sync-key">Sync key</Label>
+                        <Input
+                            id="sync-key"
+                            v-model="form.secret_key"
+                            autocomplete="new-password"
+                            :placeholder="editingId === null ? 'Required' : 'Leave blank to keep the current key'"
+                            type="password"
+                        />
+                        <p
+                            v-if="form.errors.secret_key"
+                            class="text-destructive text-xs"
+                        >
+                            {{ form.errors.secret_key }}
+                        </p>
+                    </div>
+                    <div class="flex items-center justify-end gap-2 sm:col-span-2">
+                        <Button
+                            v-if="editingId !== null"
+                            type="button"
+                            variant="outline"
+                            @click="resetForm"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            :disabled="form.processing"
+                            type="submit"
+                        >
+                            {{
+                                form.processing
+                                    ? 'Saving…'
+                                    : editingId === null
+                                      ? 'Add environment'
+                                      : 'Save environment'
+                            }}
+                        </Button>
+                    </div>
+                </form>
+            </div>
         </section>
 
         <RemoteReconciliationPanel
@@ -581,102 +686,5 @@
             :can-choose-with-ai="page.props.ai.can_choose"
             :environments="environments"
         />
-
-        <section class="bg-card rounded-xl border p-5">
-            <div class="mb-5 flex items-start gap-3">
-                <div class="bg-primary/10 text-primary flex size-9 items-center justify-center rounded-lg">
-                    <Plus class="size-4" />
-                </div>
-                <div>
-                    <h2 class="text-sm font-semibold">
-                        {{ editingId === null ? 'Add an environment' : 'Edit environment' }}
-                    </h2>
-                    <p class="text-muted-foreground mt-1 text-xs">
-                        Use either the application URL or its complete Vox sync endpoint.
-                    </p>
-                </div>
-            </div>
-
-            <form
-                class="grid gap-4 sm:grid-cols-2"
-                @submit.prevent="submit"
-            >
-                <div class="space-y-1.5">
-                    <Label for="sync-name">Name</Label>
-                    <Input
-                        id="sync-name"
-                        v-model="form.name"
-                        autocomplete="off"
-                        placeholder="Demo remote"
-                    />
-                    <p
-                        v-if="form.errors.name"
-                        class="text-destructive text-xs"
-                    >
-                        {{ form.errors.name }}
-                    </p>
-                </div>
-                <div class="space-y-1.5">
-                    <Label for="sync-type">Environment type</Label>
-                    <select
-                        id="sync-type"
-                        v-model="form.type"
-                        class="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
-                    >
-                        <option value="testing">Testing</option>
-                        <option value="staging">Staging</option>
-                        <option value="production">Production</option>
-                        <option value="custom">Custom</option>
-                    </select>
-                </div>
-                <div class="space-y-1.5 sm:col-span-2">
-                    <Label for="sync-url">URL</Label>
-                    <Input
-                        id="sync-url"
-                        v-model="form.url"
-                        inputmode="url"
-                        placeholder="https://staging.example.com"
-                    />
-                    <p
-                        v-if="form.errors.url"
-                        class="text-destructive text-xs"
-                    >
-                        {{ form.errors.url }}
-                    </p>
-                </div>
-                <div class="space-y-1.5 sm:col-span-2">
-                    <Label for="sync-key">Sync key</Label>
-                    <Input
-                        id="sync-key"
-                        v-model="form.secret_key"
-                        autocomplete="new-password"
-                        :placeholder="editingId === null ? 'Required' : 'Leave blank to keep the current key'"
-                        type="password"
-                    />
-                    <p
-                        v-if="form.errors.secret_key"
-                        class="text-destructive text-xs"
-                    >
-                        {{ form.errors.secret_key }}
-                    </p>
-                </div>
-                <div class="flex items-center justify-end gap-2 sm:col-span-2">
-                    <Button
-                        v-if="editingId !== null"
-                        type="button"
-                        variant="outline"
-                        @click="resetForm"
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        :disabled="form.processing"
-                        type="submit"
-                    >
-                        {{ form.processing ? 'Saving…' : editingId === null ? 'Add environment' : 'Save environment' }}
-                    </Button>
-                </div>
-            </form>
-        </section>
     </div>
 </template>

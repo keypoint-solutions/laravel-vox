@@ -33,13 +33,13 @@ class TranslationFileWriter
     public function toJson(array $data): string
     {
         $sorted = $this->sortArray($data);
-        $flags = JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES;
+        $flags = JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR;
 
         if (! config('vox.parse.escape_unicode', false)) {
             $flags |= JSON_UNESCAPED_UNICODE;
         }
 
-        return json_encode($sorted, $flags) ?: '{}';
+        return json_encode($sorted, $flags);
     }
 
     /**

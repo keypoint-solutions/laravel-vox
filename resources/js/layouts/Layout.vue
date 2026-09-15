@@ -164,7 +164,16 @@
                         </a>
                         <a
                             class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
-                            href="mailto:cbereveanu@gmail.com"
+                            href="https://github.com/keypoint-solutions/laravel-vox/blob/main/README.md"
+                            rel="noreferrer"
+                            target="_blank"
+                        >
+                            <FileText class="size-3.5" />
+                            Documentation
+                        </a>
+                        <a
+                            class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
+                            href="mailto:costin@keypoint.ro"
                         >
                             <Mail class="size-3.5" />
                             Contact
@@ -346,7 +355,16 @@
                             </a>
                             <a
                                 class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
-                                href="mailto:cbereveanu@gmail.com"
+                                href="https://github.com/keypoint-solutions/laravel-vox/blob/main/README.md"
+                                rel="noreferrer"
+                                target="_blank"
+                            >
+                                <FileText class="size-3.5" />
+                                Documentation
+                            </a>
+                            <a
+                                class="text-sidebar-foreground/70 hover:text-sidebar-foreground inline-flex items-center gap-1.5"
+                                href="mailto:costin@keypoint.ro"
                             >
                                 <Mail class="size-3.5" />
                                 Contact
