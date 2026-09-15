@@ -71,3 +71,38 @@ it('exports long translation keys without truncating their identity', function (
     expect($snapshot->export()['values'][0]['key'])->toBe($key)
         ->and($snapshot->export(true)['values'][0]['key'])->toBe($key);
 });
+
+it('validates fifty thousand values within the snapshot processing budget', function (): void {
+    $values = [];
+    for ($index = 0; $index < 50000; $index++) {
+        $values[] = ['group' => 'messages', 'key' => 'key_'.$index, 'locale' => 'en', 'value' => 'Published wording'];
+    }
+
+    $start = hrtime(true);
+    $validated = app(RemoteTranslationSnapshot::class)->validate($values);
+    $seconds = (hrtime(true) - $start) / 1e9;
+
+    expect($validated)->toHaveCount(50000)
+        ->and($seconds)->toBeLessThan(3.0);
+});
+
+it('preserves wire format validation boundaries', function (): void {
+    $snapshot = app(RemoteTranslationSnapshot::class);
+    $entry = ['group' => 'vendor::messages', 'key' => '0', 'locale' => 'sr_Latn_RS', 'value' => ''];
+
+    expect($snapshot->validate([]))->toBe([])
+        ->and($snapshot->validate([$entry]))->toBe([$entry]);
+
+    $invalid = [null, 'invalid', array_fill(0, 100001, $entry), [null]];
+    foreach ([
+        ['group', '../messages'], ['group', str_repeat('a', 256)], ['group', 123],
+        ['key', '  '], ['key', 123], ['locale', 'en/gb'], ['locale', 123],
+        ['value', str_repeat('a', 1000001)], ['value', []],
+    ] as [$field, $replacement]) {
+        $invalid[] = [array_replace($entry, [$field => $replacement])];
+    }
+
+    foreach ($invalid as $payload) {
+        expect(fn () => $snapshot->validate($payload))->toThrow(ValidationException::class);
+    }
+});

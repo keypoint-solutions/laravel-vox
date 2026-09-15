@@ -4,7 +4,6 @@ namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 
@@ -81,19 +80,35 @@ class RemoteTranslationSnapshot
      */
     public function validate(mixed $values): array
     {
-        $validated = Validator::make(['values' => $values], [
-            'values' => ['present', 'array', 'max:100000'],
-        ])->validate()['values'];
+        if (! is_array($values) || count($values) > 100000) {
+            throw ValidationException::withMessages(['sync' => 'Remote snapshot must contain an array of at most 100000 values.']);
+        }
+
         $seen = [];
 
-        foreach ($validated as $value) {
-            Validator::make(['entry' => $value], [
-                'entry' => ['required', 'array:group,key,locale,value'],
-                'entry.group' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z0-9][A-Za-z0-9_.-]*(?:::[A-Za-z0-9][A-Za-z0-9_.-]*)?$/D'],
-                'entry.key' => ['required', 'string'],
-                'entry.locale' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*$/D'],
-                'entry.value' => ['present', 'string', 'max:1000000'],
-            ])->validate();
+        foreach ($values as $value) {
+            if (! is_array($value) || count($value) !== 4
+                || ! isset($value['group'], $value['key'], $value['locale'], $value['value'])) {
+                throw ValidationException::withMessages(['sync' => 'Each remote value must contain only group, key, locale, and value fields.']);
+            }
+
+            if (! is_string($value['group']) || strlen($value['group']) > 255
+                || preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]*(?:::[A-Za-z0-9][A-Za-z0-9_.-]*)?$/D', $value['group']) !== 1) {
+                throw ValidationException::withMessages(['sync' => 'Remote translation group is invalid.']);
+            }
+
+            if (! is_string($value['key']) || trim($value['key']) === '') {
+                throw ValidationException::withMessages(['sync' => 'Remote translation key must be a non-empty string.']);
+            }
+
+            if (! is_string($value['locale']) || strlen($value['locale']) > 255
+                || preg_match('/^[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*$/D', $value['locale']) !== 1) {
+                throw ValidationException::withMessages(['sync' => 'Remote translation locale is invalid.']);
+            }
+
+            if (! is_string($value['value']) || mb_strlen($value['value'], 'UTF-8') > 1000000) {
+                throw ValidationException::withMessages(['sync' => 'Remote translation value must be a string of at most 1000000 characters.']);
+            }
 
             if ($value['group'] === 'json' && str_contains($value['key'], '::')) {
                 $namespace = explode('::', $value['key'], 2)[0];
@@ -112,7 +127,7 @@ class RemoteTranslationSnapshot
             $seen[$identity] = true;
         }
 
-        return array_values($validated);
+        return array_values($values);
     }
 
     public static function identity(?string $group, string $key, string $locale = ''): string

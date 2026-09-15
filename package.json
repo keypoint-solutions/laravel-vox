@@ -1,7 +1,7 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
     "name": "@keypoint-solutions/laravel-vox",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "private": false,
     "description": "A Laravel translation manager with AI backing and a friendly management GUI.",
     "author": {

@@ -4,6 +4,11 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.7 — 2026-09-15
+
+- Speed up remote snapshot validation with direct format checks, preserving field, size, namespace, and duplicate checks without constructing a Laravel validator for every value.
+- Document the application Composer hook for refreshing manager assets after updates, including migration and deployment requirements.
+
 ## 1.0.6 — 2026-09-15
 
 - Allow remote snapshots to preserve translation keys longer than 255 characters instead of rejecting the export with HTTP 422.

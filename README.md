@@ -78,6 +78,24 @@ Setup creates `storage/vox/vox.sqlite` when needed, runs package migrations, and
 
 After upgrading, run `php artisan vox:setup --force` to apply migrations and refresh assets. `vox:install` remains an alias for setup.
 
+### Keep manager assets up to date
+
+Add the following command to the consuming application's `composer.json` under `scripts.post-update-cmd`, preserving its existing commands:
+
+```json
+{
+    "scripts": {
+        "post-update-cmd": ["@php artisan vendor:publish --tag=vox-assets --force"]
+    }
+}
+```
+
+This refreshes the prebuilt manager JavaScript and CSS in `public/vendor/vox` after Composer updates, keeping the UI aligned with the installed PHP package. The hook belongs in your application: Composer does not execute dependency packages' scripts.
+
+Asset publishing alone does not apply Vox database migrations. Continue running `php artisan vox:setup --force` after upgrades, or `php artisan vox:deploy --no-interaction` as part of the [deployment flow](#deploying-on-a-remote-server); both already publish the assets.
+
+`post-update-cmd` does not run during `composer install` with a lock file. For deployments, keep the setup/deploy step above. If assets are published separately, add the same command to `post-install-cmd` or run it explicitly after installation. Composer hooks are skipped with `--no-scripts`.
+
 ### Authorization
 
 Define gates in an application service provider. Replace `is_admin` with your application's authorization rule:
