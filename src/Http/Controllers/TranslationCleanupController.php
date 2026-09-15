@@ -11,7 +11,6 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Translation\TranslationDeletionEligibility;
-use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
 
 class TranslationCleanupController
 {
@@ -20,17 +19,10 @@ class TranslationCleanupController
         $data = $request->validate([
             'ids' => ['required', 'array', 'min:1', 'max:100'],
             'ids.*' => ['required', 'integer', 'distinct'],
-            'action' => ['required', Rule::in(['delete', 'ignore', 'restore'])],
+            'action' => ['required', Rule::in(['delete', 'restore'])],
             'confirmation' => ['required', Rule::in(['CONFIRM'])],
         ]);
-        $scan = [];
-        if ($data['action'] === 'delete') {
-            $scanner = new TranslationScanner(base_path(), config('vox.parse.paths', []), config('vox.parse.exclude', []), config('vox.parse.extensions', []), 0);
-            $scan = $scanner->scan();
-            $registry->writeDetectedPatterns($scanner->dynamicKeys());
-        }
-
-        DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($data, $registry, $eligibility, $audit, $scan): void {
+        DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($data, $registry, $eligibility, $audit): void {
             $rows = VoxTranslation::query()->whereIn('id', $data['ids'])->lockForUpdate()->with('values')->get();
             if ($rows->count() !== count($data['ids'])) {
                 throw ValidationException::withMessages(['cleanup' => 'The selection changed. Refresh and try again.']);
@@ -38,7 +30,7 @@ class TranslationCleanupController
             foreach ($rows as $row) {
                 if ($data['action'] === 'delete') {
                     $fullKey = $registry->fullKey($row->key, $row->group);
-                    $reason = $eligibility->reason($row, $scan);
+                    $reason = $eligibility->reason($row);
                     if ($reason !== null) {
                         throw ValidationException::withMessages(['cleanup' => "[$fullKey] ".$reason]);
                     }
@@ -53,9 +45,9 @@ class TranslationCleanupController
             ]);
             foreach ($rows as $row) {
                 if ($data['action'] === 'delete') {
-                    $row->update(['is_pending_delete' => true, 'is_ignored' => true]);
+                    $row->update(['is_pending_delete' => true]);
                 } else {
-                    $row->update(['is_ignored' => $data['action'] === 'ignore', 'is_pending_delete' => false]);
+                    $row->update(['is_pending_delete' => false]);
                 }
             }
         });

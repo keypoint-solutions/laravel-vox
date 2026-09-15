@@ -46,6 +46,7 @@
         baseLocale: string;
         ai: {
             available: boolean;
+            can_choose: boolean;
             driver: string;
         };
     }
@@ -577,6 +578,7 @@
 
         <RemoteReconciliationPanel
             :review="page.props.reconciliation"
+            :can-choose-with-ai="page.props.ai.can_choose"
             :environments="environments"
         />
 

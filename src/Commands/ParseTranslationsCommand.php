@@ -5,14 +5,14 @@ namespace KeypointSolutions\LaravelVox\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use KeypointSolutions\LaravelVox\Support\TranslationFileChangeReporter;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileUpdater;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
-use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
+use KeypointSolutions\LaravelVox\Translation\TranslationScanPreparation;
 
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\select;
@@ -26,7 +26,7 @@ class ParseTranslationsCommand extends Command
 
     public $description = 'Parse codebase and update language files.';
 
-    public function handle(): int
+    public function handle(TranslationScanPreparation $preparation): int
     {
         $langPath = rtrim(config('vox.paths.lang', lang_path()), DIRECTORY_SEPARATOR);
 
@@ -67,35 +67,19 @@ class ParseTranslationsCommand extends Command
             }
         }
 
-        $scanner = new TranslationScanner(
-            base_path(),
-            config('vox.parse.paths', []),
-            config('vox.parse.exclude', []),
-            config('vox.parse.extensions', []),
-            (int) config('vox.parse.context_lines', 3)
-        );
-
-        $scanResults = spin(fn () => $scanner->scan(), 'Scanning translation keys');
-        $dynamicKeys = $scanner->dynamicKeys();
-        $dynamicKeyRegistry = app(VoxDynamicKeyRegistry::class);
-        $dynamicKeyRegistry->writeDetectedPatterns($dynamicKeys);
-        $scanResults = $dynamicKeyRegistry->mergeEnumeratedScanResults($scanResults);
+        $scan = spin(fn () => $preparation->prepare(), 'Scanning translation keys');
+        $scanResults = $scan['results'];
+        $dynamicKeys = $scan['dynamic_keys'];
+        $locales = $scan['locales'];
+        $baseLocale = $scan['base_locale'];
         app(VoxFrontendManifest::class)->writeFromScanResults($scanResults, $dynamicKeys);
 
         if ($this->output->isVerbose()) {
-            $this->outputAnalyzedFiles($scanner);
-        }
-
-        $localeResolver = app(VoxLocaleResolver::class);
-        $locales = $localeResolver->resolveLocales();
-        $baseLocale = $localeResolver->resolveBaseLocale($locales);
-
-        if (! in_array($baseLocale, $locales, true)) {
-            $locales[] = $baseLocale;
+            $this->outputAnalyzedFiles($scan['files']);
         }
 
         $fileRepository = new TranslationFileRepository(new TranslationFileWriter);
-        $beforeSnapshot = $this->snapshotLangFiles($fileRepository->langPath());
+        $beforeSnapshot = app(TranslationFileChangeReporter::class)->snapshot($fileRepository->langPath());
         $this->outputDynamicKeys($dynamicKeys);
         $updater = new TranslationFileUpdater($fileRepository, app(VoxDynamicKeyRegistry::class));
 
@@ -106,16 +90,17 @@ class ParseTranslationsCommand extends Command
             'removed' => $result->removed(),
         ]);
 
+        app(TranslationFileChangeReporter::class)->report(
+            $fileRepository->langPath(),
+            $beforeSnapshot,
+            app(TranslationFileChangeReporter::class)->snapshot($fileRepository->langPath())
+        );
+
         info('Translation files updated.');
         table(['Metric', 'Count'], [
             ['Added keys', (string) $result->added()],
             ['Removed keys', (string) $result->removed()],
         ]);
-        $this->outputModifiedFiles(
-            $fileRepository->langPath(),
-            $beforeSnapshot,
-            $this->snapshotLangFiles($fileRepository->langPath())
-        );
 
         return self::SUCCESS;
     }
@@ -130,6 +115,22 @@ class ParseTranslationsCommand extends Command
         }
 
         info('Dynamic translation patterns detected and registered.');
+        if (! $this->output->isVerbose()) {
+            $patterns = collect($dynamicKeys)->groupBy('pattern')->sortKeys();
+            table(['Pattern', 'Used in', 'Occurrences'], $patterns->map(function ($occurrences, string $pattern): array {
+                $exposure = $occurrences->pluck('is_frontend')->unique();
+
+                return [
+                    $this->formatDynamicDisplay($pattern),
+                    $exposure->count() > 1 ? 'Frontend + backend' : ($exposure->first() ? 'Frontend' : 'Backend'),
+                    (string) $occurrences->count(),
+                ];
+            })->values()->all());
+            $this->line('Use -v to show source context and locations.');
+
+            return;
+        }
+
         table(
             ['Pattern', 'Exposure', 'Source', 'Location'],
             array_map(
@@ -142,66 +143,6 @@ class ParseTranslationsCommand extends Command
                 $dynamicKeys
             )
         );
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function snapshotLangFiles(string $langPath): array
-    {
-        if (! File::isDirectory($langPath)) {
-            return [];
-        }
-
-        $snapshot = [];
-
-        foreach (File::allFiles($langPath) as $file) {
-            $extension = strtolower($file->getExtension());
-
-            if (! in_array($extension, ['php', 'json'], true)) {
-                continue;
-            }
-
-            $path = $file->getPathname();
-            $contents = File::get($path);
-            $snapshot[$path] = hash('sha256', $contents);
-        }
-
-        return $snapshot;
-    }
-
-    /**
-     * @param  array<string, string>  $before
-     * @param  array<string, string>  $after
-     */
-    private function outputModifiedFiles(string $langPath, array $before, array $after): void
-    {
-        $modified = [];
-
-        foreach ($after as $path => $hash) {
-            if (! isset($before[$path]) || $before[$path] !== $hash) {
-                $modified[] = $this->formatLangPath($langPath, $path);
-            }
-        }
-
-        if ($modified === []) {
-            info('No translation files modified.');
-
-            return;
-        }
-
-        table(['Modified files'], array_map(fn (string $path) => [$path], $modified));
-    }
-
-    private function formatLangPath(string $langPath, string $path): string
-    {
-        $prefix = rtrim($langPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
-
-        if (Str::startsWith($path, $prefix)) {
-            return Str::replaceFirst($prefix, '', $path);
-        }
-
-        return $path;
     }
 
     private function formatDynamicDisplay(string $value): string
@@ -242,10 +183,9 @@ class ParseTranslationsCommand extends Command
         return $location;
     }
 
-    private function outputAnalyzedFiles(TranslationScanner $scanner): void
+    /** @param array<int, string> $files */
+    private function outputAnalyzedFiles(array $files): void
     {
-        $files = $scanner->files();
-
         if ($files === []) {
             info('No files analyzed.');
 

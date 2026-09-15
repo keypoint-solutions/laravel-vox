@@ -13,7 +13,7 @@ class TranslationFileDeletion
         private TranslationFileValidator $validator,
     ) {}
 
-    /** @return array<string, array{before: string, after: string}> */
+    /** @return array<string, array{before: string, after: string|null}> */
     public function prepare(iterable $rows, bool $includeRuntime = true): array
     {
         $locales = [];
@@ -40,7 +40,7 @@ class TranslationFileDeletion
                 if ($json) {
                     unset($updated[$key]);
                 } else {
-                    $this->remove($updated, $key);
+                    app(TranslationGroupFormat::class)->remove($updated, $key);
                 }
                 if ($updated === $data[$path]) {
                     continue;
@@ -52,7 +52,7 @@ class TranslationFileDeletion
                 unset($obsolete[$key]);
                 $contents = $json ? $this->writer->toJson($updated) : $this->writer->toPhp($updated, [], $comments, array_values($obsolete));
                 $this->validator->validateContents($contents, $path);
-                $changes[$path] = ['before' => $changes[$path]['before'] ?? File::get($path), 'after' => $contents];
+                $changes[$path] = ['before' => $changes[$path]['before'] ?? File::get($path), 'after' => $updated === [] ? null : $contents];
             }
         }
 
@@ -72,24 +72,11 @@ class TranslationFileDeletion
                 if ($updated !== $values) {
                     $contents = $this->writer->toJson($updated);
                     $this->validator->validateContents($contents, $path);
-                    $changes[$path] = ['before' => $before, 'after' => $contents];
+                    $changes[$path] = ['before' => $before, 'after' => $updated === [] ? null : $contents];
                 }
             }
         }
 
         return $changes;
-    }
-
-    private function remove(array &$values, string $key): void
-    {
-        unset($values[$key]);
-        foreach ($values as $segment => &$value) {
-            if (is_array($value) && str_starts_with($key, $segment.'.')) {
-                $this->remove($value, substr($key, strlen($segment) + 1));
-                if ($value === []) {
-                    unset($values[$segment]);
-                }
-            }
-        }
     }
 }

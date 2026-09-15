@@ -5,7 +5,6 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -16,6 +15,7 @@ use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
+use KeypointSolutions\LaravelVox\Translation\TranslationEligibility;
 use KeypointSolutions\LaravelVox\Translation\TranslationKey;
 use Throwable;
 
@@ -24,6 +24,7 @@ class ManageTranslationController
     public function __construct(
         private VoxLocaleResolver $localeResolver,
         private VoxDynamicKeyRegistry $dynamicKeys,
+        private TranslationEligibility $eligibility,
     ) {}
 
     public function store(
@@ -156,7 +157,7 @@ class ManageTranslationController
 
         $baseValue = $validated['base_value'];
 
-        if (trim($baseValue) === '') {
+        if (! $this->eligibility->canTranslateSource((string) ($validated['key'] ?? ''), $baseValue)) {
             return redirect()->back()->withErrors([
                 'translate' => 'Base locale value is required before translating.',
             ]);
@@ -188,7 +189,7 @@ class ManageTranslationController
         VoxTranslation $translation,
         VoxAuditLogger $auditLogger,
     ): RedirectResponse {
-        abort_if($translation->is_ignored, 422, 'Restore this ignored key before editing it.');
+        abort_if($translation->is_pending_delete, 422, 'Cancel deletion before editing this key.');
         $validated = $request->validate([
             'values' => ['required', 'array'],
             'values.*' => ['nullable', 'string'],
@@ -236,7 +237,7 @@ class ManageTranslationController
 
     public function toggleApproval(VoxTranslation $translation, VoxAuditLogger $auditLogger): RedirectResponse
     {
-        abort_if($translation->is_ignored, 422, 'Restore this ignored key before editing it.');
+        abort_if($translation->is_pending_delete, 422, 'Cancel deletion before editing this key.');
         $status = $translation->status === 'approved' ? 'pending' : 'approved';
 
         $translation->timestamps = false;
@@ -264,7 +265,7 @@ class ManageTranslationController
         ]);
         $status = $validated['status'];
         $ids = VoxTranslation::query()
-            ->where('is_ignored', false)
+            ->where('is_pending_delete', false)
             ->whereIn('id', $validated['ids'])
             ->pluck('id')
             ->all();
@@ -309,25 +310,24 @@ class ManageTranslationController
         ));
         $translations = VoxTranslation::query()
             ->with(['values', 'occurrences'])
-            ->where('is_ignored', false)
+            ->where('is_pending_delete', false)
             ->whereIn('id', $validated['ids'])
             ->get();
         $driver = $driverFactory->make();
-        $missingPrefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
 
         /** @var array<int, array{translation: VoxTranslation, values: array<string, string>}> $translated */
         $translated = [];
 
         try {
             foreach ($translations as $translation) {
-                if ($translation->is_orphan || $translation->is_ignored) {
+                if ($translation->is_orphan || $translation->is_pending_delete) {
                     continue;
                 }
 
                 $values = $translation->values->keyBy('locale');
                 $baseValue = $values->get($baseLocale)?->value;
 
-                if ($this->isMissingValue($baseValue, $missingPrefix)) {
+                if (! $this->eligibility->canTranslateSource($translation->key, $baseValue)) {
                     continue;
                 }
 
@@ -335,7 +335,7 @@ class ManageTranslationController
                 $context = $this->buildTranslationContext($translation);
 
                 foreach ($targetLocales as $locale) {
-                    if (! $this->isMissingValue($values->get($locale)?->value, $missingPrefix)) {
+                    if (! $this->eligibility->isMissing($values->get($locale)?->value)) {
                         continue;
                     }
 
@@ -410,7 +410,7 @@ class ManageTranslationController
         VoxTranslation $translation,
         TranslationDriverFactory $driverFactory
     ): RedirectResponse {
-        abort_if($translation->is_ignored, 422, 'Restore this ignored key before editing it.');
+        abort_if($translation->is_pending_delete, 422, 'Cancel deletion before editing this key.');
         $validated = $request->validate([
             'locales' => ['nullable', 'array'],
             'locales.*' => ['string'],
@@ -438,7 +438,7 @@ class ManageTranslationController
             $baseValue = $translation->values()->where('locale', $baseLocale)->value('value');
         }
 
-        if (! is_string($baseValue) || $baseValue === '') {
+        if (! $this->eligibility->canTranslateSource($translation->key, $baseValue)) {
             return redirect()->back()->withErrors(['translate' => 'Base locale value is required before translating.']);
         }
 
@@ -458,13 +458,6 @@ class ManageTranslationController
         }
 
         return Inertia::flash('translated_values', $translatedValues)->back();
-    }
-
-    private function isMissingValue(mixed $value, string $missingPrefix): bool
-    {
-        return ! is_string($value)
-            || $value === ''
-            || Str::startsWith($value, $missingPrefix);
     }
 
     /**

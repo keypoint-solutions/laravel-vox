@@ -371,3 +371,15 @@ test('a discovered manifest change automatically triggers runtime compilation th
     assert.equal(commands.at(-1), 'vox:compile');
     assert.ok(commands.filter(command => command === 'vox:frontend-discover').length >= 2);
 });
+
+test('preserves Laravel slash group names for nested ordinary and vendor folders', t => {
+    const { root, write } = fixture(t);
+    write('lang/en/admin/messages.php', "<?php return ['hello'=>'Admin'];");
+    write('lang/vendor/shop/en/admin/messages.php', "<?php return ['hello'=>'Shop admin'];");
+    const catalogue = new PhpTranslationCatalogue([resolve(root, 'lang')]);
+    catalogue.initialize();
+    assert.deepEqual(catalogue.messages('en', ['admin/messages', 'shop::admin/messages']), {
+        'admin/messages.hello': 'Admin',
+        'shop::admin/messages.hello': 'Shop admin',
+    });
+});

@@ -78,7 +78,7 @@ class FrontendTranslationArtifacts
         foreach ($this->groupsForLocale($files, $locale) as $group) {
             foreach (Arr::dot($files->loadGroup($locale, $group)) as $key => $value) {
                 if (is_string($value)) {
-                    $translations[str_replace(DIRECTORY_SEPARATOR, '.', $group).'.'.$key] = $value;
+                    $translations[$group.'.'.$key] = $value;
                 }
             }
         }
@@ -105,32 +105,7 @@ class FrontendTranslationArtifacts
             return $groups;
         }
 
-        $directories = ['' => $files->langPath().DIRECTORY_SEPARATOR.$locale];
-        $vendorPath = $files->langPath().DIRECTORY_SEPARATOR.'vendor';
-
-        if (File::isDirectory($vendorPath)) {
-            foreach (File::directories($vendorPath) as $namespacePath) {
-                $directories[basename($namespacePath).'::'] = $namespacePath.DIRECTORY_SEPARATOR.$locale;
-            }
-        }
-
-        $groups = [];
-
-        foreach ($directories as $prefix => $directory) {
-            if (! File::isDirectory($directory)) {
-                continue;
-            }
-
-            foreach (File::allFiles($directory) as $file) {
-                if ($file->getExtension() === 'php') {
-                    $groups[] = $prefix.substr($file->getRelativePathname(), 0, -4);
-                }
-            }
-        }
-
-        sort($groups);
-
-        return $groups;
+        return $files->groups($locale);
     }
 
     /**
@@ -138,17 +113,11 @@ class FrontendTranslationArtifacts
      */
     private function namespacedJsonTranslations(TranslationFileRepository $files, string $locale): array
     {
-        $vendorPath = $files->langPath().DIRECTORY_SEPARATOR.'vendor';
-
-        if (! File::isDirectory($vendorPath)) {
-            return [];
-        }
-
         $translations = [];
-
-        foreach (File::directories($vendorPath) as $namespacePath) {
-            $namespace = basename($namespacePath);
-
+        foreach ($files->jsonNamespaces($locale) as $namespace) {
+            if ($namespace === null) {
+                continue;
+            }
             foreach ($files->loadJson($locale, $namespace) as $key => $value) {
                 if (is_string($value)) {
                     $translations[$namespace.'::'.$key] = $value;

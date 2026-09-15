@@ -149,3 +149,42 @@ it('forces retranslation for a requested key', function () {
     expect($frSample['count'])->toBe('Count :count')
         ->and($frSample['title'])->toBe('🚩Title');
 });
+
+it('translates empty targets but skips unusable source wording even when forced', function (bool $force): void {
+    $root = prepareVoxFixtures();
+    config()->set('vox.translate.driver', 'null');
+    config()->set('vox.parse.missing_translation_prefix', 'TODO:');
+    $source = ['emptyTarget' => 'Hello', 'emptySource' => '', 'flaggedSource' => 'TODO:source', 'ready' => 'Ready'];
+    $target = ['emptyTarget' => '', 'emptySource' => 'TODO:empty', 'flaggedSource' => 'TODO:flagged', 'ready' => 'Prêt'];
+    File::put($root.'/lang/en/check.php', '<?php return '.var_export($source, true).';');
+    File::put($root.'/lang/fr/check.php', '<?php return '.var_export($target, true).';');
+    $this->artisan('vox:translate', ['--path' => 'en/check.php', '--force' => $force])->assertExitCode(0);
+    expect(require $root.'/lang/fr/check.php')->toBe([
+        'emptySource' => 'TODO:empty', 'emptyTarget' => 'Hello', 'flaggedSource' => 'TODO:flagged',
+        'ready' => $force ? 'Ready' : 'Prêt',
+    ]);
+})->with([false, true]);
+
+it('preserves flat dotted keys without creating nested duplicates during translation', function (): void {
+    $root = prepareVoxFixtures();
+    config()->set('vox.translate.driver', 'null');
+    config()->set('vox.parse.output', 'flat');
+    config()->set('vox.parse.preserve_existing_format', true);
+    File::put($root.'/lang/en/check.php', "<?php return ['promo.line' => 'Hello'];");
+    File::put($root.'/lang/fr/check.php', "<?php return ['promo.line' => '🚩Hello'];");
+    $this->artisan('vox:translate', ['--path' => 'en/check.php'])->assertExitCode(0);
+    expect(require $root.'/lang/fr/check.php')->toBe(['promo.line' => 'Hello']);
+});
+
+it('uses shared missing and source checks for root and vendor JSON translations', function (bool $vendor): void {
+    $root = prepareVoxFixtures();
+    config()->set('vox.translate.driver', 'null');
+    $directory = $root.'/lang'.($vendor ? '/vendor/check' : '');
+    File::ensureDirectoryExists($directory);
+    File::put($directory.'/en.json', json_encode(['Hello' => 'Hello', 'Empty' => '', 'Flagged' => '🚩source']));
+    File::put($directory.'/fr.json', json_encode(['Hello' => '', 'Empty' => '🚩empty', 'Flagged' => '🚩flagged']));
+    $this->artisan('vox:translate', ['--path' => ($vendor ? 'vendor/check/' : '').'en.json'])->assertExitCode(0);
+    expect(json_decode(File::get($directory.'/fr.json'), true))->toBe([
+        'Empty' => '🚩empty', 'Flagged' => '🚩flagged', 'Hello' => 'Hello',
+    ]);
+})->with([false, true]);

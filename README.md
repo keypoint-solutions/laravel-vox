@@ -780,11 +780,6 @@ Use `vox.retained_keys` for explicit keys or wildcard retention rules. The defau
 `passwords.*`, and `validation.*`. Additional Settings patterns also retain keys;
 `vox.dynamic_keys.bindings` still enumerates runtime key families.
 
-Delete individual or selected orphan keys and dynamic keys without direct static references from Manage. Deletion marks keys as pending in Vox. Files remain unchanged until Publish removes their values from language files and existing runtime catalogues in every locale. Sync and Parse preserve pending deletions; restore a key from the Pending deletion filter to cancel before publishing. Confirmation lists
-the keys and locale-value count. Scheduling deletion rechecks current source and records an audit entry. Publish removes the pending database records and related reconciliation records after file updates succeed. A future scan, binding, or remote import may recreate deleted keys.
+Delete any individual or selected key from Manage. Deletion marks keys as pending in Vox. Files remain unchanged until Publish removes their values from language files and existing runtime catalogues in every locale. Files emptied by deletion are removed. Sync and Parse preserve pending deletions; cancel deletion from the Pending deletion filter to keep a key before publishing. Confirmation lists the keys and locale-value count. Publish removes pending database records and related reconciliation records after file updates succeed, and failures roll back file changes.
 
-To stop managing a key while preserving its language-file values, use **Ignore in Vox**. Its database row and values remain available under the
-**Ignored** filter, but sync and publishing skip its values. Parsing preserves existing ignored values without generating
-new values for that key. Restore returns it to management; run Sync afterward to refresh its values and usage.
-
-Ignore and Restore leave published files untouched. Deletion does not remove matching retention rules; compiled frontend bundles need rebuilding after file changes outside development. Database resets preserve published and runtime files and remove ignored records.
+A future scan, binding, or remote import may recreate deleted keys, but cannot recover their previous translations. Deletion does not remove matching retention rules; compiled frontend bundles need rebuilding after file changes outside development. The Ignore feature has been removed; the migration converts previously ignored keys to pending deletion without publishing them.

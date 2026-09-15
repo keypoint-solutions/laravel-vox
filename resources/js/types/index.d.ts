@@ -7,6 +7,7 @@ export interface AppPageProps {
             sync_remote: string;
             sync_local: string;
             sync_reconcile: string;
+            sync_choose: string;
             sync_locale_store: string;
             sync_archive_download: string;
             sync_archive_import: string;

@@ -39,8 +39,8 @@ class LocaleProvisioner
 
         $locales = $this->localeResolver->resolveLocales();
         $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
-        $groups = $this->groupsForLocale($baseLocale);
-        $jsonNamespaces = $this->jsonNamespacesForLocale($baseLocale);
+        $groups = $this->files->groups($baseLocale);
+        $jsonNamespaces = $this->files->jsonNamespaces($baseLocale);
 
         if ($groups === [] && $jsonNamespaces === []) {
             throw new RuntimeException("The source locale [{$baseLocale}] does not contain any PHP or JSON translation files.");
@@ -76,7 +76,7 @@ class LocaleProvisioner
                 $stagedFiles->saveGroup(
                     $locale,
                     $group,
-                    $values,
+                    app(TranslationGroupFormat::class)->normalize($values),
                     [],
                     $this->files->loadLineComments($baseLocale, $group),
                     array_values($this->files->loadObsoleteComments($baseLocale, $group))
@@ -182,72 +182,6 @@ class LocaleProvisioner
     }
 
     /**
-     * @return array<int, string>
-     */
-    private function groupsForLocale(string $locale): array
-    {
-        $groups = [];
-        $localePath = $this->files->langPath().DIRECTORY_SEPARATOR.$locale;
-
-        if (File::isDirectory($localePath)) {
-            foreach (File::files($localePath) as $file) {
-                if (strtolower($file->getExtension()) === 'php') {
-                    $groups[] = $file->getBasename('.php');
-                }
-            }
-        }
-
-        $vendorPath = $this->files->langPath().DIRECTORY_SEPARATOR.'vendor';
-
-        if (File::isDirectory($vendorPath)) {
-            foreach (File::directories($vendorPath) as $namespacePath) {
-                $namespace = basename($namespacePath);
-                $namespaceLocalePath = $namespacePath.DIRECTORY_SEPARATOR.$locale;
-
-                if (! File::isDirectory($namespaceLocalePath)) {
-                    continue;
-                }
-
-                foreach (File::files($namespaceLocalePath) as $file) {
-                    if (strtolower($file->getExtension()) === 'php') {
-                        $groups[] = $namespace.'::'.$file->getBasename('.php');
-                    }
-                }
-            }
-        }
-
-        sort($groups);
-
-        return array_values(array_unique($groups));
-    }
-
-    /**
-     * @return array<int, string|null>
-     */
-    private function jsonNamespacesForLocale(string $locale): array
-    {
-        $namespaces = [];
-
-        if (File::isFile($this->files->jsonPath($locale))) {
-            $namespaces[] = null;
-        }
-
-        $vendorPath = $this->files->langPath().DIRECTORY_SEPARATOR.'vendor';
-
-        if (File::isDirectory($vendorPath)) {
-            foreach (File::directories($vendorPath) as $namespacePath) {
-                $namespace = basename($namespacePath);
-
-                if (File::isFile($this->files->jsonPath($locale, $namespace))) {
-                    $namespaces[] = $namespace;
-                }
-            }
-        }
-
-        return $namespaces;
-    }
-
-    /**
      * @param  array<string, mixed>  $values
      * @return array<string, mixed>
      */
@@ -291,7 +225,7 @@ class LocaleProvisioner
 
             $valueCount++;
 
-            if ($driver === null) {
+            if ($driver === null || ! app(TranslationEligibility::class)->canTranslateSource($fullKey, $value)) {
                 $prepared[$key] = Str::startsWith($value, $missingPrefix)
                     ? $value
                     : $missingPrefix.$value;

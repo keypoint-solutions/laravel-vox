@@ -74,7 +74,7 @@ it('shows real publish readiness statistics', function (): void {
 it('refreshes published files and runtime bundles with no publishable changes while preserving drafts', function (): void {
     config()->set('vox.frontend.runtime.enabled', true);
     config()->set('vox.frontend.runtime.path', $this->publishLangPath.'/runtime');
-    config()->set('vox.frontend.groups', ['messages']);
+    config()->set('vox.frontend.groups', ['mode' => 'configured', 'values' => ['messages']]);
 
     $translation = VoxTranslation::factory()->approved()->create(['group' => 'messages', 'key' => 'greeting']);
     $english = $translation->values()->create([
@@ -245,4 +245,26 @@ it('refreshes runtime frontend artifacts after publishing language files', funct
     } finally {
         File::deleteDirectory($runtimePath);
     }
+});
+
+it('clears readiness after publishing a value with no application default', function (): void {
+    VoxTranslation::factory()->approved()->withValues(['en' => 'New wording'])
+        ->create(['group' => 'messages', 'key' => 'new']);
+    $this->post('/vox/publish')->assertRedirect();
+    $this->get('/vox/publish')->assertInertia(fn (AssertableInertia $page) => $page
+        ->component('Publish', false)->where('stats.publishable', 0)->where('stats.publishable_values', 0));
+    expect(app(TranslationPublisher::class)->publish()->values())->toBe(0);
+});
+
+it('publishes approved wording over a flagged default and removes its flat duplicate', function (): void {
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('fr', 'labels', ['promo' => ['line' => 'Ancien texte'], 'promo.line' => '🚩line']);
+    $translation = VoxTranslation::factory()->approved()->create(['group' => 'labels', 'key' => 'promo.line']);
+    $translation->values()->create([
+        'locale' => 'fr', 'value' => 'Texte approuvé', 'file_value' => '🚩line',
+        'is_approved' => true, 'is_pending_publish' => false,
+    ]);
+    $this->post('/vox/publish')->assertRedirect();
+    expect($files->loadGroup('fr', 'labels'))->toBe(['promo' => ['line' => 'Texte approuvé']]);
+    expect(app(TranslationPublisher::class)->publish()->values())->toBe(0);
 });

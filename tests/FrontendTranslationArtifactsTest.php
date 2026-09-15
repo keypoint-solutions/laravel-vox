@@ -81,7 +81,7 @@ it('expands all groups from a wildcard in configuration or the manifest', functi
     app(FrontendTranslationArtifacts::class)->publish();
 
     expect(json_decode(File::get($this->frontendRuntimePath.'/en.json'), true))->toBe([
-        'account.settings.heading' => 'Settings',
+        'account/settings.heading' => 'Settings',
         'backend.heading' => 'Administration',
         'demo::Package message' => 'Package JSON',
         'demo::messages.greeting' => 'Package greeting',

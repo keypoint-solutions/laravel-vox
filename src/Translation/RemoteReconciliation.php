@@ -105,6 +105,9 @@ class RemoteReconciliation
         $candidate = VoxRemoteTranslation::query()->whereNull('environment_id')->firstOrNew([
             'identity' => RemoteTranslationSnapshot::identity($translation->group, $translation->key, $locale),
         ]);
+        if ($candidate->exists && $candidate->remote_present && $candidate->remote_value === $value) {
+            return;
+        }
         if (! $candidate->exists) {
             $candidate->fill([
                 'environment_id' => null,
@@ -189,6 +192,30 @@ class RemoteReconciliation
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public function reviewCandidate(int $id, string $token): array
+    {
+        return $this->reviewCandidates([['id' => $id, 'token' => $token]])[$id];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function reviewCandidates(array $entries): array
+    {
+        $rows = $this->rows()->keyBy('id');
+        $selected = [];
+        foreach ($entries as $entry) {
+            $row = $rows->get($entry['id']);
+            if ($row === null || ! $row['actionable'] || ! hash_equals($row['token'], $entry['token'])) {
+                $this->stale();
+            }
+            $selected[$row['id']] = $row;
+        }
+
+        return $selected;
+    }
+
+    /**
      * @param  array<string, mixed>  $decision
      */
     public function resolve(array $decision): int
@@ -223,8 +250,25 @@ class RemoteReconciliation
 
             $action = $decision['action'] ?? '';
 
-            if (! in_array($action, ['accept', 'keep', 'edit'], true) || $selected->isEmpty()) {
+            if (! in_array($action, ['accept', 'keep', 'edit', 'confirm'], true) || $selected->isEmpty()) {
                 throw ValidationException::withMessages(['reconciliation' => 'Select changes and a review decision.']);
+            }
+
+            $confirmations = collect($decision['entries'] ?? [])->keyBy('id');
+            if ($action === 'confirm') {
+                if (($decision['all_matching'] ?? false) || ($decision['publish'] ?? false) || $selected->count() > 100) {
+                    throw ValidationException::withMessages(['reconciliation' => 'Confirm explicit selections from the current page without publishing.']);
+                }
+                $identities = $selected->map(fn (array $row): string => RemoteTranslationSnapshot::identity($row['group'], $row['key'], $row['locale']));
+                if ($identities->unique()->count() !== $selected->count()) {
+                    throw ValidationException::withMessages(['reconciliation' => 'Select one source per translation before confirming.']);
+                }
+                foreach ($selected as $row) {
+                    $entry = $confirmations->get($row['id']);
+                    if (! in_array($entry['side'] ?? null, ['local', 'incoming'], true) || ! array_key_exists('value', $entry)) {
+                        throw ValidationException::withMessages(['reconciliation' => 'Choose wording for every selected row.']);
+                    }
+                }
             }
 
             if ($action === 'edit' && ($selected->count() !== 1 || ! is_string($decision['value'] ?? null))) {
@@ -247,11 +291,21 @@ class RemoteReconciliation
             $createdTranslations = [];
             $acceptedValueIds = [];
 
+            $decisionCounts = ['accept' => 0, 'keep' => 0, 'edit' => 0];
             foreach ($selected as $row) {
+                $rowAction = $action;
+                $editedValue = $decision['value'] ?? '';
+                if ($action === 'confirm') {
+                    $entry = $confirmations->get($row['id']);
+                    $editedValue = $entry['value'] ?? '';
+                    $original = $entry['side'] === 'local' ? ($row['local_value'] ?? '') : $row['remote_value'];
+                    $rowAction = $editedValue !== $original ? 'edit' : ($entry['side'] === 'local' ? 'keep' : 'accept');
+                }
+                $decisionCounts[$rowAction]++;
                 $localValue = $row['local_value'];
 
-                if ($action !== 'keep') {
-                    $localValue = $action === 'edit' ? $decision['value'] : $row['remote_value'];
+                if ($rowAction !== 'keep') {
+                    $localValue = $rowAction === 'edit' ? $editedValue : $row['remote_value'];
                     $identity = RemoteTranslationSnapshot::identity($row['group'], $row['key']);
                     $translation = $row['translation_id'] !== null
                         ? VoxTranslation::query()->findOrFail($row['translation_id'])
@@ -269,8 +323,8 @@ class RemoteReconciliation
 
                         $createdTranslations[$identity] = $translation;
                     }
-                    if ($translation->is_ignored) {
-                        throw ValidationException::withMessages(['reconciliation' => 'Restore ignored keys before accepting remote values.']);
+                    if ($translation->is_pending_delete) {
+                        throw ValidationException::withMessages(['reconciliation' => 'Cancel deletion before accepting remote values.']);
                     }
 
                     $accepted = VoxTranslationValue::query()->firstOrNew([
@@ -295,6 +349,7 @@ class RemoteReconciliation
 
             $this->auditLogger->record('remote-reconciliation', [
                 'decision' => $action,
+                'decisions' => $decisionCounts,
                 'values' => $selected->count(),
                 'candidate_ids' => $selected->pluck('id')->all(),
                 'environment_ids' => $selected->pluck('environment_id')->unique()->values()->all(),
@@ -324,9 +379,10 @@ class RemoteReconciliation
         $candidates = $query->get();
         $local = $this->localTranslations($candidates->pluck('key')->all(), $lock);
         $locales = $this->locales->resolveLocales();
-        $locales[] = $this->locales->resolveBaseLocale($locales);
+        $defaultLocale = $this->locales->resolveBaseLocale($locales);
+        $locales[] = $defaultLocale;
 
-        return $candidates->map(function (VoxRemoteTranslation $candidate) use ($local, $locales): array {
+        return $candidates->map(function (VoxRemoteTranslation $candidate) use ($local, $locales, $defaultLocale): array {
             $translation = $local[RemoteTranslationSnapshot::identity($candidate->group, $candidate->key)] ?? null;
             $value = $translation?->values->firstWhere('locale', $candidate->locale);
             $localValue = $value?->value;
@@ -338,6 +394,8 @@ class RemoteReconciliation
                 'key' => $candidate->key,
                 'locale' => $candidate->locale,
                 'local_value' => $localValue,
+                'default_locale' => $defaultLocale,
+                'default_value' => $translation?->values->firstWhere('locale', $defaultLocale)?->value,
                 'remote_value' => $candidate->remote_value,
                 'last_seen_value' => $candidate->last_seen_value,
                 'base_value' => $candidate->base_value,
@@ -345,7 +403,7 @@ class RemoteReconciliation
                 'has_baseline' => $candidate->has_baseline,
                 'state' => $state,
                 'needs_review' => in_array($state, ['incoming', 'conflict'], true),
-                'actionable' => ! in_array($state, ['reconciled', 'unavailable'], true),
+                'actionable' => ! in_array($state, ['kept', 'reconciled', 'unavailable'], true),
                 'locale_available' => in_array($candidate->locale, $locales, true),
                 'translation_id' => $translation?->id,
                 'is_orphan' => $translation?->is_orphan ?? false,
@@ -376,7 +434,7 @@ class RemoteReconciliation
             return $local !== $candidate->base_local_value ? 'conflict' : 'incoming';
         }
 
-        return 'outgoing';
+        return $local === $candidate->base_local_value ? 'kept' : 'outgoing';
     }
 
     /**
@@ -415,7 +473,7 @@ class RemoteReconciliation
     {
         return [
             'environment_id' => ! empty($filters['environment_id']) ? (int) $filters['environment_id'] : null,
-            'state' => in_array($filters['state'] ?? '', ['all', 'incoming', 'outgoing', 'conflict', 'reconciled', 'unavailable'], true)
+            'state' => in_array($filters['state'] ?? '', ['all', 'incoming', 'outgoing', 'kept', 'conflict', 'reconciled', 'unavailable'], true)
                 ? $filters['state'] : 'review',
             'locale' => (string) ($filters['locale'] ?? ''),
             'search' => trim((string) ($filters['search'] ?? '')),

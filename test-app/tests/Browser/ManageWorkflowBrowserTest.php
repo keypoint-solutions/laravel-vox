@@ -128,24 +128,24 @@ it('bulk approves selected translations and can edit a translated value', functi
     expect($first->values()->where('locale', 'fr')->value('value'))->toBe('Valeur modifiée');
 });
 
-it('ignores and restores a translation through confirmed cleanup', function (): void {
+it('marks a used translation for deletion and cancels it', function (): void {
     $row = VoxTranslationFactory::new()->withValues(['en' => 'Cleanup example', 'fr' => 'Exemple'])->create(['group' => 'browser', 'key' => 'cleanup-example']);
     $page = visit('/vox/manage')
         ->click('[data-test="translation-row-'.$row->id.'"]')
-        ->press('Ignore in Vox')
-        ->assertSee('Published language files will not be changed.')
-        ->fill('#cleanup-confirmation', 'CONFIRM')
+        ->press('Delete key')
+        ->assertSee('Language files remain unchanged until Publish.')
+        ->assertMissing('#cleanup-confirmation')
         ->click('[data-test="confirm-cleanup"]')
         ->waitForText('Translation selection updated.')
-        ->pressAndWaitFor('Ignored')
+        ->pressAndWaitFor('Pending deletion')
         ->assertSee('browser.cleanup-example')
         ->click('[data-test="translation-row-'.$row->id.'"]')
-        ->press('Restore key')
+        ->press('Cancel deletion')
         ->fill('#cleanup-confirmation', 'CONFIRM')
         ->click('[data-test="confirm-cleanup"]')
         ->waitForText('Translation selection updated.')
         ->assertNoJavaScriptErrors();
-    expect($row->fresh()->is_ignored)->toBeFalse();
+    expect($row->fresh()->is_pending_delete)->toBeFalse();
 });
 
 it('deletes an orphan after a button confirmation without typing', function (): void {

@@ -6,13 +6,16 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use KeypointSolutions\LaravelVox\Support\TranslationFileChangeReporter;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\OpenAiTranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
+use KeypointSolutions\LaravelVox\Translation\TranslationEligibility;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
+use KeypointSolutions\LaravelVox\Translation\TranslationGroupFormat;
 use KeypointSolutions\LaravelVox\Translation\TranslationPromptBuilder;
 
 use function Laravel\Prompts\info;
@@ -25,7 +28,7 @@ class TranslateMissingTranslationsCommand extends Command
 
     public $description = 'Translate missing keys using the configured driver.';
 
-    public function handle(): int
+    public function handle(TranslationEligibility $eligibility, TranslationGroupFormat $format): int
     {
         $localeResolver = app(VoxLocaleResolver::class);
         $locales = $localeResolver->resolveLocales();
@@ -38,13 +41,12 @@ class TranslateMissingTranslationsCommand extends Command
         $fileRepository = new TranslationFileRepository(new TranslationFileWriter);
         $driver = app(TranslationDriverFactory::class)->make();
         $promptBuilder = app(TranslationPromptBuilder::class);
-        $prefix = config('vox.parse.missing_translation_prefix', '🚩');
         $useContext = config('vox.translate.use_context', true);
         $force = (bool) $this->option('force');
         $requestedKey = $this->normalizeKeyOption((string) $this->option('key'));
 
         $translated = 0;
-        $beforeSnapshot = $this->snapshotLangFiles($fileRepository->langPath());
+        $beforeSnapshot = app(TranslationFileChangeReporter::class)->snapshot($fileRepository->langPath());
         $target = $this->resolveTargetPath((string) $this->option('path'));
         $baseGroups = [];
         $baseJson = [];
@@ -118,9 +120,7 @@ class TranslateMissingTranslationsCommand extends Command
 
                 $existing = $fileRepository->loadGroup($locale, $group);
 
-                if (config('vox.parse.output', 'flat') === 'flat' && ! config('vox.parse.preserve_existing_format', true)) {
-                    $existing = Arr::dot($existing);
-                }
+                $existing = $format->normalize($existing);
 
                 $flatExisting = Arr::dot($existing);
                 $updated = $existing;
@@ -136,7 +136,7 @@ class TranslateMissingTranslationsCommand extends Command
                         continue;
                     }
 
-                    if (! $force && is_string($current) && ! str_starts_with($current, $prefix)) {
+                    if (! $force && ! $eligibility->isMissing($current)) {
                         continue;
                     }
 
@@ -144,7 +144,7 @@ class TranslateMissingTranslationsCommand extends Command
                         continue;
                     }
 
-                    if ($this->shouldSkipPlaceholderTranslation($key, $value)) {
+                    if (! $eligibility->canTranslateSource($key, $value)) {
                         continue;
                     }
 
@@ -157,7 +157,7 @@ class TranslateMissingTranslationsCommand extends Command
                         "{$group}.{$key}",
                         $this->buildTranslationContext($baseGroupComments[$group] ?? [], $key)
                     );
-                    $this->setValue($updated, $key, $translation, $existing, $flatExisting);
+                    $format->set($updated, $key, $translation);
                     $translated++;
                 }
 
@@ -182,7 +182,7 @@ class TranslateMissingTranslationsCommand extends Command
                         continue;
                     }
 
-                    if (! $force && is_string($current) && ! str_starts_with($current, $prefix)) {
+                    if (! $force && ! $eligibility->isMissing($current)) {
                         continue;
                     }
 
@@ -190,7 +190,7 @@ class TranslateMissingTranslationsCommand extends Command
                         continue;
                     }
 
-                    if ($this->shouldSkipPlaceholderTranslation($key, $value)) {
+                    if (! $eligibility->canTranslateSource($key, $value)) {
                         continue;
                     }
 
@@ -227,7 +227,7 @@ class TranslateMissingTranslationsCommand extends Command
                             continue;
                         }
 
-                        if (! $force && is_string($current) && ! str_starts_with($current, $prefix)) {
+                        if (! $force && ! $eligibility->isMissing($current)) {
                             continue;
                         }
 
@@ -235,7 +235,7 @@ class TranslateMissingTranslationsCommand extends Command
                             continue;
                         }
 
-                        if ($this->shouldSkipPlaceholderTranslation($key, $value)) {
+                        if (! $eligibility->canTranslateSource($key, $value)) {
                             continue;
                         }
 
@@ -264,10 +264,10 @@ class TranslateMissingTranslationsCommand extends Command
         table(['Metric', 'Count'], [
             ['Translated keys', (string) $translated],
         ]);
-        $this->outputModifiedFiles(
+        app(TranslationFileChangeReporter::class)->report(
             $fileRepository->langPath(),
             $beforeSnapshot,
-            $this->snapshotLangFiles($fileRepository->langPath())
+            app(TranslationFileChangeReporter::class)->snapshot($fileRepository->langPath())
         );
 
         return self::SUCCESS;
@@ -278,70 +278,20 @@ class TranslateMissingTranslationsCommand extends Command
      */
     private function collectGroups(TranslationFileRepository $files, string $locale): array
     {
-        $langRoot = $files->langPath();
-        $langPath = $langRoot.DIRECTORY_SEPARATOR.$locale;
         $groups = [];
-
-        if (is_dir($langPath)) {
-            foreach (glob($langPath.DIRECTORY_SEPARATOR.'*.php') as $filePath) {
-                $group = basename($filePath, '.php');
-                $entries = $files->loadGroup($locale, $group);
-                $groups[$group] = Arr::dot($entries);
-            }
-        }
-
-        $vendorRoot = $langRoot.DIRECTORY_SEPARATOR.'vendor';
-
-        if (! File::isDirectory($vendorRoot)) {
-            return $groups;
-        }
-
-        foreach (File::directories($vendorRoot) as $vendorPath) {
-            $namespace = basename($vendorPath);
-            $vendorLocalePath = $vendorPath.DIRECTORY_SEPARATOR.$locale;
-
-            if (! File::isDirectory($vendorLocalePath)) {
-                continue;
-            }
-
-            foreach (glob($vendorLocalePath.DIRECTORY_SEPARATOR.'*.php') as $filePath) {
-                $group = $namespace.'::'.basename($filePath, '.php');
-                $entries = $files->loadGroup($locale, $group);
-                $groups[$group] = Arr::dot($entries);
-            }
+        foreach ($files->groups($locale) as $group) {
+            $groups[$group] = Arr::dot($files->loadGroup($locale, $group));
         }
 
         return $groups;
     }
 
-    /**
-     * @return array<int, string>
-     */
+    /** @return array<int, string> */
     private function collectVendorJsonNamespaces(TranslationFileRepository $files, string $locale): array
     {
-        $vendorRoot = $files->langPath().DIRECTORY_SEPARATOR.'vendor';
-
-        if (! File::isDirectory($vendorRoot)) {
-            return [];
-        }
-
-        $namespaces = [];
-
-        foreach (File::directories($vendorRoot) as $vendorPath) {
-            $namespace = basename($vendorPath);
-            $jsonPath = $vendorPath.DIRECTORY_SEPARATOR.$locale.'.json';
-
-            if (File::exists($jsonPath)) {
-                $namespaces[] = $namespace;
-            }
-        }
-
-        return $namespaces;
+        return array_values(array_filter($files->jsonNamespaces($locale), fn ($namespace): bool => $namespace !== null));
     }
 
-    /**
-     * @return array{type: 'group', group: string}|array{type: 'json', namespace: string|null}|null
-     */
     private function resolveTargetPath(string $path): ?array
     {
         $normalized = trim($path);
@@ -361,7 +311,9 @@ class TranslateMissingTranslationsCommand extends Command
         $filename = $segments[count($segments) - 1];
 
         if (Str::endsWith($filename, '.php')) {
-            $group = basename($filename, '.php');
+            $offset = ($segments[0] ?? null) === 'vendor' ? 3 : 1;
+            $relative = count($segments) > $offset ? implode('/', array_slice($segments, $offset)) : $filename;
+            $group = substr($relative, 0, -4);
 
             if ($group === '') {
                 return null;
@@ -395,60 +347,6 @@ class TranslateMissingTranslationsCommand extends Command
         }
 
         return null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $existing
-     * @param  array<string, mixed>  $flatExisting
-     */
-    private function setValue(array &$target, string $key, string $value, array $existing, array $flatExisting): void
-    {
-        if ($this->shouldUseNested($existing, $key)) {
-            Arr::set($target, $key, $value);
-
-            return;
-        }
-
-        $target[$key] = $value;
-    }
-
-    private function shouldUseNested(array $existing, string $key): bool
-    {
-        if (config('vox.parse.output', 'flat') === 'nested') {
-            return true;
-        }
-
-        if (! config('vox.parse.preserve_existing_format', true)) {
-            return false;
-        }
-
-        return Arr::has($existing, $key);
-    }
-
-    private function shouldSkipPlaceholderTranslation(string $key, mixed $value): bool
-    {
-        if (! is_string($value)) {
-            return false;
-        }
-
-        if (! $this->isPlaceholderKey($key)) {
-            return false;
-        }
-
-        return $value === $key;
-    }
-
-    private function isPlaceholderKey(string $key): bool
-    {
-        $segments = array_unique([$key, Str::afterLast($key, '.')]);
-
-        foreach ($segments as $segment) {
-            if ($this->segmentLooksPlaceholder($segment)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -551,107 +449,6 @@ class TranslateMissingTranslationsCommand extends Command
         }
 
         return $lines === [] ? [''] : $lines;
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function snapshotLangFiles(string $langPath): array
-    {
-        if (! File::isDirectory($langPath)) {
-            return [];
-        }
-
-        $snapshot = [];
-
-        foreach (File::allFiles($langPath) as $file) {
-            $extension = strtolower($file->getExtension());
-
-            if (! in_array($extension, ['php', 'json'], true)) {
-                continue;
-            }
-
-            $path = $file->getPathname();
-            $contents = File::get($path);
-            $snapshot[$path] = hash('sha256', $contents);
-        }
-
-        return $snapshot;
-    }
-
-    /**
-     * @param  array<string, string>  $before
-     * @param  array<string, string>  $after
-     */
-    private function outputModifiedFiles(string $langPath, array $before, array $after): void
-    {
-        $modified = [];
-
-        foreach ($after as $path => $hash) {
-            if (! isset($before[$path]) || $before[$path] !== $hash) {
-                $modified[] = $this->formatLangPath($langPath, $path);
-            }
-        }
-
-        if ($modified === []) {
-            info('No translation files modified.');
-
-            return;
-        }
-
-        table(['Modified files'], array_map(fn (string $path) => [$path], $modified));
-    }
-
-    private function formatLangPath(string $langPath, string $path): string
-    {
-        $prefix = rtrim($langPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
-
-        if (Str::startsWith($path, $prefix)) {
-            return Str::replaceFirst($prefix, '', $path);
-        }
-
-        return $path;
-    }
-
-    private function segmentLooksPlaceholder(string $segment): bool
-    {
-        $segment = trim($segment);
-
-        if ($segment === '') {
-            return false;
-        }
-
-        if (Str::contains($segment, ' ')) {
-            return false;
-        }
-
-        $prefixes = config('vox.translate.placeholder_prefixes', []);
-
-        if (! is_array($prefixes)) {
-            $prefixes = [];
-        }
-
-        $lower = Str::lower($segment);
-
-        foreach ($prefixes as $prefix) {
-            if (! is_string($prefix) || $prefix === '') {
-                continue;
-            }
-
-            if (Str::startsWith($lower, Str::lower($prefix))) {
-                return true;
-            }
-        }
-
-        if (preg_match('/[_-]/', $segment) === 1) {
-            return true;
-        }
-
-        if (preg_match('/^[a-z]+[A-Z]/', $segment) === 1) {
-            return true;
-        }
-
-        return preg_match('/\\d/', $segment) === 1;
     }
 
     private function normalizeKeyOption(string $value): ?string

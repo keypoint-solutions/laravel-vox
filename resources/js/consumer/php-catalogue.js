@@ -21,7 +21,7 @@ export class PhpTranslationCatalogue {
             const namespace = vendor ? parts.splice(0, 2)[1] : null;
             const locale = parts.shift();
             if (!locale || parts.length === 0) continue;
-            const group = parts.join('.').slice(0, -4);
+            const group = parts.join('/').slice(0, -4);
             return { file, priority, vendor, locale, group: namespace ? `${namespace}::${group}` : group };
         }
         return null;

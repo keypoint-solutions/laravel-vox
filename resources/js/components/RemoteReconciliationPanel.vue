@@ -1,8 +1,10 @@
 <script setup lang="ts">
     import { router, usePage } from '@inertiajs/vue3';
+    import { Sparkles } from '@lucide/vue';
     import { computed, ref, watch } from 'vue';
 
-    import { Badge, Button, Checkbox, Input, Label, Select, SlidePanel, Textarea } from '@/components/ui';
+    import { Badge, Button, Checkbox, Input, Label, Select, Textarea } from '@/components/ui';
+    import FontAwesomeCheck from '@/components/ui/FontAwesomeCheck.vue';
     import PageSizeSelect from '@/components/ui/PageSizeSelect.vue';
 
     interface Candidate {
@@ -13,6 +15,8 @@
         locale: string;
         local_value: string | null;
         remote_value: string;
+        default_locale: string;
+        default_value: string | null;
         base_value: string | null;
         base_local_value: string | null;
         last_seen_value: string | null;
@@ -39,6 +43,7 @@
 
     const props = defineProps<{
         review: ReconciliationPage;
+        canChooseWithAi?: boolean;
         environments: { id: number; name: string }[];
     }>();
     const page = usePage();
@@ -49,10 +54,35 @@
     const selected = ref<Record<number, string>>({});
     const allMatching = ref(false);
     const busy = ref(false);
+    const choosingId = ref<number | null>(null);
+    const aiReasons = ref<Record<number, string>>({});
     const message = ref('');
     const error = ref('');
-    const editing = ref<Candidate | null>(null);
-    const editedValue = ref('');
+    const choices = ref<Record<number, { token: string; side: 'local' | 'incoming'; local: string; incoming: string }>>(
+        {}
+    );
+    const bulkHasEdits = computed(() =>
+        props.review.data.some(
+            (row) =>
+                (allMatching.value || selected.value[row.id]) &&
+                choices.value[row.id]?.token === row.token &&
+                (choices.value[row.id].incoming !== row.remote_value ||
+                    choices.value[row.id].local !== (row.local_value ?? ''))
+        )
+    );
+
+    watch(
+        () => props.review.data,
+        (rows) => {
+            const currentTokens = new Map(rows.map((row) => [row.id, row.token]));
+            for (const [id, choice] of Object.entries(choices.value)) {
+                if (currentTokens.get(Number(id)) !== choice.token) {
+                    delete choices.value[Number(id)];
+                    delete aiReasons.value[Number(id)];
+                }
+            }
+        }
+    );
     const visible = computed(() => props.review.data.filter((row) => row.actionable));
     const visibleSelected = computed(
         () => visible.value.length > 0 && (allMatching.value || visible.value.every((row) => selected.value[row.id]))
@@ -76,7 +106,8 @@
         { value: 'review', label: 'Needs review' },
         { value: 'incoming', label: 'Incoming changes' },
         { value: 'conflict', label: 'Conflicts' },
-        { value: 'outgoing', label: 'Local values kept / changed' },
+        { value: 'outgoing', label: 'Local changes' },
+        { value: 'kept', label: 'Resolved: kept local' },
         { value: 'reconciled', label: 'Matching values' },
         { value: 'unavailable', label: 'No longer in source' },
         { value: 'all', label: 'All values' },
@@ -84,7 +115,8 @@
     const labels: Record<string, string> = {
         incoming: 'Incoming',
         conflict: 'Conflict',
-        outgoing: 'Local value kept / changed',
+        outgoing: 'Local change',
+        kept: 'Resolved: kept local',
         reconciled: 'Matching',
         unavailable: 'No longer in source',
     };
@@ -151,13 +183,134 @@
         );
     }
 
-    function edit(row: Candidate): void {
-        editing.value = row;
-        editedValue.value = row.local_value ?? row.remote_value;
-        error.value = '';
+    function choose(row: Candidate, side: 'local' | 'incoming'): void {
+        if (busy.value || filtersDirty.value || !row.actionable || (side === 'incoming' && !row.locale_available)) {
+            return;
+        }
+        delete aiReasons.value[row.id];
+        const previous = choices.value[row.id];
+        choices.value[row.id] = {
+            token: row.token,
+            side,
+            local: previous?.token === row.token ? previous.local : (row.local_value ?? ''),
+            incoming: previous?.token === row.token ? previous.incoming : row.remote_value,
+        };
     }
 
-    function decide(action: 'accept' | 'keep' | 'edit', row?: Candidate, publish = false): void {
+    function updateWording(row: Candidate, side: 'local' | 'incoming', value: string): void {
+        choose(row, side);
+        if (choices.value[row.id]?.side === side) {
+            choices.value[row.id][side] = value;
+        }
+    }
+
+    const pageSelection = computed(() =>
+        visible.value.filter(
+            (row) => row.locale_available && (allMatching.value || selected.value[row.id] === row.token)
+        )
+    );
+    const canConfirmPage = computed(
+        () =>
+            pageSelection.value.length > 0 &&
+            pageSelection.value.every((row) => choices.value[row.id]?.token === row.token)
+    );
+
+    function chooseWithAi(row?: Candidate): void {
+        if (busy.value || filtersDirty.value) return;
+        const rows = row ? [row] : pageSelection.value;
+        if (!rows.length || rows.some((item) => !item.actionable || !item.locale_available)) return;
+        const entries = rows.map((item) => ({
+            id: item.id,
+            token: item.token,
+            local: choices.value[item.id]?.local ?? item.local_value ?? '',
+            incoming: choices.value[item.id]?.incoming ?? item.remote_value,
+        }));
+        busy.value = true;
+        choosingId.value = row?.id ?? -1;
+        error.value = '';
+        router.post(page.props.vox?.routes?.sync_choose ?? '', row ? entries[0] : { entries }, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: (response) => {
+                type Suggestion = { id: number; token: string; choice: 'local' | 'incoming'; reason: string };
+                const results = row
+                    ? [response.flash?.translationChoice as Suggestion]
+                    : (response.flash?.translationChoices as Suggestion[]);
+                for (const result of results ?? []) {
+                    if (!result) continue;
+                    const submitted = entries.find((item) => item.id === result.id);
+                    const current = props.review.data.find((item) => item.id === result.id);
+                    if (
+                        !submitted ||
+                        !current ||
+                        result.token !== submitted.token ||
+                        current.token !== submitted.token ||
+                        !['local', 'incoming'].includes(result.choice) ||
+                        (choices.value[current.id]?.local ?? current.local_value ?? '') !== submitted.local ||
+                        (choices.value[current.id]?.incoming ?? current.remote_value) !== submitted.incoming
+                    )
+                        continue;
+                    choices.value[current.id] = {
+                        token: current.token,
+                        side: result.choice,
+                        local: submitted.local,
+                        incoming: submitted.incoming,
+                    };
+                    aiReasons.value[current.id] = result.reason;
+                }
+            },
+            onError: (errors) => {
+                error.value = Object.values(errors)[0] ?? 'AI could not choose wording.';
+            },
+            onFinish: () => {
+                busy.value = false;
+                choosingId.value = null;
+            },
+        });
+    }
+
+    function confirmPage(): void {
+        if (busy.value || filtersDirty.value || !canConfirmPage.value) return;
+        const entries = pageSelection.value.map((row) => {
+            const choice = choices.value[row.id];
+            return { id: row.id, token: row.token, side: choice.side, value: choice[choice.side] };
+        });
+        busy.value = true;
+        error.value = '';
+        router.post(
+            page.props.vox?.routes?.sync_reconcile ?? '',
+            { action: 'confirm', entries, publish: false },
+            {
+                preserveScroll: true,
+                onSuccess: (response) => {
+                    message.value = (response.flash?.success as string) ?? 'Selections confirmed.';
+                    for (const entry of entries) {
+                        delete choices.value[entry.id];
+                        delete aiReasons.value[entry.id];
+                    }
+                    clearSelection();
+                },
+                onError: (errors) => {
+                    error.value = Object.values(errors)[0] ?? 'Selections could not be confirmed.';
+                },
+                onFinish: () => {
+                    busy.value = false;
+                },
+            }
+        );
+    }
+
+    function confirm(row: Candidate): void {
+        const choice = choices.value[row.id];
+        if (!choice || choice.token !== row.token || busy.value || filtersDirty.value) {
+            return;
+        }
+        const original = choice.side === 'local' ? (row.local_value ?? '') : row.remote_value;
+        const action = choice[choice.side] !== original ? 'edit' : choice.side === 'local' ? 'keep' : 'accept';
+        decide(action, row);
+    }
+
+    function decide(action: 'accept' | 'keep' | 'edit', row?: Candidate): void {
         busy.value = true;
         message.value = '';
         error.value = '';
@@ -169,19 +322,21 @@
             page.props.vox?.routes?.sync_reconcile ?? '',
             {
                 action,
-                publish,
+                publish: false,
                 all_matching: !row && allMatching.value,
                 entries,
                 filters: props.review.filters,
                 selection_token: props.review.selection_token,
-                ...(action === 'edit' ? { value: editedValue.value } : {}),
+                ...(action === 'edit' && row ? { value: choices.value[row.id][choices.value[row.id].side] } : {}),
             },
             {
                 preserveScroll: true,
                 onSuccess: (response) => {
                     message.value = (response.flash?.success as string | undefined) ?? 'Review decisions saved.';
                     clearSelection();
-                    editing.value = null;
+                    if (row) {
+                        delete choices.value[row.id];
+                    }
                 },
                 onError: (errors) => {
                     error.value = Object.values(errors)[0] ?? 'The review decision could not be saved.';
@@ -217,14 +372,15 @@
                 >
             </div>
             <p class="text-muted-foreground text-sm">
-                Compare incoming wording with the current database value. Accept approves the selected translations;
-                Accept and publish also writes only those translations to language files. Keep local retains the
-                database wording.
+                Select the wording you want to keep, then confirm your selection. You can edit either version before
+                confirming. Only the selected version is saved. Incoming or edited selections are approved and ready to
+                publish when you choose.
             </p>
             <div class="flex flex-wrap gap-2 text-xs">
                 <Badge variant="secondary">{{ review.counts.incoming ?? 0 }} incoming</Badge>
                 <Badge variant="outline">{{ review.counts.conflict ?? 0 }} conflicts</Badge>
-                <Badge variant="secondary">{{ review.counts.outgoing ?? 0 }} local values kept / changed</Badge>
+                <Badge variant="secondary">{{ review.counts.outgoing ?? 0 }} local changes</Badge>
+                <Badge variant="secondary">{{ review.counts.kept ?? 0 }} resolved: kept local</Badge>
                 <Badge variant="secondary">{{ review.counts.reconciled ?? 0 }} matching</Badge>
             </div>
             <form
@@ -269,7 +425,6 @@
                 <Button
                     class="self-end"
                     type="submit"
-                    variant="outline"
                     :disabled="busy"
                     >Filter changes</Button
                 >
@@ -331,26 +486,56 @@
                     >Clear selection</Button
                 >
             </div>
+            <p
+                v-if="bulkHasEdits"
+                class="text-muted-foreground text-sm"
+            >
+                Confirm the selected wording below to save edits. Accept and Keep local use the original values.
+            </p>
+            <div
+                v-if="canChooseWithAi"
+                class="space-y-2"
+            >
+                <p class="text-muted-foreground text-xs">
+                    AI choices and confirmation apply only to checked rows on this page. Suggestions are cleared when
+                    you leave the page.
+                </p>
+                <div class="flex flex-wrap items-center gap-2">
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        data-test="review-bulk-ai"
+                        :disabled="busy || filtersDirty || !pageSelection.length"
+                        @click="chooseWithAi()"
+                    >
+                        <Sparkles
+                            class="size-4 shrink-0"
+                            aria-hidden="true"
+                        />
+                        {{ choosingId === -1 ? 'Choosing…' : `Choose with AI (${pageSelection.length})` }}
+                    </Button>
+                    <Button
+                        size="sm"
+                        data-test="review-bulk-confirm"
+                        :disabled="busy || filtersDirty || !canConfirmPage"
+                        @click="confirmPage"
+                    >
+                        Confirm selections ({{ pageSelection.length }})
+                    </Button>
+                </div>
+            </div>
             <div class="flex flex-wrap gap-2">
                 <Button
                     data-test="review-bulk-accept"
-                    :disabled="busy || filtersDirty || selectedCount === 0"
+                    :disabled="busy || filtersDirty || selectedCount === 0 || bulkHasEdits"
                     @click="decide('accept')"
                 >
                     {{ busy ? 'Saving…' : `Accept (${selectedCount})` }}
                 </Button>
                 <Button
-                    data-test="review-bulk-accept-publish"
-                    variant="outline"
-                    :disabled="busy || filtersDirty || selectedCount === 0"
-                    @click="decide('accept', undefined, true)"
-                >
-                    Accept and publish ({{ selectedCount }})
-                </Button>
-                <Button
                     data-test="review-bulk-keep"
                     variant="outline"
-                    :disabled="busy || filtersDirty || selectedCount === 0"
+                    :disabled="busy || filtersDirty || selectedCount === 0 || bulkHasEdits"
                     @click="decide('keep')"
                 >
                     Keep local ({{ selectedCount }})
@@ -397,39 +582,131 @@
                 </div>
                 <Badge :variant="row.state === 'conflict' ? 'outline' : 'secondary'">{{ labels[row.state] }}</Badge>
             </div>
-            <div class="grid gap-4 md:grid-cols-2">
-                <div class="min-w-0 rounded-lg border p-3">
-                    <p class="text-muted-foreground mb-2 text-xs font-medium">Current database wording</p>
+            <div
+                class="grid gap-4 md:grid-cols-2"
+                role="group"
+                :aria-label="`Choose wording for ${row.key} ${row.locale}`"
+            >
+                <div
+                    class="min-w-0 rounded-lg transition-colors"
+                    @click="choose(row, 'local')"
+                >
+                    <label
+                        :data-test="`review-local-control-${row.id}`"
+                        :class="choices[row.id]?.side === 'local' ? 'text-emerald-700 dark:text-emerald-400' : ''"
+                        class="mb-3 flex cursor-pointer items-center gap-2 text-xs font-medium"
+                    >
+                        <input
+                            v-if="row.actionable"
+                            type="radio"
+                            :name="`wording-${row.id}`"
+                            :data-test="`review-local-${row.id}`"
+                            :checked="choices[row.id]?.side === 'local'"
+                            :disabled="busy || filtersDirty"
+                            class="peer sr-only"
+                            @change="choose(row, 'local')"
+                        />
+                        <span
+                            class="flex items-center gap-2 rounded-sm peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-emerald-600"
+                        >
+                            <FontAwesomeCheck
+                                v-if="row.actionable"
+                                class="size-3.5 shrink-0 text-emerald-700 dark:text-emerald-400"
+                                :class="choices[row.id]?.side === 'local' ? 'opacity-100' : 'opacity-0'"
+                            />
+                            Current database wording
+                        </span>
+                    </label>
+                    <Textarea
+                        v-if="row.actionable && row.locale_available"
+                        :model-value="choices[row.id]?.local ?? row.local_value ?? ''"
+                        :aria-label="`Current wording for ${row.key} ${row.locale}`"
+                        :data-test="`review-local-wording-${row.id}`"
+                        :disabled="busy || filtersDirty"
+                        class="border-border/60 min-h-32 resize-y transition-colors focus-visible:ring-emerald-500/40 focus-visible:ring-offset-0"
+                        :class="
+                            choices[row.id]?.side === 'local'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/40'
+                                : 'bg-transparent'
+                        "
+                        @focus="choose(row, 'local')"
+                        @update:model-value="updateWording(row, 'local', $event)"
+                    />
                     <pre
-                        class="max-h-40 overflow-auto font-sans text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
+                        v-else
+                        class="max-h-64 overflow-auto font-sans text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
                         >{{ row.local_value ?? 'No local value' }}</pre>
                 </div>
-                <div class="min-w-0 rounded-lg border p-3">
-                    <p class="text-muted-foreground mb-2 text-xs font-medium">Incoming wording</p>
+                <div
+                    class="min-w-0 rounded-lg transition-colors"
+                    @click="choose(row, 'incoming')"
+                >
+                    <label
+                        :data-test="`review-incoming-control-${row.id}`"
+                        :class="choices[row.id]?.side === 'incoming' ? 'text-emerald-700 dark:text-emerald-400' : ''"
+                        class="mb-3 flex cursor-pointer items-center gap-2 text-xs font-medium"
+                    >
+                        <input
+                            v-if="row.actionable"
+                            type="radio"
+                            :name="`wording-${row.id}`"
+                            :data-test="`review-incoming-${row.id}`"
+                            :checked="choices[row.id]?.side === 'incoming'"
+                            :disabled="busy || filtersDirty || !row.locale_available"
+                            class="peer sr-only"
+                            @change="choose(row, 'incoming')"
+                        />
+                        <span
+                            class="flex items-center gap-2 rounded-sm peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-emerald-600"
+                        >
+                            <FontAwesomeCheck
+                                v-if="row.actionable"
+                                class="size-3.5 shrink-0 text-emerald-700 dark:text-emerald-400"
+                                :class="choices[row.id]?.side === 'incoming' ? 'opacity-100' : 'opacity-0'"
+                            />
+                            Incoming wording
+                        </span>
+                    </label>
+                    <Textarea
+                        v-if="row.actionable && row.locale_available"
+                        :model-value="choices[row.id]?.incoming ?? row.remote_value"
+                        :aria-label="`Incoming wording for ${row.key} ${row.locale}`"
+                        :data-test="`review-wording-${row.id}`"
+                        :disabled="busy || filtersDirty"
+                        class="border-border/60 min-h-32 resize-y transition-colors focus-visible:ring-emerald-500/40 focus-visible:ring-offset-0"
+                        :class="
+                            choices[row.id]?.side === 'incoming'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/40'
+                                : 'bg-transparent'
+                        "
+                        @focus="choose(row, 'incoming')"
+                        @update:model-value="updateWording(row, 'incoming', $event)"
+                    />
                     <pre
-                        class="max-h-40 overflow-auto font-sans text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
+                        v-else
+                        class="max-h-64 overflow-auto font-sans text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
                         >{{ row.remote_value }}</pre>
                 </div>
             </div>
-            <details class="text-muted-foreground text-xs">
-                <summary class="cursor-pointer">Comparison history</summary>
-                <div class="mt-2 space-y-2">
-                    <template v-if="row.has_baseline">
-                        <p>Source value at last agreement or review:</p>
-                        <pre class="max-h-32 overflow-auto font-sans [overflow-wrap:anywhere] whitespace-pre-wrap">{{
-                            row.base_value ?? 'No value'
-                        }}</pre>
-                        <p>Local value at that time:</p>
-                        <pre class="max-h-32 overflow-auto font-sans [overflow-wrap:anywhere] whitespace-pre-wrap">{{
-                            row.base_local_value ?? 'No value'
-                        }}</pre>
-                    </template>
-                    <p v-else>No shared baseline yet. Existing values that differ need an explicit review decision.</p>
-                    <p>Previously seen source value:</p>
-                    <pre class="max-h-32 overflow-auto font-sans [overflow-wrap:anywhere] whitespace-pre-wrap">{{
-                        row.last_seen_value ?? 'First observation'
-                    }}</pre>
-                </div>
+            <details
+                class="text-muted-foreground text-sm"
+                :data-test="`review-reference-${row.id}`"
+            >
+                <summary
+                    class="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600"
+                >
+                    Default-language reference · {{ row.default_locale }}
+                </summary>
+                <pre
+                    v-if="row.default_value"
+                    class="text-foreground mt-3 max-h-64 overflow-auto font-sans text-sm [overflow-wrap:anywhere] whitespace-pre-wrap"
+                    >{{ row.default_value }}</pre>
+                <p
+                    v-else
+                    class="mt-3"
+                >
+                    No wording is available in the default language for this key.
+                </p>
             </details>
             <p
                 v-if="row.state === 'unavailable'"
@@ -453,34 +730,40 @@
             </p>
             <div
                 v-if="row.actionable"
-                class="flex flex-wrap gap-2"
+                class="flex flex-wrap items-center justify-end gap-2"
             >
-                <Button
-                    size="sm"
-                    :disabled="busy || !row.locale_available"
-                    @click="decide('accept', row)"
-                    >Accept</Button
+                <p
+                    v-if="aiReasons[row.id]"
+                    role="status"
+                    class="text-muted-foreground w-full text-sm [overflow-wrap:anywhere]"
                 >
+                    AI suggestion: {{ aiReasons[row.id] }} Review the selection, then confirm to save.
+                </p>
                 <Button
-                    size="sm"
-                    variant="outline"
-                    :disabled="busy || !row.locale_available || row.is_orphan"
-                    @click="decide('accept', row, true)"
-                    >Accept and publish</Button
-                >
-                <Button
-                    size="sm"
-                    variant="outline"
-                    :disabled="busy"
-                    @click="decide('keep', row)"
-                    >Keep local</Button
-                >
-                <Button
+                    v-if="canChooseWithAi"
                     size="sm"
                     variant="ghost"
-                    :disabled="busy || !row.locale_available"
-                    @click="edit(row)"
-                    >Edit merged value</Button
+                    :data-test="`review-ai-${row.id}`"
+                    :disabled="busy || filtersDirty || !row.locale_available"
+                    @click="chooseWithAi(row)"
+                >
+                    <Sparkles
+                        class="size-4 shrink-0"
+                        aria-hidden="true"
+                    />
+                    {{ choosingId === row.id ? 'Choosing…' : 'Choose with AI' }}
+                </Button>
+                <Button
+                    size="sm"
+                    :data-test="`review-confirm-${row.id}`"
+                    :disabled="
+                        busy ||
+                        filtersDirty ||
+                        !choices[row.id] ||
+                        (choices[row.id]?.side === 'incoming' && !row.locale_available)
+                    "
+                    @click="confirm(row)"
+                    >Confirm selection</Button
                 >
             </div>
         </article>
@@ -511,44 +794,4 @@
             </div>
         </div>
     </section>
-
-    <SlidePanel
-        :open="editing !== null"
-        title="Edit merged value"
-        :subtitle="editing ? `${editing.group}.${editing.key} · ${editing.locale}` : ''"
-        @close="editing = null"
-    >
-        <form
-            v-if="editing"
-            id="review-edit-form"
-            class="space-y-4"
-            @submit.prevent="decide('edit', editing)"
-        >
-            <p class="text-muted-foreground text-sm">
-                Save and approve the wording you want to keep. You can publish it when you are ready.
-            </p>
-            <Label for="review-edited-value">Merged translation</Label>
-            <Textarea
-                id="review-edited-value"
-                v-model="editedValue"
-                class="min-h-48"
-                :disabled="busy"
-            />
-            <p
-                v-if="error"
-                role="alert"
-                class="text-destructive text-sm"
-            >
-                {{ error }}
-            </p>
-        </form>
-        <template #footer>
-            <Button
-                type="submit"
-                form="review-edit-form"
-                :disabled="busy"
-                >Save merged value</Button
-            >
-        </template>
-    </SlidePanel>
 </template>

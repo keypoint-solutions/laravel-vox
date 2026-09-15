@@ -81,8 +81,13 @@ it('classifies incoming outgoing conflicting and matching values against the ack
 
     decideVoxValues($this, 'keep');
     pullVoxValues($this, [incomingVoxValue('Remote edit')]);
-    expect($this->reconciliation->page(['state' => 'all'])['data'][0]['state'])->toBe('outgoing')
+    expect($this->reconciliation->page(['state' => 'all'])['data'][0]['state'])->toBe('kept')
         ->and($this->reconciliation->unresolvedCount())->toBe(0);
+
+    expect($this->reconciliation->page(['state' => 'kept'])['actionable_count'])->toBe(0);
+    $this->translation->values()->first()->update(['value' => 'Later local edit']);
+    expect($this->reconciliation->page(['state' => 'outgoing'])['total'])->toBe(1);
+    $this->translation->values()->first()->update(['value' => 'Local edit']);
 
     pullVoxValues($this, [incomingVoxValue('Another remote edit')]);
     expect($this->reconciliation->page(['state' => 'all'])['data'][0]['state'])->toBe('incoming');
@@ -174,7 +179,7 @@ it('keeps environment baselines independent and treats absent remote entries as 
         ->and($this->translation->values()->first()->value)->toBe('Original');
 });
 
-it('stores a manually merged value as pending and rejects edits to more than one candidate', function (): void {
+it('approves edited wording without publishing and audits the edit', function (): void {
     pullVoxValues($this, [incomingVoxValue('Remote')]);
     $row = $this->reconciliation->page(['state' => 'all'])['data'][0];
     $this->reconciliation->resolve([
@@ -184,6 +189,9 @@ it('stores a manually merged value as pending and rejects edits to more than one
 
     expect($this->translation->values()->first()->value)->toBe('Merged wording')
         ->and($this->translation->fresh()->status)->toBe('approved')
+        ->and($this->translation->values()->first()->is_pending_publish)->toBeTrue()
+        ->and((require $this->reconciliationRoot.'/en/messages.php')['greeting'])->toBe('Original')
+        ->and(VoxAudit::query()->where('action', 'remote-reconciliation')->latest('id')->first()->context['decision'])->toBe('edit')
         ->and($this->reconciliation->unresolvedCount())->toBe(0);
 
     pullVoxValues($this, [incomingVoxValue('Changed'), incomingVoxValue('New', 'other')]);
@@ -291,4 +299,32 @@ it('does not partially accept a batch containing an unconfigured locale', functi
     expect(fn () => decideVoxValues($this, 'accept'))->toThrow(ValidationException::class);
     expect($this->translation->values()->first()->value)->toBe('Original')
         ->and($this->translation->values()->count())->toBe(1);
+});
+
+it('provides the configured default language reference separately from the comparison baseline', function (): void {
+    config()->set('vox.translate.locales.values', ['en', 'fr']);
+    config()->set('vox.translate.base_locale', 'fr');
+    $this->translation->values()->create(['locale' => 'fr', 'value' => 'Référence française']);
+    pullVoxValues($this, [incomingVoxValue('Incoming English')]);
+    $row = $this->reconciliation->page(['state' => 'all'])['data'][0];
+    expect($row['default_locale'])->toBe('fr')
+        ->and($row['default_value'])->toBe('Référence française');
+    $this->translation->values()->where('locale', 'fr')->delete();
+    expect($this->reconciliation->page(['state' => 'all'])['data'][0]['default_value'])->toBeNull();
+});
+
+it('refreshes stale file comparisons matching a published override without changing shipped defaults or drafts', function (): void {
+    $value = $this->translation->values()->first();
+    $value->update(['value' => 'Published', 'file_value' => 'Original', 'published_override' => 'Published', 'is_pending_publish' => false]);
+    $this->reconciliation->ingestFileValue($this->translation, 'en', 'Original', 'Original');
+    File::put($this->reconciliationRoot.'/en/messages.php', "<?php return ['greeting' => 'Published'];");
+    app(TranslationDatabaseSynchronizer::class)->sync();
+    $row = $this->reconciliation->page(['environment_id' => -1, 'state' => 'all'])['data'][0];
+    expect($row['state'])->toBe('reconciled')->and($row['remote_value'])->toBe('Published')
+        ->and($value->fresh()->file_value)->toBe('Original');
+    app(TranslationDatabaseSynchronizer::class)->sync();
+    expect($this->reconciliation->page(['environment_id' => -1, 'state' => 'all'])['data'][0]['revision'])->toBe($row['revision']);
+    $value->refresh()->saveDraft('Next draft');
+    app(TranslationDatabaseSynchronizer::class)->sync();
+    expect($value->fresh()->value)->toBe('Next draft')->and($value->fresh()->is_pending_publish)->toBeTrue();
 });

@@ -80,3 +80,23 @@ it('retains newly created dynamic drafts through deployment until approved and p
     expect((require $this->fixtureRoot.'/lang/en/custom.php')['notice'])->toBe('New notice')
         ->and($value->fresh()->published_override)->toBe('New notice');
 });
+
+it('removes both representations and deletes an empty file when no application value exists', function (): void {
+    $translation = VoxTranslation::factory()->create(['group' => 'custom', 'key' => 'promo.line']);
+    $translation->values()->create(['locale' => 'en', 'value' => 'Override', 'published_override' => 'Override', 'is_approved' => true]);
+    $path = $this->fixtureRoot.'/lang/en/custom.php';
+    File::put($path, "<?php return ['promo' => ['line' => 'Override'], 'promo.line' => 'Override'];");
+    $this->post('/vox/manage/translations/'.$translation->id.'/use-application', ['locale' => 'en'])->assertSessionHasNoErrors();
+    expect(File::exists($path))->toBeFalse();
+});
+
+it('restores application wording using the configured group format', function (string $format): void {
+    config()->set('vox.parse.output', $format);
+    config()->set('vox.parse.preserve_existing_format', false);
+    $translation = VoxTranslation::factory()->create(['group' => 'custom', 'key' => 'promo.line']);
+    $translation->values()->create(['locale' => 'en', 'value' => 'Override', 'file_value' => 'Original', 'published_override' => 'Override', 'is_approved' => true]);
+    $path = $this->fixtureRoot.'/lang/en/custom.php';
+    File::put($path, "<?php return ['promo' => ['line' => 'Override'], 'promo.line' => 'Override'];");
+    $this->post('/vox/manage/translations/'.$translation->id.'/use-application', ['locale' => 'en'])->assertSessionHasNoErrors();
+    expect(require $path)->toBe($format === 'flat' ? ['promo.line' => 'Original'] : ['promo' => ['line' => 'Original']]);
+})->with(['flat', 'nested']);

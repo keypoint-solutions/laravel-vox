@@ -82,7 +82,7 @@ class PublishController
 
         $prefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
         $approved = VoxTranslation::query()
-            ->where('is_ignored', false)
+            ->where('is_pending_delete', false)
             ->whereHas('values', fn (Builder $query): Builder => $query->where('is_approved', true)->whereIn('locale', $locales))
             ->with('values')
             ->get();
@@ -107,7 +107,7 @@ class PublishController
                     continue;
                 }
 
-                if (! $translationValue->is_pending_publish && $translationValue->file_value !== null) {
+                if (! $translationValue->hasApprovedChange()) {
                     continue;
                 }
 

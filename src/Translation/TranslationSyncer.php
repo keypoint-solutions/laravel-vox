@@ -4,7 +4,6 @@ namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\File;
 use KeypointSolutions\LaravelVox\Models\VoxRemoteTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationOccurrence;
@@ -55,7 +54,7 @@ class TranslationSyncer
                 'key' => $payload['key'],
                 'group' => $payload['group'],
             ]);
-            if ($translation->exists && $translation->is_ignored) {
+            if ($translation->exists && $translation->is_pending_delete) {
                 $seenTranslationIds[] = $translation->id;
 
                 continue;
@@ -110,6 +109,10 @@ class TranslationSyncer
                 $isNewValue = ! $translationValue->exists;
 
                 if (! $deployment && $translationValue->published_override !== null && $value === $translationValue->published_override) {
+                    if ($fileCandidates->has(RemoteTranslationSnapshot::identity($translation->group, $translation->key, $locale))) {
+                        app(RemoteReconciliation::class)->ingestFileValue($translation, $locale, $value, $oldFileValue ?? $current);
+                    }
+
                     continue;
                 }
 
@@ -165,7 +168,7 @@ class TranslationSyncer
 
         if ($deployment) {
             $absent = VoxTranslationValue::query()->whereNotIn('id', $seenValueIds)
-                ->whereHas('translation', fn ($query) => $query->where('is_ignored', false))->lockForUpdate()->get();
+                ->whereHas('translation', fn ($query) => $query->where('is_pending_delete', false))->lockForUpdate()->get();
             foreach ($absent as $value) {
                 $value->file_value = null;
                 $value->is_obsolete = $value->published_override === null && ! $value->is_pending_publish;
@@ -173,7 +176,7 @@ class TranslationSyncer
             }
         }
 
-        $orphanQuery = VoxTranslation::query()->where('is_ignored', false);
+        $orphanQuery = VoxTranslation::query()->where('is_pending_delete', false);
 
         if ($seenTranslationIds !== []) {
             $orphanQuery->whereNotIn('id', $seenTranslationIds);
@@ -183,8 +186,14 @@ class TranslationSyncer
             ->lockForUpdate()
             ->with('values')
             ->get()
-            ->filter(function (VoxTranslation $translation): bool {
-                if (! $translation->is_orphan && ($translation->values->contains('is_pending_publish', true) || $translation->values->contains(fn ($value): bool => $value->published_override !== null))) {
+            ->filter(function (VoxTranslation $translation) use ($deployment): bool {
+                if (! $translation->is_orphan && $translation->values->contains(
+                    fn ($value): bool => $value->is_pending_publish && $value->file_value === null && $value->published_override === null
+                )) {
+                    return false;
+                }
+
+                if ($deployment && ! $translation->is_orphan && ($translation->values->contains('is_pending_publish', true) || $translation->values->contains(fn ($value): bool => $value->published_override !== null))) {
                     return false;
                 }
 
@@ -275,54 +284,10 @@ class TranslationSyncer
     private function collectGroupFiles(string $langPath, array $locales): array
     {
         $files = [];
-
+        $repository = $this->files->forPath($langPath);
         foreach ($locales as $locale) {
-            $groupPath = $langPath.DIRECTORY_SEPARATOR.$locale;
-
-            if (! File::isDirectory($groupPath)) {
-                continue;
-            }
-
-            foreach (File::files($groupPath) as $file) {
-                if ($file->getExtension() !== 'php') {
-                    continue;
-                }
-
-                $files[] = [
-                    'locale' => $locale,
-                    'group' => $file->getBasename('.php'),
-                    'path' => $file->getPathname(),
-                ];
-            }
-        }
-
-        $vendorRoot = $langPath.DIRECTORY_SEPARATOR.'vendor';
-
-        if (! File::isDirectory($vendorRoot)) {
-            return $files;
-        }
-
-        foreach (File::directories($vendorRoot) as $vendorPath) {
-            $namespace = basename($vendorPath);
-
-            foreach ($locales as $locale) {
-                $groupPath = $vendorPath.DIRECTORY_SEPARATOR.$locale;
-
-                if (! File::isDirectory($groupPath)) {
-                    continue;
-                }
-
-                foreach (File::files($groupPath) as $file) {
-                    if ($file->getExtension() !== 'php') {
-                        continue;
-                    }
-
-                    $files[] = [
-                        'locale' => $locale,
-                        'group' => $namespace.'::'.$file->getBasename('.php'),
-                        'path' => $file->getPathname(),
-                    ];
-                }
+            foreach ($repository->groups($locale) as $group) {
+                $files[] = ['locale' => $locale, 'group' => $group, 'path' => $repository->groupPath($locale, $group)];
             }
         }
 
@@ -336,40 +301,10 @@ class TranslationSyncer
     private function collectJsonFiles(string $langPath, array $locales): array
     {
         $files = [];
-
+        $repository = $this->files->forPath($langPath);
         foreach ($locales as $locale) {
-            $path = $langPath.DIRECTORY_SEPARATOR.$locale.'.json';
-
-            if (File::exists($path)) {
-                $files[] = [
-                    'locale' => $locale,
-                    'path' => $path,
-                    'namespace' => null,
-                ];
-            }
-        }
-
-        $vendorRoot = $langPath.DIRECTORY_SEPARATOR.'vendor';
-
-        if (! File::isDirectory($vendorRoot)) {
-            return $files;
-        }
-
-        foreach (File::directories($vendorRoot) as $vendorPath) {
-            $namespace = basename($vendorPath);
-
-            foreach ($locales as $locale) {
-                $path = $vendorPath.DIRECTORY_SEPARATOR.$locale.'.json';
-
-                if (! File::exists($path)) {
-                    continue;
-                }
-
-                $files[] = [
-                    'locale' => $locale,
-                    'path' => $path,
-                    'namespace' => $namespace,
-                ];
+            foreach ($repository->jsonNamespaces($locale) as $namespace) {
+                $files[] = ['locale' => $locale, 'namespace' => $namespace, 'path' => $repository->jsonPath($locale, $namespace)];
             }
         }
 

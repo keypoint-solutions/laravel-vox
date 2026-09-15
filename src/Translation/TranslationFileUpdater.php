@@ -9,7 +9,7 @@ use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 
 class TranslationFileUpdater
 {
-    private array $ignoredKeys = [];
+    private array $pendingDeletionKeys = [];
 
     public function __construct(
         private TranslationFileRepository $files,
@@ -22,11 +22,20 @@ class TranslationFileUpdater
      */
     public function updateFromScan(array $scanResults, array $locales, string $baseLocale): TranslationUpdateResult
     {
-        $this->ignoredKeys = [];
+        return app(TranslationFileTransaction::class)->run(fn (): TranslationUpdateResult => $this->updateFiles($scanResults, $locales, $baseLocale));
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $scanResults
+     * @param  array<int, string>  $locales
+     */
+    private function updateFiles(array $scanResults, array $locales, string $baseLocale): TranslationUpdateResult
+    {
+        $this->pendingDeletionKeys = [];
         $connection = config('vox.database.connection', 'vox');
-        if (Schema::connection($connection)->hasTable('vox_translations') && Schema::connection($connection)->hasColumn('vox_translations', 'is_ignored')) {
-            foreach (VoxTranslation::query()->where('is_ignored', true)->get() as $ignored) {
-                $this->ignoredKeys[$this->dynamicKeys->fullKey($ignored->key, $ignored->group)] = true;
+        if (Schema::connection($connection)->hasTable('vox_translations') && Schema::connection($connection)->hasColumn('vox_translations', 'is_pending_delete')) {
+            foreach (VoxTranslation::query()->where('is_pending_delete', true)->get() as $pendingDeletion) {
+                $this->pendingDeletionKeys[$this->dynamicKeys->fullKey($pendingDeletion->key, $pendingDeletion->group)] = true;
             }
         }
         $groupedKeys = [];
@@ -34,7 +43,7 @@ class TranslationFileUpdater
         $namespacedJsonKeys = [];
 
         foreach ($scanResults as $entry) {
-            if (isset($this->ignoredKeys[$this->dynamicKeys->fullKey($entry['key'], $entry['group'])])) {
+            if (isset($this->pendingDeletionKeys[$this->dynamicKeys->fullKey($entry['key'], $entry['group'])])) {
                 continue;
             }
             $group = $entry['group'];
@@ -60,6 +69,19 @@ class TranslationFileUpdater
             $groupedKeys[$group][] = $entry['key'];
         }
 
+        if ($this->obsoleteAction() === 'discard') {
+            foreach ($locales as $locale) {
+                foreach ($this->files->groups($locale) as $group) {
+                    $groupedKeys[$group] ??= [];
+                }
+                foreach ($this->files->jsonNamespaces($locale) as $namespace) {
+                    if ($namespace !== null) {
+                        $namespacedJsonKeys[$namespace] ??= [];
+                    }
+                }
+            }
+        }
+
         $jsonKeys = array_values(array_unique($jsonKeys));
         $result = new TranslationUpdateResult;
 
@@ -72,9 +94,7 @@ class TranslationFileUpdater
 
             foreach ($locales as $locale) {
                 $existing = $this->files->loadGroup($locale, $group);
-                if (config('vox.parse.output', 'flat') === 'flat' && ! config('vox.parse.preserve_existing_format', true)) {
-                    $existing = Arr::dot($existing);
-                }
+                $existing = app(TranslationGroupFormat::class)->normalize($existing);
                 $flatExisting = Arr::dot($existing);
                 $updated = $existing;
                 $commented = [];
@@ -101,7 +121,7 @@ class TranslationFileUpdater
                         continue;
                     }
 
-                    if (isset($this->ignoredKeys[$this->dynamicKeys->fullKey($obsoleteKey, $group)]) || $this->dynamicKeys->matches($obsoleteKey, $group)) {
+                    if (isset($this->pendingDeletionKeys[$this->dynamicKeys->fullKey($obsoleteKey, $group)]) || $this->dynamicKeys->matches($obsoleteKey, $group)) {
                         continue;
                     }
 
@@ -129,6 +149,12 @@ class TranslationFileUpdater
                     foreach ($keys as $activeKey) {
                         unset($rawCommented[$activeKey]);
                     }
+                }
+
+                if ($updated === [] && $this->obsoleteAction() === 'discard') {
+                    app(TranslationFileTransaction::class)->delete($this->files->groupPath($locale, $group));
+
+                    continue;
                 }
 
                 $this->files->saveGroup(
@@ -166,7 +192,7 @@ class TranslationFileUpdater
                     continue;
                 }
 
-                if (isset($this->ignoredKeys[$obsoleteKey]) || $this->dynamicKeys->matches($obsoleteKey, null)) {
+                if (isset($this->pendingDeletionKeys[$obsoleteKey]) || $this->dynamicKeys->matches($obsoleteKey, null)) {
                     continue;
                 }
 
@@ -176,7 +202,11 @@ class TranslationFileUpdater
                 }
             }
 
-            $this->files->saveJson($locale, $updated);
+            if ($updated === [] && $this->obsoleteAction() === 'discard') {
+                app(TranslationFileTransaction::class)->delete($this->files->jsonPath($locale));
+            } else {
+                $this->files->saveJson($locale, $updated);
+            }
         }
 
         foreach ($namespacedJsonKeys as $namespace => $keys) {
@@ -205,7 +235,7 @@ class TranslationFileUpdater
                         continue;
                     }
 
-                    if (isset($this->ignoredKeys[$namespace.'::'.$obsoleteKey]) || $this->dynamicKeys->matches($namespace.'::'.$obsoleteKey, null)) {
+                    if (isset($this->pendingDeletionKeys[$namespace.'::'.$obsoleteKey]) || $this->dynamicKeys->matches($namespace.'::'.$obsoleteKey, null)) {
                         continue;
                     }
 
@@ -215,7 +245,11 @@ class TranslationFileUpdater
                     }
                 }
 
-                $this->files->saveJson($locale, $updated, $namespace);
+                if ($updated === [] && $this->obsoleteAction() === 'discard') {
+                    app(TranslationFileTransaction::class)->delete($this->files->jsonPath($locale, (string) $namespace));
+                } else {
+                    $this->files->saveJson($locale, $updated, (string) $namespace);
+                }
             }
         }
 
@@ -280,13 +314,7 @@ class TranslationFileUpdater
      */
     private function setValue(array &$target, string $key, string $value, array $existing): void
     {
-        if ($this->shouldUseNested($existing, $key)) {
-            Arr::set($target, $key, $value);
-
-            return;
-        }
-
-        $target[$key] = $value;
+        app(TranslationGroupFormat::class)->set($target, $key, $value);
     }
 
     /**
@@ -317,30 +345,7 @@ class TranslationFileUpdater
      */
     private function forgetValue(array &$target, string $key, array $existing, array $flatExisting): void
     {
-        if (array_key_exists($key, $flatExisting)) {
-            unset($target[$key]);
-
-            return;
-        }
-
-        Arr::forget($target, $key);
-    }
-
-    /**
-     * @param  array<string, mixed>  $existing
-     * @param  array<string, mixed>  $flatExisting
-     */
-    private function shouldUseNested(array $existing, string $key): bool
-    {
-        if (config('vox.parse.output', 'flat') === 'nested') {
-            return true;
-        }
-
-        if (! config('vox.parse.preserve_existing_format', true)) {
-            return false;
-        }
-
-        return Arr::has($existing, $key);
+        app(TranslationGroupFormat::class)->remove($target, $key);
     }
 
     private function obsoleteAction(): string
@@ -371,7 +376,7 @@ class TranslationFileUpdater
         $keys = [];
 
         foreach (array_keys($baseFlat) as $key) {
-            if (! isset($this->ignoredKeys[$this->dynamicKeys->fullKey($key, $group)]) && $this->dynamicKeys->matches($key, $group)) {
+            if (! isset($this->pendingDeletionKeys[$this->dynamicKeys->fullKey($key, $group)]) && $this->dynamicKeys->matches($key, $group)) {
                 $keys[] = $key;
             }
         }

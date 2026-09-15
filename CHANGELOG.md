@@ -7,7 +7,7 @@ All notable changes to `laravel-vox` will be documented in this file.
 ### Added
 
 - Separate source usage from configured retention, with exact occurrences and possible dynamic matches.
-- Confirmed orphan/unpublished dynamic key deletion, reversible Ignore in Vox, and backward-compatible `retained_keys` configuration.
+- Confirmed deletion for any key, cancellation before publishing, empty-file removal, and backward-compatible `retained_keys` configuration. Previously ignored keys migrate to pending deletion.
 
 - Live translation text updates in the Vox Vue integration, preserving mounted components and unsaved form state during translation HMR.
 - Incremental Vite translation reloads with per-file PHP parsing caches and separate locale modules, avoiding recompilation of other languages and generated `php_*.json` files.

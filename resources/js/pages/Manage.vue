@@ -72,7 +72,6 @@
         is_orphan: boolean;
         is_dynamic: boolean;
         is_retained: boolean;
-        is_ignored: boolean;
         is_pending_delete: boolean;
         deletion_unavailable_reason: string | null;
         matching_patterns: string[];
@@ -155,10 +154,10 @@
         { value: 'new', label: 'New' },
         { value: 'updated', label: 'Updated' },
         { value: 'missing', label: 'Missing' },
+        { value: 'empty', label: 'Empty' },
         { value: 'orphan', label: 'Orphan' },
         { value: 'dynamic', label: 'Dynamic usage' },
         { value: 'retained', label: 'Retained by rule' },
-        { value: 'ignored', label: 'Ignored' },
         { value: 'pending-deletion', label: 'Pending deletion' },
         { value: 'pending', label: 'Pending' },
         { value: 'approved', label: 'Approved' },
@@ -612,14 +611,12 @@
     }
 
     const cleanupRows = ref<TranslationItem[]>([]);
-    const cleanupAction = ref<'delete' | 'ignore' | 'restore'>('delete');
+    const cleanupAction = ref<'delete' | 'restore'>('delete');
     const cleanupConfirmation = ref('');
     const cleanupError = ref('');
     const isCleaning = ref(false);
-    const cleanupTitle = computed(
-        () => ({ delete: 'Delete keys', ignore: 'Ignore in Vox', restore: 'Restore keys' })[cleanupAction.value]
-    );
-    function reviewCleanup(action: 'delete' | 'ignore' | 'restore', rows?: TranslationItem[]): void {
+    const cleanupTitle = computed(() => ({ delete: 'Delete keys', restore: 'Cancel deletion' })[cleanupAction.value]);
+    function reviewCleanup(action: 'delete' | 'restore', rows?: TranslationItem[]): void {
         cleanupAction.value = action;
         cleanupRows.value = rows ?? translations.value.data.filter((row) => selectedIds.value.includes(row.id));
         cleanupConfirmation.value = '';
@@ -632,7 +629,7 @@
             {
                 ids: cleanupRows.value.map((row) => row.id),
                 action: cleanupAction.value,
-                confirmation: cleanupAction.value === 'delete' ? 'CONFIRM' : cleanupConfirmation.value,
+                confirmation: cleanupAction.value === 'restore' ? cleanupConfirmation.value : 'CONFIRM',
             },
             {
                 preserveScroll: true,
@@ -1208,13 +1205,8 @@
                             >
                             <Button
                                 variant="outline"
-                                @click="reviewCleanup('ignore')"
-                                >Ignore in Vox</Button
-                            >
-                            <Button
-                                variant="outline"
                                 @click="reviewCleanup('restore')"
-                                >Restore</Button
+                                >Cancel deletion</Button
                             >
                             <Button
                                 data-test="bulk-translate-missing"
@@ -1356,11 +1348,6 @@
                                         v-if="translation.is_retained"
                                         variant="secondary"
                                         >Retained</Badge
-                                    >
-                                    <Badge
-                                        v-if="translation.is_ignored && !translation.is_pending_delete"
-                                        variant="warning"
-                                        >Ignored</Badge
                                     >
                                     <Badge
                                         v-if="translation.is_pending_delete"
@@ -1650,9 +1637,9 @@
                         >Retained by rule</Badge
                     >
                     <Badge
-                        v-if="editTranslation?.is_ignored"
+                        v-if="editTranslation?.is_pending_delete"
                         variant="warning"
-                        >{{ editTranslation?.is_pending_delete ? 'Pending deletion' : 'Ignored' }}</Badge
+                        >Pending deletion</Badge
                     >
                     <Badge
                         v-if="editTranslation?.occurrences.length"
@@ -1820,16 +1807,10 @@
                 >Delete key</Button
             >
             <Button
-                v-if="!editTranslation.is_ignored"
-                variant="outline"
-                @click="reviewCleanup('ignore', [editTranslation])"
-                >Ignore in Vox</Button
-            >
-            <Button
-                v-else
+                v-if="editTranslation.is_pending_delete"
                 variant="outline"
                 @click="reviewCleanup('restore', [editTranslation])"
-                >Restore key</Button
+                >Cancel deletion</Button
             >
         </div>
 
@@ -1886,7 +1867,7 @@
                     Cancel
                 </Button>
                 <Button
-                    :disabled="isSaving || usingApplicationLocale !== null || editTranslation?.is_ignored"
+                    :disabled="isSaving || usingApplicationLocale !== null || editTranslation?.is_pending_delete"
                     @click="saveEdit"
                 >
                     {{ isSaving ? 'Saving…' : 'Save changes' }}
@@ -1915,22 +1896,15 @@
             v-if="cleanupAction === 'delete'"
             class="mt-3"
         >
-            Publish will permanently remove the selected keys, their values, and related reconciliation records. Only
-            current orphans and dynamic keys without direct static references qualify. Dynamic usage cannot be
-            conclusively checked. A future discovery or binding may recreate a deleted key.
-        </p>
-        <p
-            v-else-if="cleanupAction === 'ignore'"
-            class="mt-3"
-        >
-            Ignored keys remain available to restore. Vox will skip their sync updates and publishing. Existing
-            application translations remain in use.
+            Publish will permanently remove the selected keys, their values, and related reconciliation records. All
+            locale wording will be lost. Parse may rediscover used keys, but cannot recover their previous translations.
+            Dynamically constructed keys may not reappear.
         </p>
         <p
             v-else
             class="mt-3"
         >
-            These keys will return to normal management. Run Sync to refresh their values and usage.
+            These keys will return to normal management.
         </p>
         <ul class="my-4 space-y-1">
             <li
@@ -1942,7 +1916,7 @@
             </li>
         </ul>
         <FormField
-            v-if="cleanupAction !== 'delete'"
+            v-if="cleanupAction === 'restore'"
             label="Type CONFIRM to continue"
             ><Input
                 id="cleanup-confirmation"
@@ -1957,7 +1931,7 @@
         </p>
         <template #footer
             ><Button
-                :disabled="isCleaning || (cleanupAction !== 'delete' && cleanupConfirmation !== 'CONFIRM')"
+                :disabled="isCleaning || (cleanupAction === 'restore' && cleanupConfirmation !== 'CONFIRM')"
                 data-test="confirm-cleanup"
                 @click="submitCleanup"
                 >{{ isCleaning ? 'Working…' : cleanupTitle }}</Button

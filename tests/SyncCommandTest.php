@@ -7,6 +7,7 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
+use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
 use KeypointSolutions\LaravelVox\Translation\TranslationSyncer;
 
 it('syncs translation files into the vox database', function () {
@@ -152,4 +153,17 @@ it('marks database-only translations as orphans and restores them when they reap
     $this->artisan('vox:sync')->assertExitCode(0);
 
     expect($translation->fresh()->is_orphan)->toBeFalse();
+});
+
+it('orphans removed local keys even when they have published overrides', function (): void {
+    prepareVoxFixtures();
+    $translation = VoxTranslation::factory()->approved()->create(['group' => 'removed', 'key' => 'message']);
+    $translation->values()->create([
+        'locale' => 'en', 'value' => 'Published wording', 'published_override' => 'Published wording',
+        'is_approved' => true,
+    ]);
+    $this->artisan('vox:sync')->assertExitCode(0);
+    expect($translation->fresh()->is_orphan)->toBeTrue();
+    app(TranslationPublisher::class)->publish();
+    expect(File::exists(config('vox.paths.lang').'/en/removed.php'))->toBeFalse();
 });

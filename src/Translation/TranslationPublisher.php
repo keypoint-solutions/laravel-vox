@@ -60,7 +60,11 @@ class TranslationPublisher
             $deletion = new TranslationFileDeletion($this->files->forPath($stagingPath), app(TranslationFileWriter::class), $this->validator);
             $deletedFiles = $deletion->prepare($pending, false);
             foreach ($deletedFiles as $path => $change) {
-                File::replace($path, $change['after']);
+                if ($change['after'] === null) {
+                    File::delete($path);
+                } else {
+                    File::replace($path, $change['after']);
+                }
             }
             $publishedFiles = [];
 
@@ -75,7 +79,11 @@ class TranslationPublisher
                 $destination = rtrim($langPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$relativePath;
                 File::ensureDirectoryExists(dirname($destination));
 
-                app(TranslationFileTransaction::class)->replace($destination, File::get($stagedFile));
+                if (isset($deletedFiles[$stagedFile]) && $deletedFiles[$stagedFile]['after'] === null) {
+                    app(TranslationFileTransaction::class)->delete($destination);
+                } else {
+                    app(TranslationFileTransaction::class)->replace($destination, File::get($stagedFile));
+                }
 
                 $publishedFiles[] = $destination;
             }
@@ -86,7 +94,11 @@ class TranslationPublisher
 
             $runtimeChanges = app(TranslationFileDeletion::class)->prepare($pending);
             foreach ($runtimeChanges as $path => $change) {
-                app(TranslationFileTransaction::class)->replace($path, $change['after']);
+                if ($change['after'] === null) {
+                    app(TranslationFileTransaction::class)->delete($path);
+                } else {
+                    app(TranslationFileTransaction::class)->replace($path, $change['after']);
+                }
                 $frontendFiles[] = $path;
             }
 
@@ -163,7 +175,7 @@ class TranslationPublisher
         $orphanTranslations = 0;
 
         $translations = VoxTranslation::query()
-            ->where('is_ignored', false)
+            ->when(! $overridesOnly, fn ($query) => $query->where('is_pending_delete', false))
             ->with('values')
             ->orderBy('group')
             ->orderBy('key')
@@ -183,9 +195,7 @@ class TranslationPublisher
                 if (! in_array($locale, $locales, true) || ($valueIds !== null && ! in_array($translationValue->id, $valueIds, true))) {
                     continue;
                 }
-                $publishDraft = ! $overridesOnly && ! $translationValue->is_obsolete
-                    && $translationValue->is_approved
-                    && ($translationValue->is_pending_publish || $translationValue->file_value === null);
+                $publishDraft = ! $overridesOnly && $translationValue->hasApprovedChange();
                 if ($publishDraft && (! is_string($translationValue->value)
                     || $translationValue->value === '' || Str::startsWith($translationValue->value, $prefix))) {
                     $incomplete = true;
@@ -226,7 +236,7 @@ class TranslationPublisher
         foreach ($groupUpdates as $locale => $groups) {
             foreach ($groups as $group => $updates) {
                 $existing = $files->loadGroup($locale, $group);
-                $updated = $existing;
+                $updated = app(TranslationGroupFormat::class)->normalize($existing);
                 $changedValues = 0;
 
                 foreach ($updates as $key => $value) {
@@ -234,11 +244,11 @@ class TranslationPublisher
                         continue;
                     }
 
-                    $this->setGroupValue($updated, $existing, $key, $value);
+                    $this->setGroupValue($updated, $key, $value);
                     $changedValues++;
                 }
 
-                if ($changedValues === 0) {
+                if ($changedValues === 0 && $updated === $existing) {
                     continue;
                 }
 
@@ -271,7 +281,7 @@ class TranslationPublisher
                     $changedValues++;
                 }
 
-                if ($changedValues === 0) {
+                if ($changedValues === 0 && $updated === $existing) {
                     continue;
                 }
 
@@ -320,19 +330,9 @@ class TranslationPublisher
 
     /**
      * @param  array<string, mixed>  $updated
-     * @param  array<string, mixed>  $existing
      */
-    private function setGroupValue(array &$updated, array $existing, string $key, string $value): void
+    private function setGroupValue(array &$updated, string $key, string $value): void
     {
-        $useNested = config('vox.parse.output', 'flat') === 'nested'
-            || (config('vox.parse.preserve_existing_format', true) && Arr::has($existing, $key));
-
-        if ($useNested) {
-            Arr::set($updated, $key, $value);
-
-            return;
-        }
-
-        $updated[$key] = $value;
+        app(TranslationGroupFormat::class)->set($updated, $key, $value);
     }
 }

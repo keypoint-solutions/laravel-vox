@@ -69,9 +69,9 @@ class TranslationFileValidator
         $segment = '[A-Za-z0-9][A-Za-z0-9_.-]*';
         $locale = '[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*';
         $matchesRootJson = preg_match('/^'.$locale.'\.json$/D', $normalized) === 1;
-        $matchesPhpGroup = preg_match('/^'.$locale.'\/'.$segment.'\.php$/D', $normalized) === 1;
+        $matchesPhpGroup = preg_match('/^'.$locale.'\/(?:'.$segment.'\/)*'.$segment.'\.php$/D', $normalized) === 1;
         $matchesVendorPhp = preg_match(
-            '/^vendor\/'.$segment.'\/'.$locale.'\/'.$segment.'\.php$/D',
+            '/^vendor\/'.$segment.'\/'.$locale.'\/(?:'.$segment.'\/)*'.$segment.'\.php$/D',
             $normalized
         ) === 1;
         $matchesVendorJson = preg_match(

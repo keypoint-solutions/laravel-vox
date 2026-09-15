@@ -41,6 +41,12 @@ class VoxTranslationValue extends VoxModel
         $this->translation->touch();
     }
 
+    public function hasApprovedChange(): bool
+    {
+        return $this->is_approved && ! $this->is_obsolete
+            && ($this->is_pending_publish || $this->value !== $this->liveValue());
+    }
+
     public function liveValue(): ?string
     {
         return $this->published_override ?? $this->file_value;

@@ -80,7 +80,7 @@ class ManageController
         $scope = $request->input('scope');
         $scope = is_string($scope) ? $scope : null;
 
-        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing', 'orphan', 'dynamic', 'retained', 'ignored', 'pending-deletion'];
+        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing', 'empty', 'orphan', 'dynamic', 'retained', 'pending-deletion'];
         if (! in_array($status, $allowedStatus, true)) {
             $status = null;
         }
@@ -245,7 +245,6 @@ class ManageController
                     'is_orphan' => $translation->is_orphan,
                     'is_dynamic' => in_array('detected', $dynamicMatch['sources'] ?? [], true) || in_array('binding', $dynamicMatch['sources'] ?? [], true),
                     'is_retained' => array_intersect(['settings', 'retained-config'], $dynamicMatch['sources'] ?? []) !== [],
-                    'is_ignored' => $translation->is_ignored,
                     'is_pending_delete' => $translation->is_pending_delete,
                     'deletion_unavailable_reason' => $this->deletionEligibility->reason($translation),
                     'retention_sources' => $dynamicMatch['sources'] ?? [],
@@ -281,8 +280,7 @@ class ManageController
         if ($status === 'pending-deletion') {
             return;
         }
-        $query->where('is_ignored', $status === 'ignored');
-        if ($status === null || $status === 'ignored') {
+        if ($status === null) {
             return;
         }
 
@@ -299,6 +297,17 @@ class ManageController
         }
 
         $query->where('is_orphan', false);
+
+        if (in_array($status, ['missing', 'empty'], true)) {
+            $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
+            $method = $status === 'empty' ? 'whereDoesntHave' : 'whereHas';
+            $query->{$method}('values', function (Builder $valueQuery) use ($baseLocale): void {
+                $valueQuery->where('locale', $baseLocale)->whereNotNull('value')->where('value', '!=', '');
+            });
+            if ($status === 'empty') {
+                return;
+            }
+        }
 
         if ($status === 'missing') {
             $this->applyMissingFilter($query, $locales);
@@ -490,6 +499,11 @@ class ManageController
         $flagPrefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
         $values = $translation->values->keyBy('locale');
 
+        $baseValue = $values->get($this->localeResolver->resolveBaseLocale($locales))?->value;
+        if ($baseValue === null || $baseValue === '') {
+            return false;
+        }
+
         foreach ($locales as $locale) {
             $value = $values->get($locale)?->value;
 
@@ -512,10 +526,10 @@ class ManageController
             ['value' => 'pending', 'label' => 'Pending'],
             ['value' => 'approved', 'label' => 'Approved'],
             ['value' => 'missing', 'label' => 'Missing'],
+            ['value' => 'empty', 'label' => 'Empty'],
             ['value' => 'orphan', 'label' => 'Orphan'],
             ['value' => 'dynamic', 'label' => 'Dynamic usage'],
             ['value' => 'retained', 'label' => 'Retained by rule'],
-            ['value' => 'ignored', 'label' => 'Ignored'],
             ['value' => 'pending-deletion', 'label' => 'Pending deletion'],
         ];
     }

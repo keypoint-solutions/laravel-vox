@@ -4,6 +4,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use KeypointSolutions\LaravelVox\Database\Factories\VoxTranslationFactory;
+use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
@@ -210,7 +211,7 @@ it('filters expected changes and accepts every matching value across pages witho
         ->and(app(RemoteReconciliation::class)->unresolvedCount())->toBe(1);
 });
 
-it('can keep local wording and edit a merged value from the review panel', function (): void {
+it('confirms the final edited wording from either selected box', function (string $side, int $width): void {
     $environment = VoxEnvironment::query()->create([
         'name' => 'Review production', 'type' => 'production',
         'url' => 'https://review.example.test', 'secret_key' => 'review-secret',
@@ -222,21 +223,27 @@ it('can keep local wording and edit a merged value from the review panel', funct
         'group' => 'review_demo', 'key' => 'wording', 'locale' => 'en', 'value' => 'Remote wording',
     ]]);
 
-    $page = visit('/vox/sync')
-        ->pressAndWaitFor('Keep local')
-        ->assertSee('Kept local values for 1 remote changes')
-        ->select('#review-state', 'outgoing')
-        ->pressAndWaitFor('Filter changes')
-        ->assertSee('Local wording')
-        ->press('Edit merged value')
-        ->fill('#review-edited-value', 'Merged wording')
-        ->pressAndWaitFor('Save merged value')
-        ->assertSee('Accepted 1 values into pending review')
+    $row = app(RemoteReconciliation::class)->page(['state' => 'review'])['data'][0];
+    $id = $row['id'];
+
+    visit('/vox/sync')->resize($width, 900)
+        ->assertDisabled("[data-test='review-confirm-{$id}']")
+        ->assertDontSee('Accept and publish')
+        ->assertDontSee('Edit merged value')
+        ->fill("[data-test='review-local-wording-{$id}']", 'Edited local wording')
+        ->fill("[data-test='review-wording-{$id}']", 'Edited incoming wording')
+        ->click("[data-test='review-{$side}-control-{$id}']")
+        ->click("[data-test='review-confirm-{$id}']")
+        ->assertSee('Edited and approved 1 values.')
         ->assertNoJavaScriptErrors();
 
-    expect($translation->values()->first()->value)->toBe('Merged wording')
-        ->and($translation->fresh()->status)->toBe('pending');
-});
+    $value = $translation->values()->first();
+    expect($value->value)->toBe($side === 'local' ? 'Edited local wording' : 'Edited incoming wording')
+        ->and($value->is_approved)->toBeTrue()
+        ->and($value->is_pending_publish)->toBeTrue()
+        ->and($translation->fresh()->status)->toBe('approved')
+        ->and(VoxAudit::query()->where('action', 'remote-reconciliation')->latest('id')->first()->context['decision'])->toBe('edit');
+})->with(['local', 'incoming'])->with([375, 1280]);
 
 it('retains individual selections across pages and clears them when filters change', function (): void {
     $environment = VoxEnvironment::query()->create([
@@ -271,3 +278,85 @@ it('retains individual selections across pages and clears them when filters chan
     expect(app(RemoteReconciliation::class)->unresolvedCount())->toBe(53)
         ->and(VoxTranslation::query()->where('group', 'paged_review')->count())->toBe(0);
 });
+
+it('lets AI select edited wording and waits for confirmation', function (string $side, int $width): void {
+    config()->set('vox.translate.driver', 'openai');
+    config()->set('vox.translate.providers.openai.api_key', 'test-key');
+    Http::fake(['*' => Http::response(['output' => [['type' => 'message', 'content' => [[
+        'type' => 'output_text', 'text' => json_encode(['choice' => $side, 'reason' => 'This wording meets the translation rules.']),
+    ]]]]])]);
+    $environment = VoxEnvironment::query()->create([
+        'name' => 'AI production', 'type' => 'production',
+        'url' => 'https://ai.example.test', 'secret_key' => 'review-secret',
+    ]);
+    $translation = VoxTranslationFactory::new()->approved()->withValues(['en' => 'Original wording'])->create([
+        'group' => 'ai_review', 'key' => 'wording',
+    ]);
+    app(RemoteReconciliation::class)->ingest($environment, [[
+        'group' => 'ai_review', 'key' => 'wording', 'locale' => 'en', 'value' => 'Remote wording',
+    ]]);
+    $row = app(RemoteReconciliation::class)->page(['state' => 'review'])['data'][0];
+    $id = $row['id'];
+    $page = visit('/vox/sync')->resize($width, 900)
+        ->assertDisabled("[data-test='review-confirm-{$id}']")
+        ->fill("[data-test='review-local-wording-{$id}']", 'Edited local wording')
+        ->fill("[data-test='review-wording-{$id}']", 'Edited incoming wording')
+        ->click("[data-test='review-ai-{$id}']")
+        ->assertSee('AI suggestion: This wording meets the translation rules.')
+        ->assertChecked("[data-test='review-{$side}-{$id}']")
+        ->assertNoJavaScriptErrors();
+    expect($translation->values()->first()->value)->toBe('Original wording')
+        ->and(VoxAudit::query()->where('action', 'remote-reconciliation')->count())->toBe(0);
+    $page->click("[data-test='review-reference-{$id}'] summary")
+        ->assertSee('Original wording');
+    $page->click("[data-test='review-confirm-{$id}']")
+        ->assertSee('Edited and approved 1 values.')
+        ->assertNoJavaScriptErrors();
+    expect($translation->values()->first()->value)->toBe("Edited {$side} wording")
+        ->and($translation->values()->first()->is_pending_publish)->toBeTrue()
+        ->and(VoxAudit::query()->where('action', 'remote-reconciliation')->latest('id')->first()->context['decision'])->toBe('edit');
+})->with(['local', 'incoming'])->with([375, 1280]);
+
+it('chooses only checked current-page rows in one AI request and confirms their final drafts', function (int $width): void {
+    config()->set('vox.translate.driver', 'openai');
+    config()->set('vox.translate.providers.openai.api_key', 'test-key');
+    Http::fake(function ($request) {
+        $contexts = json_decode($request['input'], true);
+        $choices = [];
+        foreach ($contexts as $id => $context) {
+            $choices[$id] = ['choice' => 'incoming', 'reason' => 'Incoming is suitable.'];
+        }
+
+        return Http::response(['output' => [['type' => 'message', 'content' => [[
+            'type' => 'output_text', 'text' => json_encode($choices),
+        ]]]]]);
+    });
+    $environment = VoxEnvironment::query()->create([
+        'name' => 'Bulk AI', 'type' => 'production', 'url' => 'https://bulk.example.test', 'secret_key' => 'secret',
+    ]);
+    $values = [];
+    for ($index = 0; $index < 26; $index++) {
+        VoxTranslationFactory::new()->approved()->withValues(['en' => 'Local '.$index])->create([
+            'group' => 'bulk_ai', 'key' => 'key_'.$index,
+        ]);
+        $values[] = ['group' => 'bulk_ai', 'key' => 'key_'.$index, 'locale' => 'en', 'value' => 'Incoming '.$index];
+    }
+    app(RemoteReconciliation::class)->ingest($environment, $values);
+    $rows = app(RemoteReconciliation::class)->page(['state' => 'review'])['data'];
+    $id = $rows[0]['id'];
+    $page = visit('/vox/sync')->resize($width, 900)
+        ->click('[data-test="review-select-all"]')
+        ->assertDisabled('[data-test="review-bulk-confirm"]')
+        ->fill("[data-test='review-wording-{$id}']", 'Edited incoming for bulk')
+        ->click('[data-test="review-bulk-ai"]')
+        ->assertSee('AI suggestion: Incoming is suitable.')
+        ->assertChecked("[data-test='review-incoming-{$id}']")
+        ->assertNoJavaScriptErrors();
+    Http::assertSentCount(1);
+    Http::assertSent(fn ($request): bool => count(json_decode($request['input'], true)) === 25);
+    expect(VoxTranslation::where('group', 'bulk_ai')->where('key', $rows[0]['key'])->first()->values()->first()->value)->toStartWith('Local');
+    $page->click('[data-test="review-bulk-confirm"]')->assertSee('Confirmed 25 selections.')->assertNoJavaScriptErrors();
+    expect(VoxTranslation::where('group', 'bulk_ai')->where('key', $rows[0]['key'])->first()->values()->first()->value)->toBe('Edited incoming for bulk')
+        ->and(app(RemoteReconciliation::class)->page(['state' => 'review'])['total'])->toBe(1)
+        ->and(VoxAudit::where('action', 'remote-reconciliation')->latest('id')->first()->context['decisions']['edit'])->toBe(1);
+})->with([375, 1280]);

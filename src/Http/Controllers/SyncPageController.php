@@ -8,6 +8,8 @@ use Inertia\Response;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleCatalog;
+use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationChoiceDriver;
+use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
 use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
 
 class SyncPageController
@@ -48,6 +50,7 @@ class SyncPageController
             'baseLocale' => $catalog['default_locale'],
             'ai' => [
                 'available' => $aiAvailable,
+                'can_choose' => $aiAvailable && app(TranslationDriverFactory::class)->make() instanceof TranslationChoiceDriver,
                 'driver' => $driver,
             ],
         ]);

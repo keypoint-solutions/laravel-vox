@@ -375,3 +375,22 @@ it('validates the complete archive before overwriting any translation file', fun
         ->and(require $this->syncLangPath.'/fr/safe_demo.php')
         ->toBe(['message' => 'Garder français']);
 });
+
+it('does not send unusable source values to AI when provisioning a locale', function (): void {
+    config()->set('vox.translate.driver', LocaleProvisionTranslationDriver::class);
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('en', 'messages', ['empty' => '', 'flagged' => '🚩source', 'snake_key' => 'snake_key', 'valid' => 'Hello']);
+    $this->post('/vox/sync/locales', ['locale' => 'ro', 'auto_translate' => true])->assertSessionHasNoErrors();
+    expect($files->loadGroup('ro', 'messages'))->toBe([
+        'empty' => '', 'flagged' => '🚩source', 'snake_key' => '🚩snake_key', 'valid' => 'ro: Hello',
+    ]);
+});
+
+it('provisions nested ordinary and vendor PHP groups', function (): void {
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('en', 'admin/messages', ['welcome' => 'Welcome']);
+    $files->saveGroup('en', 'package::admin/messages', ['welcome' => 'Welcome']);
+    $this->post('/vox/sync/locales', ['locale' => 'ro', 'auto_translate' => false])->assertSessionHasNoErrors();
+    expect($files->loadGroup('ro', 'admin/messages'))->toBe(['welcome' => '🚩Welcome'])
+        ->and($files->loadGroup('ro', 'package::admin/messages'))->toBe(['welcome' => '🚩Welcome']);
+});

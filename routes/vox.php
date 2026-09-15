@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use KeypointSolutions\LaravelVox\Http\Controllers\AuditController;
+use KeypointSolutions\LaravelVox\Http\Controllers\ChooseRemoteTranslationController;
 use KeypointSolutions\LaravelVox\Http\Controllers\DashboardController;
 use KeypointSolutions\LaravelVox\Http\Controllers\DownloadTranslationArchiveController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ImportTranslationArchiveController;
@@ -36,6 +37,7 @@ Route::middleware([...$configMiddleware, SerializeVoxWrites::class])
 
         Route::get('/sync', SyncPageController::class)->name('sync');
         Route::post('/sync/local', SyncLocalTranslationsController::class)->name('sync.local');
+        Route::post('/sync/choose', ChooseRemoteTranslationController::class)->middleware('throttle:30,1')->name('sync.choose');
         Route::post('/sync/reconcile', ReconcileRemoteTranslationsController::class)->name('sync.reconcile');
         Route::post('/sync/locales', ProvisionLocaleController::class)->name('sync.locales.store');
         Route::get('/sync/archive', DownloadTranslationArchiveController::class)->name('sync.archive.download');

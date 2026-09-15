@@ -522,7 +522,6 @@ it('counts every group by status independently of the selected group and search'
     VoxTranslation::factory()->orphan()->withValues(['en' => 'Two', 'fr' => 'Deux'])->create(['group' => null]);
     VoxTranslation::factory()->approved()->withValues(['en' => 'Three', 'fr' => 'Trois'])->create(['group' => 'json']);
     VoxTranslation::factory()->withValues(['en' => 'Four', 'fr' => 'TODO:Four'])->create(['group' => 'messages']);
-    VoxTranslation::factory()->withValues(['en' => 'Five', 'fr' => 'Cinq'])->create(['group' => 'ignored', 'is_ignored' => true]);
     VoxTranslation::factory()->withValues(['en' => 'Six', 'fr' => 'Six'])->create(['group' => 'deleted', 'is_pending_delete' => true]);
 
     $response = $this->get('/vox/manage?'.http_build_query(['status' => $status]));
@@ -531,7 +530,7 @@ it('counts every group by status independently of the selected group and search'
     $counts = collect($props['groups'])->pluck('total', 'name');
     $expected = collect($props['translations']['data'])->countBy(fn (array $translation): string => $translation['group'] ?? 'default');
 
-    expect($counts)->toHaveCount(5)
+    expect($counts)->toHaveCount(4)
         ->and($counts->sum())->toBe($props['translations']['total']);
 
     foreach ($counts as $group => $count) {
@@ -548,4 +547,37 @@ it('counts every group by status independently of the selected group and search'
 
     expect($filtered->inertiaPage()['props']['groups'])->toBe($props['groups'])
         ->and($filtered->inertiaPage()['props']['translations']['total'])->toBe(0);
-})->with([null, 'orphan', 'missing', 'approved', 'pending', 'ignored', 'pending-deletion']);
+})->with([null, 'orphan', 'missing', 'approved', 'pending', 'pending-deletion']);
+
+it('separates empty default wording from missing translations and counts groups consistently', function (): void {
+    config()->set('vox.translate.base_locale', 'fr');
+    VoxTranslation::factory()->withValues(['en' => 'English', 'fr' => ''])->create(['group' => 'empty', 'key' => 'blank']);
+    VoxTranslation::factory()->withValues(['en' => 'English'])->create(['group' => 'empty', 'key' => 'absent']);
+    VoxTranslation::factory()->withValues(['en' => '', 'fr' => 'Bonjour'])->create(['group' => 'work', 'key' => 'missing']);
+    VoxTranslation::factory()->withValues(['en' => 'Hello', 'fr' => '🚩Hello'])->create(['group' => 'work', 'key' => 'flagged']);
+    VoxTranslation::factory()->withValues(['en' => 'Hello', 'fr' => 'Bonjour'])->create(['group' => 'work', 'key' => 'complete']);
+    $empty = $this->get('/vox/manage?status=empty');
+    expect(manageTranslations($empty)->pluck('display_key')->sort()->values()->all())->toBe(['empty.absent', 'empty.blank'])
+        ->and(manageTranslations($empty)->pluck('has_missing_values')->unique()->all())->toBe([false]);
+    $missing = $this->get('/vox/manage?status=missing');
+    expect(manageTranslations($missing)->pluck('display_key')->sort()->values()->all())->toBe(['work.flagged', 'work.missing']);
+    expect(collect($empty->inertiaPage()['props']['groups'])->sum('total'))->toBe(2)
+        ->and(collect($missing->inertiaPage()['props']['groups'])->sum('total'))->toBe(2);
+});
+
+it('skips unusable sources in bulk AI translation using the shared eligibility rules', function (): void {
+    $this->withoutMiddleware(PreventRequestForgery::class);
+    config()->set('vox.translate.driver', 'openai');
+    config()->set('vox.translate.providers.openai.api_key', 'test-key');
+    config()->set('vox.parse.missing_translation_prefix', 'TODO:');
+    Http::fake();
+    $ids = [];
+    foreach (['empty' => '', 'flagged' => 'TODO:source', 'snake_key' => 'snake_key'] as $key => $source) {
+        $ids[] = VoxTranslation::factory()->withValues(['en' => $source, 'fr' => ''])
+            ->create(['group' => 'messages', 'key' => $key])->id;
+    }
+    $this->from('/vox/manage')->post('/vox/manage/translations/bulk-translate', ['ids' => $ids])
+        ->assertRedirect('/vox/manage')
+        ->assertInertiaFlash('success', 'No missing target values were found in the selected translations.');
+    Http::assertNothingSent();
+});

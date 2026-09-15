@@ -292,6 +292,49 @@ class TranslationFileRepository
         app(TranslationFileTransaction::class)->replace($path, $contents);
     }
 
+    /** @return array<int, string> */
+    public function groups(string $locale): array
+    {
+        $groups = [];
+        foreach ($this->namespaceRoots() as $namespace => $root) {
+            $directory = $root.DIRECTORY_SEPARATOR.$locale;
+            foreach (File::isDirectory($directory) ? File::allFiles($directory) : [] as $file) {
+                if ($file->getExtension() === 'php') {
+                    $group = str_replace(DIRECTORY_SEPARATOR, '/', substr($file->getRelativePathname(), 0, -4));
+                    $groups[] = ($namespace === '' ? '' : $namespace.'::').$group;
+                }
+            }
+        }
+        sort($groups);
+
+        return $groups;
+    }
+
+    /** @return array<int, string|null> */
+    public function jsonNamespaces(string $locale): array
+    {
+        $namespaces = [];
+        foreach ($this->namespaceRoots() as $namespace => $root) {
+            if (File::isFile($root.DIRECTORY_SEPARATOR.$locale.'.json')) {
+                $namespaces[] = $namespace === '' ? null : $namespace;
+            }
+        }
+
+        return $namespaces;
+    }
+
+    /** @return array<string, string> */
+    private function namespaceRoots(): array
+    {
+        $roots = ['' => $this->langPath()];
+        $vendor = $this->langPath().DIRECTORY_SEPARATOR.'vendor';
+        foreach (File::isDirectory($vendor) ? File::directories($vendor) : [] as $directory) {
+            $roots[basename($directory)] = $directory;
+        }
+
+        return $roots;
+    }
+
     public function groupPath(string $locale, string $group): string
     {
         $parts = $this->splitNamespacedGroup($group);

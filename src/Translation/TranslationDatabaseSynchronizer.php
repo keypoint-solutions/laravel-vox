@@ -5,14 +5,13 @@ namespace KeypointSolutions\LaravelVox\Translation;
 use Illuminate\Support\Facades\DB;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 
 class TranslationDatabaseSynchronizer
 {
     public function __construct(
         private TranslationFileRepository $files,
-        private VoxLocaleResolver $localeResolver,
+        private TranslationScanPreparation $preparation,
         private VoxFrontendManifest $frontendManifest,
         private VoxDynamicKeyRegistry $dynamicKeys,
         private FrontendTranslationArtifacts $frontendArtifacts,
@@ -30,22 +29,10 @@ class TranslationDatabaseSynchronizer
 
     private function syncUsing(bool $updateLanguageFiles, bool $deployment, ?TranslationFileRepository $sourceFiles): SyncResult
     {
-        $scanner = new TranslationScanner(
-            base_path(),
-            config('vox.parse.paths', []),
-            config('vox.parse.exclude', []),
-            config('vox.parse.extensions', []),
-            (int) config('vox.parse.context_lines', 3)
-        );
-        $scanResults = $scanner->scan();
-        $this->dynamicKeys->writeDetectedPatterns($scanner->dynamicKeys());
-        $scanResults = $this->dynamicKeys->mergeEnumeratedScanResults($scanResults);
-        $locales = $this->localeResolver->resolveLocales();
-        $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
-
-        if (! in_array($baseLocale, $locales, true)) {
-            $locales[] = $baseLocale;
-        }
+        $scan = $this->preparation->prepare();
+        $scanResults = $scan['results'];
+        $locales = $scan['locales'];
+        $baseLocale = $scan['base_locale'];
 
         $languageFileResult = null;
 
