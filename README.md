@@ -329,14 +329,14 @@ flowchart LR
 
 Run these commands from the consuming application:
 
-| When                                       | What to run or do                                                                                                                                                                                   |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Starting frontend development              | `npm run dev` with the Vox Vite plugin configured. It handles frontend discovery and translation hot reload.                                                                                        |
-| After adding or removing translation calls | `php artisan vox:sync --parse` to update language files and refresh the manager. Configure retention for runtime-only key families first.                                                           |
-| Filling missing translations               | Use **AI translate missing** or edit values in Manage, then approve the wording you want to publish.                                                                                                |
-| Ready to make approved wording live        | `php artisan vox:publish`. Runtime catalogues are refreshed automatically; bundled delivery needs `npm run build` for the distributable assets.                                                     |
-| Before committing                          | Review the language-file diff, including deletions, then commit the intended files.                                                                                                                 |
-| Deploying fresh release files              | `php artisan vox:deploy --no-interaction`, before activating the release. For bundled delivery, build frontend assets afterward. See [Deployment](#deployment) for ordering and retry requirements. |
+| When                                       | What to run or do                                                                                                                                                                                                     |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Starting frontend development              | `npm run dev` with the Vox Vite plugin configured. It handles frontend discovery and translation hot reload.                                                                                                          |
+| After adding or removing translation calls | `php artisan vox:sync --parse` to update language files and refresh the manager. Configure retention for runtime-only key families first.                                                                             |
+| Filling missing translations               | Use **AI translate missing** or edit values in Manage, then approve the wording you want to publish.                                                                                                                  |
+| Ready to make approved wording live        | `php artisan vox:publish`. Runtime catalogues are refreshed automatically; bundled delivery needs `npm run build` for the distributable assets.                                                                       |
+| Before committing                          | Review the language-file diff, including deletions, then commit the intended files.                                                                                                                                   |
+| Deploying fresh release files              | `php artisan vox:deploy --no-interaction`, before activating the release. For bundled delivery, build frontend assets afterward. See [Deployment](#deploying-on-a-remote-server) for ordering and retry requirements. |
 
 ### Variations
 
@@ -412,7 +412,7 @@ Review's batch actions apply to all matching actionable values, beyond the displ
 | `php artisan vox:publish`           | Write approved changes, refresh previously published wording, and apply pending deletions. Also refresh frontend catalogues. Add `--published-only` to regenerate recorded defaults and overrides without applying drafts or pending deletions.    |
 | `php artisan vox:frontend-discover` | **Advanced; normally automatic.** The Vox Vite plugin runs this at startup, on relevant source changes during development, and before production builds. Refreshes the frontend group manifest without changing language files or database values. |
 | `php artisan vox:compile`           | Generate frontend translation JSON from current language files. Does not import database values, publish drafts, or run a JavaScript build.                                                                                                        |
-| `php artisan vox:deploy`            | Run setup, import freshly installed release defaults, and restore published management overrides while preserving drafts. Use only after installing fresh release language files; see [Deployment](#deployment).                                   |
+| `php artisan vox:deploy`            | Run setup, import freshly installed release defaults, and restore published management overrides while preserving drafts. Use only after installing fresh release language files; see [Deployment](#deploying-on-a-remote-server).                 |
 
 ```bash
 # Refresh runtime catalogues after editing language files directly.
@@ -452,21 +452,37 @@ php artisan vox:review --environment=1
 
 Sync can download the file result Publish would produce, without modifying local files. ZIP import validates and copies files, then leaves database reconciliation to a subsequent local sync. Archives reject traversal, symlinks, and executable PHP; PHP translation files must return literal arrays of strings.
 
-## Deployment
+## Deploying on a remote server
 
-Use a tagged Composer release in consuming applications rather than a development path symlink. Keep the target's `storage/vox` persistent and backed up across releases; never replace it with build-machine data. Language files and generated runtime files must be writable for management publication.
+Use a tagged Composer release in consuming applications. The following requirements apply regardless of your deployment tool or hosting platform:
 
-After installing **fresh release language files**, before activating the release:
+1. **Preserve Vox state.** Keep `storage/vox` persistent and backed up across deployments; do not overwrite it with build-machine data. If you configured another database connection or storage paths, preserve those instead. Language files and generated runtime files must be writable for management publication.
+2. **Install application dependencies and fresh language files.** Make the target environment's configuration and persistent Vox storage/database available.
+3. **Prepare translations before serving the updated application:**
+
+    ```bash
+    php artisan vox:deploy --no-interaction
+    ```
+
+    This runs Vox setup/migrations, publishes manager assets, imports shipped translation defaults, reapplies published manager overrides, and generates frontend catalogues when runtime delivery is enabled. Unpublished drafts are preserved. It does not pull remote environments, so a separate `vox:sync` is not required for deployment. A separate `vox:setup` is only needed if an earlier application step requires Vox to be initialized.
+
+4. **Finish your application's deployment.** With bundled delivery, build frontend assets after `vox:deploy` so they include the effective wording. With the default server-served delivery, translation changes do not require a frontend rebuild; application code changes may still require one. Stop deployment if translation preparation fails.
+
+### Rebuild catalogues without importing
+
+To regenerate only frontend translation JSON from the language files currently on disk:
 
 ```bash
-php artisan vox:deploy --no-interaction
+php artisan vox:compile --no-interaction
 ```
 
-This includes setup/migrations and manager assets, imports shipped defaults, and reapplies published overrides while preserving drafts. It does not pull remote environments. For bundled delivery, build frontend assets after preparing effective translations. Runtime delivery reads the generated catalogues.
+This works without a Vox database and does not import defaults, publish drafts, or modify source language files. Use it for standalone catalogue builds or after restoring language files during an application rollback. To rewrite language files from recorded database defaults and published overrides without accepting new drafts, use `vox:publish --published-only` instead.
 
-A deployment retry must reinstall fresh source language files before rerunning `vox:deploy`. To regenerate without importing, use `vox:publish --published-only` instead. Vox does not retain original release snapshots or activate/roll back application releases.
+### Retries and concurrent publication
 
-All publishing processes must share the configured mutation lock. If management remains writable during release activation, coordinate activation under `VoxMutationLock` and prevent retired releases from writing afterward.
+A deployment retry must reinstall fresh source language files before rerunning `vox:deploy`. Vox does not retain original release snapshots or activate/roll back application releases.
+
+All publishing processes must share the configured mutation lock. If management remains writable during deployment, coordinate application activation under `VoxMutationLock` and prevent old application instances from writing afterward.
 
 ### Publication events
 

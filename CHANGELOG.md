@@ -4,6 +4,10 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.4 — 2026-09-15
+
+- Clarify remote-server deployment steps, persistent storage requirements, command responsibilities, frontend build ordering, and retries.
+
 ## 1.0.3 — 2026-09-15
 
 - Batch synchronization and publishing queries to avoid oversized SQLite parameter lists and reduce model memory usage. File updates remain accumulated across batches before writing.
