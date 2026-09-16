@@ -1,0 +1,2 @@
+#!/usr/bin/env sh
+sh .husky/sync-private-docs pull || true

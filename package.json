@@ -38,6 +38,7 @@
         }
     },
     "scripts": {
+        "test:hooks": "node --test tests/private-docs-hooks.test.mjs",
         "test:consumer": "node --test tests/consumer.test.mjs tests/vite.test.mjs",
         "build": "vite build",
         "dev": "vite",

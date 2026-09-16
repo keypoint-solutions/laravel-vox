@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+
+# Opt in per checkout with: git config --local vox.syncPrivateDocs true
+[ "$(git config --local --bool --get vox.syncPrivateDocs 2>/dev/null)" = "true" ] || exit 0
+[ -e _internal/docs/.git ] || exit 0
+
+node .husky/sync-private-docs.mjs "$@" || echo 'vox docs: sync unavailable; continuing main Git operation.' >&2
+exit 0
