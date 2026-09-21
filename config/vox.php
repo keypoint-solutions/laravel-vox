@@ -40,7 +40,7 @@ return [
         'bypass_auth_in_local' => env('VOX_BYPASS_AUTH_IN_LOCAL', true),
     ],
     'checkpoints' => [
-        'limit' => 10,
+        'limit' => 50,
     ],
     'database' => [
         'connection' => env('VOX_DB_CONNECTION', 'vox'),

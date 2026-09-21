@@ -40,7 +40,7 @@ class VoxSettingsRepository
 
     public function checkpointLimit(): int
     {
-        return max(1, min(1000, (int) $this->get('checkpoint_limit', config('vox.checkpoints.limit', 10))));
+        return max(1, min(1000, (int) $this->get('checkpoint_limit', config('vox.checkpoints.limit', 50))));
     }
 
     /**

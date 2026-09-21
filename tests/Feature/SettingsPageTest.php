@@ -131,7 +131,7 @@ it('refreshes models and reports a verified connection', function (): void {
 });
 
 it('validates and saves checkpoint count retention', function (): void {
-    $this->get('/vox/settings')->assertInertia(fn (AssertableInertia $page) => $page->where('settings.checkpoint_limit', 10));
+    $this->get('/vox/settings')->assertInertia(fn (AssertableInertia $page) => $page->where('settings.checkpoint_limit', 50));
     $this->post('/vox/settings', ['section' => 'checkpoints', 'checkpoint_limit' => 25])->assertSessionHasNoErrors();
     expect(app(VoxSettingsRepository::class)->checkpointLimit())->toBe(25);
     $this->post('/vox/settings', ['section' => 'checkpoints', 'checkpoint_limit' => 0])->assertSessionHasErrors('checkpoint_limit');

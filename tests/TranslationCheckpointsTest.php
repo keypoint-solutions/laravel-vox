@@ -81,15 +81,15 @@ it('captures bulk updates and cascading deletion of translation values', functio
     expect(VoxTranslation::query()->findOrFail($this->translation->id)->values()->firstOrFail()->value)->toBe('Hello');
 });
 
-it('retains the newest ten checkpoints by default and honors the saved count', function (): void {
-    for ($index = 1; $index <= 12; $index++) {
+it('retains the newest fifty checkpoints by default and honors the saved count', function (): void {
+    for ($index = 1; $index <= 52; $index++) {
         $this->checkpoints->create('Marker '.$index);
     }
-    expect($this->connection->table('vox_checkpoints')->count())->toBe(10)
+    expect($this->connection->table('vox_checkpoints')->count())->toBe(50)
         ->and($this->connection->table('vox_checkpoints')->orderBy('id')->value('label'))->toBe('Marker 3');
     app(VoxSettingsRepository::class)->save(['checkpoint_limit' => 2]);
     $this->artisan('vox:checkpoint-prune')->assertSuccessful();
-    expect($this->connection->table('vox_checkpoints')->orderBy('id')->pluck('label')->all())->toBe(['Marker 11', 'Marker 12']);
+    expect($this->connection->table('vox_checkpoints')->orderBy('id')->pluck('label')->all())->toBe(['Marker 51', 'Marker 52']);
 });
 
 it('keeps retained checkpoints restorable after pruning older changes', function (): void {
