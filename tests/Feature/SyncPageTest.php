@@ -11,8 +11,10 @@ use KeypointSolutions\LaravelVox\Models\VoxRemoteTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxSetting;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Tests\Support\LocaleProvisionTranslationDriver;
+use KeypointSolutions\LaravelVox\Translation\TranslationDatabaseSynchronizer;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
+use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
 
 beforeEach(function (): void {
     $this->withoutVite();
@@ -392,4 +394,25 @@ it('provisions nested ordinary and vendor PHP groups', function (): void {
     $this->post('/vox/sync/locales', ['locale' => 'ro', 'auto_translate' => false])->assertSessionHasNoErrors();
     expect($files->loadGroup('ro', 'admin/messages'))->toBe(['welcome' => '🚩Welcome'])
         ->and($files->loadGroup('ro', 'package::admin/messages'))->toBe(['welcome' => '🚩Welcome']);
+});
+
+it('keeps existing drafts and live overrides when adding a language', function (): void {
+    $files = app(TranslationFileRepository::class);
+    $files->saveGroup('en', 'messages', ['greeting' => 'Hello']);
+    $files->saveGroup('fr', 'messages', ['greeting' => 'Bonjour']);
+    app(TranslationDatabaseSynchronizer::class)->sync();
+    $translation = VoxTranslation::query()->where('group', 'messages')->where('key', 'greeting')->firstOrFail();
+    $french = $translation->values()->where('locale', 'fr')->firstOrFail();
+    $french->saveDraft('Salut', true);
+    app(TranslationPublisher::class)->publish();
+    $french->refresh()->saveDraft('Future wording');
+
+    $this->from('/vox/sync')->post('/vox/sync/locales', ['locale' => 'da'])
+        ->assertRedirect('/vox/sync')->assertSessionHasNoErrors();
+
+    expect($files->loadGroup('fr', 'messages')['greeting'])->toBe('Salut')
+        ->and($french->fresh()->published_override)->toBe('Salut')
+        ->and($french->fresh()->value)->toBe('Future wording')
+        ->and($french->fresh()->is_approved)->toBeFalse()
+        ->and($files->loadGroup('da', 'messages')['greeting'])->toBe('🚩Hello');
 });
