@@ -12,6 +12,7 @@
     });
 
     interface PublishPageProps {
+        pendingRules: { locale: string; scope: string; group: string | null; key: string | null; mode: string }[];
         stats: {
             approved: number;
             publishable: number;
@@ -120,6 +121,27 @@
             {{ error }}
         </div>
 
+        <section
+            v-if="page.props.pendingRules?.length"
+            class="bg-card space-y-3 rounded-xl border p-5"
+        >
+            <h2 class="text-sm font-semibold">Fallback choices to publish</h2>
+            <p
+                v-for="(rule, index) in page.props.pendingRules"
+                :key="index"
+                class="text-sm"
+            >
+                <strong>{{ rule.locale }}</strong> ·
+                {{ rule.scope === 'locale' ? 'Entire language' : [rule.group, rule.key].filter(Boolean).join('.') }} →
+                {{
+                    rule.mode === 'default'
+                        ? 'Use default language'
+                        : rule.mode === 'translated'
+                          ? 'Use own translation'
+                          : 'Inherit setting'
+                }}
+            </p>
+        </section>
         <section class="bg-card rounded-xl border">
             <div class="grid divide-y sm:grid-cols-5 sm:divide-x sm:divide-y-0">
                 <div class="p-5">

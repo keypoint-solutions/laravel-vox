@@ -74,6 +74,7 @@
     const localeForm = useForm({
         locale: '',
         auto_translate: false,
+        use_default: false,
     });
 
     function environmentRoute(template: string | undefined, id: number): string {
@@ -380,10 +381,25 @@
                 <div class="space-y-2">
                     <label class="flex items-start gap-2 text-sm">
                         <input
+                            v-model="localeForm.use_default"
+                            type="checkbox"
+                            class="mt-0.5 size-4"
+                            data-test="sync-locale-use-default"
+                        />
+                        <span
+                            ><span class="font-medium">Use default language wording</span
+                            ><span class="text-muted-foreground mt-0.5 block text-xs"
+                                >Follow {{ page.props.baseLocale }}, including new keys. Publish to create language
+                                files. You can translate individual groups or keys later.</span
+                            ></span
+                        >
+                    </label>
+                    <label class="flex items-start gap-2 text-sm">
+                        <input
                             v-model="localeForm.auto_translate"
                             class="border-input text-primary focus:ring-ring mt-0.5 size-4 rounded"
                             data-test="sync-locale-auto-translate"
-                            :disabled="!page.props.ai.available"
+                            :disabled="!page.props.ai.available || localeForm.use_default"
                             type="checkbox"
                         />
                         <span>
@@ -436,8 +452,8 @@
                     <div>
                         <h3 class="text-sm font-medium">Download publishable files</h3>
                         <p class="text-muted-foreground mt-1 text-xs">
-                            Build the same language-file result as Publish and download it as a ZIP. Local files are not
-                            changed.
+                            Download approved wording with published fallback choices as a ZIP. Publish pending fallback
+                            choices before exporting. Local files are not changed.
                         </p>
                     </div>
                     <Button

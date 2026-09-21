@@ -383,3 +383,10 @@ test('preserves Laravel slash group names for nested ordinary and vendor folders
         'shop::admin/messages.hello': 'Shop admin',
     });
 });
+
+test('does not expose fallback metadata as a translation locale', t => {
+    const { root, write } = fixture(t);
+    write('lang/vox-fallback.json', JSON.stringify({version: 1, rules: []}));
+    const { p } = plugin(root);
+    assert.doesNotMatch(p.load(catalogueId), /vox-fallback/);
+});

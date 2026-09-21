@@ -11,6 +11,11 @@ class TranslationFileValidator
 {
     public function validateFile(string $path): void
     {
+        if (basename($path) === TranslationFallbackRules::MANIFEST) {
+            TranslationFallbackRules::validateManifest(File::get($path));
+
+            return;
+        }
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
         $contents = File::get($path);
 
@@ -31,6 +36,11 @@ class TranslationFileValidator
 
     public function validateContents(string $contents, string $relativePath): void
     {
+        if ($relativePath === TranslationFallbackRules::MANIFEST) {
+            TranslationFallbackRules::validateManifest($contents);
+
+            return;
+        }
         $extension = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
 
         if ($extension === 'php') {
@@ -66,6 +76,9 @@ class TranslationFileValidator
     public function assertTranslationPath(string $path): void
     {
         $normalized = trim(str_replace('\\', '/', $path), '/');
+        if ($normalized === TranslationFallbackRules::MANIFEST) {
+            return;
+        }
         $segment = '[A-Za-z0-9][A-Za-z0-9_.-]*';
         $locale = '[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*';
         $matchesRootJson = preg_match('/^'.$locale.'\.json$/D', $normalized) === 1;

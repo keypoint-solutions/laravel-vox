@@ -20,6 +20,7 @@ use KeypointSolutions\LaravelVox\Http\Controllers\SyncEnvironmentController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncLocalTranslationsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncPageController;
 use KeypointSolutions\LaravelVox\Http\Controllers\TranslationCleanupController;
+use KeypointSolutions\LaravelVox\Http\Controllers\TranslationRuleController;
 use KeypointSolutions\LaravelVox\Http\Controllers\UseApplicationTranslationController;
 use KeypointSolutions\LaravelVox\Http\Middleware\Authorize;
 use KeypointSolutions\LaravelVox\Http\Middleware\SerializeVoxWrites;
@@ -53,6 +54,7 @@ Route::middleware([...$configMiddleware, SerializeVoxWrites::class])
             ->name('sync.environments.pull');
 
         Route::get('/manage', ManageController::class)->name('manage');
+        Route::post('/manage/fallback', TranslationRuleController::class)->name('manage.fallback');
 
         Route::post('/manage/translations/cleanup', TranslationCleanupController::class)->name('manage.translations.cleanup');
 

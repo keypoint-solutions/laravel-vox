@@ -16,6 +16,7 @@ use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
 use KeypointSolutions\LaravelVox\Translation\TranslationEligibility;
+use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 use KeypointSolutions\LaravelVox\Translation\TranslationKey;
 use Throwable;
 
@@ -170,6 +171,10 @@ class ManageTranslationController
 
         try {
             foreach ($targetLocales as $locale) {
+                $identity = TranslationKey::fromRaw($key);
+                if (app(TranslationFallbackRules::class)->usesDefault($locale, $identity->group, $identity->key)) {
+                    continue;
+                }
                 $translatedValues[$locale] = $driver->translate(
                     $baseValue,
                     $baseLocale,
@@ -335,6 +340,9 @@ class ManageTranslationController
                 $context = $this->buildTranslationContext($translation);
 
                 foreach ($targetLocales as $locale) {
+                    if (app(TranslationFallbackRules::class)->usesDefault($locale, $translation->group, $translation->key)) {
+                        continue;
+                    }
                     if (! $this->eligibility->isMissing($values->get($locale)?->value)) {
                         continue;
                     }
@@ -450,6 +458,9 @@ class ManageTranslationController
 
         try {
             foreach ($targetLocales as $locale) {
+                if (app(TranslationFallbackRules::class)->usesDefault($locale, $translation->group, $translation->key)) {
+                    continue;
+                }
                 $translated = $driver->translate($baseValue, $baseLocale, $locale, $context);
                 $translatedValues[$locale] = $translated;
             }

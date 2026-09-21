@@ -11,6 +11,7 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\FrontendTranslationArtifacts;
+use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileTransaction;
 use KeypointSolutions\LaravelVox\Translation\TranslationGroupFormat;
@@ -25,6 +26,7 @@ class UseApplicationTranslationController
         app(TranslationFileTransaction::class)->run(fn () => DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($translation, $files, $data): void {
             $value = $translation->values()->where('locale', $data['locale'])->lockForUpdate()->firstOrFail();
             $locale = $value->locale;
+            abort_if(app(TranslationFallbackRules::class)->usesDefault($locale, $translation->group, $translation->key, true), 422, 'Publish a choice to use own translation before restoring application wording.');
             $key = $translation->key;
             if ($translation->group === null || $translation->group === 'json') {
                 [$namespace, $key] = str_contains($key, '::') ? explode('::', $key, 2) : [null, $key];

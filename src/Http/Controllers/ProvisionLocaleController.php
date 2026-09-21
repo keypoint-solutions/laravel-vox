@@ -22,6 +22,7 @@ class ProvisionLocaleController
         $validated = $request->validate([
             'locale' => ['required', 'string', 'max:35', 'regex:/^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$/D'],
             'auto_translate' => ['sometimes', 'boolean'],
+            'use_default' => ['sometimes', 'boolean'],
         ], [
             'locale.regex' => 'Enter a locale code such as de, pt_BR, or zh_Hant.',
         ]);
@@ -33,7 +34,8 @@ class ProvisionLocaleController
             ]);
         }
 
-        $autoTranslate = (bool) ($validated['auto_translate'] ?? false);
+        $useDefault = (bool) ($validated['use_default'] ?? false);
+        $autoTranslate = ! $useDefault && (bool) ($validated['auto_translate'] ?? false);
 
         if ($autoTranslate && config('vox.translate.driver', 'openai') === 'null') {
             throw ValidationException::withMessages([
@@ -42,7 +44,7 @@ class ProvisionLocaleController
         }
 
         try {
-            $result = $provisioner->provision($locale, $autoTranslate);
+            $result = $provisioner->provision($locale, $autoTranslate, $useDefault);
         } catch (Throwable $exception) {
             report($exception);
 
@@ -50,6 +52,10 @@ class ProvisionLocaleController
         }
 
         $name = $localeCatalog->displayName($result->locale);
+
+        if ($useDefault) {
+            return Inertia::flash('success', "Added {$name} ({$result->locale}) using default language wording. Publish to create its language files.")->back();
+        }
 
         if ($autoTranslate) {
             return Inertia::flash(

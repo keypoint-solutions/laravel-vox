@@ -4,6 +4,7 @@ namespace KeypointSolutions\LaravelVox\Support;
 
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 
 class VoxLocaleResolver
 {
@@ -17,7 +18,7 @@ class VoxLocaleResolver
      */
     public function resolveLocales(): array
     {
-        $locales = $this->normalizeLocales(array_merge($this->applicationLocales(), $this->settings->provisionedLocales()));
+        $locales = $this->normalizeLocales(array_merge($this->applicationLocales(), $this->settings->provisionedLocales(), $this->manifestLocales()));
         $baseLocale = $this->resolveBaseLocale($locales);
 
         return $this->sortLocales(array_merge([$baseLocale], $locales));
@@ -26,9 +27,29 @@ class VoxLocaleResolver
     /** @return array<int, string> */
     public function resolveFileLocales(): array
     {
-        $locales = $this->applicationLocales();
+        $locales = array_merge($this->applicationLocales(), $this->manifestLocales());
 
         return $this->sortLocales(array_merge([$this->resolveBaseLocale($locales)], $locales));
+    }
+
+    /** @return array<int, string> */
+    private function manifestLocales(): array
+    {
+        $langPath = rtrim((string) config('vox.paths.lang', lang_path()), DIRECTORY_SEPARATOR);
+        $manifest = $langPath.'/'.TranslationFallbackRules::MANIFEST;
+        $locales = [];
+        if (File::exists($manifest)) {
+            foreach (TranslationFallbackRules::validateManifest(File::get($manifest)) as $rule) {
+                $locale = $rule['locale'];
+                if ($rule['published_mode'] !== 'inherit' || File::isDirectory($langPath.'/'.$locale)
+                    || File::isFile($langPath.'/'.$locale.'.json') || File::glob($langPath.'/vendor/*/'.$locale) !== []
+                    || File::glob($langPath.'/vendor/*/'.$locale.'.json') !== []) {
+                    $locales[] = $locale;
+                }
+            }
+        }
+
+        return array_values(array_unique($locales));
     }
 
     /** @return array<int, string> */
@@ -99,7 +120,7 @@ class VoxLocaleResolver
             }
 
             $jsonLocales = collect(File::files($langPath))
-                ->filter(fn (\SplFileInfo $file) => Str::endsWith($file->getFilename(), '.json'))
+                ->filter(fn (\SplFileInfo $file) => Str::endsWith($file->getFilename(), '.json') && $file->getFilename() !== TranslationFallbackRules::MANIFEST)
                 ->map(fn (\SplFileInfo $file) => Str::before($file->getFilename(), '.json'))
                 ->values()
                 ->all();

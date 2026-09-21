@@ -137,6 +137,7 @@ class HandleInertiaRequests extends Middleware
             'checkpoints' => route($routeNamePrefix.'checkpoints', absolute: false),
             'checkpoints_store' => route($routeNamePrefix.'checkpoints.store', absolute: false),
             'checkpoints_restore' => route($routeNamePrefix.'checkpoints.restore', ['checkpoint' => '__checkpoint__'], absolute: false),
+            'manage_fallback' => route($routeNamePrefix.'manage.fallback', absolute: false),
             'audit' => route($routeNamePrefix.'audit', absolute: false),
             'settings' => route($routeNamePrefix.'settings', absolute: false),
             'settings_reset' => route($routeNamePrefix.'settings.reset', absolute: false),

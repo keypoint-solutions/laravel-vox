@@ -6,6 +6,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Validation\ValidationException;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 
 class RemoteTranslationSnapshot
 {
@@ -24,6 +25,16 @@ class RemoteTranslationSnapshot
                     continue;
                 }
 
+                if (app(TranslationFallbackRules::class)->usesDefault($value->locale, $translation->group, $translation->key, ! $includeDrafts)) {
+                    $baseLocale = app(VoxLocaleResolver::class)->resolveBaseLocale([]);
+                    $base = $translation->values->firstWhere('locale', $baseLocale);
+                    $wording = $includeDrafts ? $base?->value : $base?->liveValue();
+                    if (is_string($wording)) {
+                        $values[] = ['group' => $translation->group ?? 'json', 'key' => $translation->key, 'locale' => $value->locale, 'value' => $wording];
+                    }
+
+                    continue;
+                }
                 $published = $value->liveValue();
                 if (! $includeDrafts && $published === null) {
                     continue;
@@ -48,6 +59,9 @@ class RemoteTranslationSnapshot
         $values = [];
 
         foreach (File::allFiles($path) as $file) {
+            if ($file->getRelativePathname() === TranslationFallbackRules::MANIFEST) {
+                continue;
+            }
             $parts = explode('/', str_replace('\\', '/', $file->getRelativePathname()));
             $namespace = $parts[0] === 'vendor' ? $parts[1] : null;
             $filename = array_pop($parts);

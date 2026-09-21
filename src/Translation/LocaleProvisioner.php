@@ -5,6 +5,7 @@ namespace KeypointSolutions\LaravelVox\Translation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
@@ -26,15 +27,15 @@ class LocaleProvisioner
         private VoxAuditLogger $auditLogger,
     ) {}
 
-    public function provision(string $locale, bool $autoTranslate = false): LocaleProvisionResult
+    public function provision(string $locale, bool $autoTranslate = false, bool $useDefault = false): LocaleProvisionResult
     {
         return app(VoxMutationLock::class)->run(
-            fn (): LocaleProvisionResult => $this->provisionUsing($locale, $autoTranslate),
+            fn (): LocaleProvisionResult => $this->provisionUsing($locale, $autoTranslate, $useDefault),
             'adding locale '.$locale
         );
     }
 
-    private function provisionUsing(string $locale, bool $autoTranslate): LocaleProvisionResult
+    private function provisionUsing(string $locale, bool $autoTranslate, bool $useDefault): LocaleProvisionResult
     {
         $locale = $this->localeResolver->normalizeLocaleCode($locale);
 
@@ -56,6 +57,24 @@ class LocaleProvisioner
         }
 
         $this->assertTargetIsEmpty($locale, $groups, $jsonNamespaces);
+
+        if ($useDefault) {
+            return app(TranslationFileTransaction::class)->run(fn (): LocaleProvisionResult => DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($locale, $baseLocale): LocaleProvisionResult {
+                $this->synchronizer->sync();
+                if (! $this->settings->save(['provisioned_locales' => array_values(array_unique([...$this->settings->provisionedLocales(), $locale]))])) {
+                    throw new RuntimeException('Settings storage is unavailable. Run the Laravel Vox migrations and try again.');
+                }
+                app(TranslationFallbackRules::class)->save($locale, 'locale', 'default');
+                $count = 0;
+                foreach (VoxTranslation::query()->where('is_pending_delete', false)->where('is_orphan', false)->lazyById() as $translation) {
+                    $translation->values()->firstOrCreate(['locale' => $locale], ['value' => '', 'is_approved' => true, 'is_pending_publish' => false]);
+                    $count++;
+                }
+                $this->auditLogger->record('locale-provisioned', ['locale' => $locale, 'source_locale' => $baseLocale, 'use_default' => true, 'values' => $count]);
+
+                return new LocaleProvisionResult($locale, 0, $count, 0);
+            }));
+        }
 
         $stagingPath = storage_path('vox/provision-'.Str::uuid());
         $stagedFiles = $this->files->forPath($stagingPath);

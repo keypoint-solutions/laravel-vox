@@ -19,6 +19,7 @@
     } from '@lucide/vue';
     import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
+    import FallbackChoice from '@/components/FallbackChoice.vue';
     import type { SelectOption, ToggleOption } from '@/components/ui';
     import {
         Badge,
@@ -59,6 +60,7 @@
     }
 
     interface TranslationItem {
+        fallback: Record<string, { mode: string; published_mode: string; selection: string }>;
         id: number;
         group: string | null;
         key: string;
@@ -104,6 +106,14 @@
     }
 
     interface ManagePageProps {
+        fallbackRules: {
+            locale: string;
+            scope: string;
+            group: string | null;
+            key: string | null;
+            mode: string;
+            published_mode: string;
+        }[];
         groups: GroupItem[];
         translations: TranslationsPayload;
         locales: string[];
@@ -128,6 +138,18 @@
 
     const page = usePage<ManagePageProps>();
     const { formatDateTime } = useDateTime();
+
+    const fallbackLocale = ref('');
+    function scopeRule(scope: string, published = false): string {
+        const rule = page.props.fallbackRules?.find(
+            (rule) =>
+                rule.locale === fallbackLocale.value &&
+                rule.scope === scope &&
+                (scope === 'locale' ||
+                    rule.group === (selectedGroup.value === 'default' ? 'json' : selectedGroup.value))
+        );
+        return rule?.[published ? 'published_mode' : 'mode'] ?? 'inherit';
+    }
 
     const groups = computed(() => page.props.groups ?? []);
     const filteredGroupsTotal = computed(() => groups.value.reduce((total, group) => total + group.total, 0));
@@ -273,6 +295,7 @@
     const targetLocales = computed(() => locales.value.filter((locale) => locale !== baseLocale.value));
     const missingTargetLocales = computed(() =>
         targetLocales.value.filter((locale) => {
+            if (editTranslation.value?.fallback?.[locale]?.mode === 'default') return false;
             const value = editValues.value[locale] ?? '';
             const prefix = page.props.missingTranslationPrefix ?? '🚩';
 
@@ -850,6 +873,56 @@
                 Add dynamic translation
             </Button>
         </div>
+
+        <details class="bg-card rounded-xl border p-4">
+            <summary class="cursor-pointer text-sm font-semibold">Language and group fallback</summary>
+            <div class="mt-4 max-w-xl space-y-4">
+                <p class="text-muted-foreground text-sm">
+                    Use {{ baseLocale }} wording for a language or group. Individual keys can override these choices.
+                    Publish to apply changes.
+                </p>
+                <Select
+                    v-model="fallbackLocale"
+                    :options="targetLocales.map((locale) => ({ value: locale, label: locale }))"
+                    placeholder="Choose language"
+                    aria-label="Fallback language"
+                />
+                <template v-if="fallbackLocale">
+                    <div class="space-y-2">
+                        <p class="text-sm font-medium">Entire language · {{ fallbackLocale }}</p>
+                        <FallbackChoice
+                            :key="fallbackLocale + '-locale'"
+                            :locale="fallbackLocale"
+                            scope="locale"
+                            :selection="scopeRule('locale')"
+                            :published="scopeRule('locale', true)"
+                            :base-locale="baseLocale"
+                        />
+                    </div>
+                    <div
+                        v-if="selectedGroup"
+                        class="space-y-2 border-t pt-4"
+                    >
+                        <p class="text-sm font-medium">Group · {{ selectedGroup }}</p>
+                        <FallbackChoice
+                            :key="fallbackLocale + selectedGroup"
+                            :locale="fallbackLocale"
+                            scope="group"
+                            :group="selectedGroup === 'default' ? 'json' : selectedGroup"
+                            :selection="scopeRule('group')"
+                            :published="scopeRule('group', true)"
+                            :base-locale="baseLocale"
+                        />
+                    </div>
+                    <p
+                        v-else
+                        class="text-muted-foreground text-xs"
+                    >
+                        Select a group below to configure a group override.
+                    </p>
+                </template>
+            </div>
+        </details>
 
         <!-- Stats Cards -->
         <div class="grid gap-4 sm:grid-cols-3">
@@ -1730,7 +1803,9 @@
                     </div>
                     <Button
                         v-if="aiStatus.available && locale !== baseLocale"
-                        :disabled="!canTranslate || isTranslating"
+                        :disabled="
+                            !canTranslate || isTranslating || editTranslation?.fallback?.[locale]?.mode === 'default'
+                        "
                         class="h-7 px-2"
                         size="sm"
                         variant="ghost"
@@ -1740,8 +1815,45 @@
                         AI
                     </Button>
                 </div>
+                <FallbackChoice
+                    v-if="locale !== baseLocale && editTranslation"
+                    :key="editTranslation.id + locale"
+                    :locale="locale"
+                    scope="key"
+                    :translation-id="editTranslation.id"
+                    :selection="editTranslation.fallback?.[locale]?.selection ?? 'inherit'"
+                    :published="
+                        page.props.fallbackRules?.find(
+                            (rule) =>
+                                rule.scope === 'key' &&
+                                rule.locale === locale &&
+                                rule.group === (editTranslation?.group ?? 'json') &&
+                                rule.key === editTranslation?.key
+                        )?.published_mode ?? 'inherit'
+                    "
+                    :base-locale="baseLocale"
+                />
                 <div
-                    v-if="editTranslation?.published_overrides?.[locale] != null"
+                    v-if="editTranslation?.fallback?.[locale]?.mode === 'default'"
+                    class="bg-muted rounded-lg p-3 text-sm"
+                >
+                    <p class="font-medium">Using default · {{ baseLocale }}</p>
+                    <p class="mt-1 whitespace-pre-wrap">
+                        {{ editValues[baseLocale] || 'Default translation missing' }}
+                    </p>
+                    <p class="text-muted-foreground mt-1 text-xs">
+                        {{
+                            editTranslation.fallback[locale].published_mode === 'default'
+                                ? 'Default wording is published. Changes refresh on publish.'
+                                : 'Pending publication. Current application wording is unchanged.'
+                        }}
+                    </p>
+                </div>
+                <div
+                    v-if="
+                        editTranslation?.published_overrides?.[locale] != null &&
+                        editTranslation?.fallback?.[locale]?.published_mode !== 'default'
+                    "
                     class="bg-muted/40 space-y-3 rounded-lg border p-3 text-sm"
                 >
                     <div>
@@ -1778,16 +1890,19 @@
                 </div>
                 <p class="text-muted-foreground text-xs">
                     {{
-                        editTranslation?.draft_locales?.includes(locale)
-                            ? 'Draft · awaiting approval'
-                            : editTranslation?.pending_publish_locales?.includes(locale)
-                              ? 'Approved · not yet published'
-                              : 'Current wording'
+                        editTranslation?.fallback?.[locale]?.mode === 'default'
+                            ? 'Preserved local wording'
+                            : editTranslation?.draft_locales?.includes(locale)
+                              ? 'Draft · awaiting approval'
+                              : editTranslation?.pending_publish_locales?.includes(locale)
+                                ? 'Approved · not yet published'
+                                : 'Current wording'
                     }}
                 </p>
                 <Textarea
                     v-model="editValues[locale]"
                     :data-test="`translation-value-${locale}`"
+                    :disabled="editTranslation?.fallback?.[locale]?.mode === 'default'"
                     :rows="2"
                     class="resize-none"
                 />

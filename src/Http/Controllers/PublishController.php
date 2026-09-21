@@ -8,9 +8,11 @@ use Inertia\Inertia;
 use Inertia\Response;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Models\VoxTranslationRule;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
 
 class PublishController
@@ -24,6 +26,7 @@ class PublishController
     {
         return Inertia::render('Publish', [
             'stats' => $this->stats(),
+            'pendingRules' => VoxTranslationRule::query()->whereColumn('mode', '!=', 'published_mode')->get(['locale', 'scope', 'group', 'key', 'mode', 'published_mode']),
             'lastPublishAt' => VoxAudit::query()
                 ->where('action', 'publish')
                 ->latest('created_at')
@@ -33,7 +36,11 @@ class PublishController
 
     public function store(TranslationPublisher $publisher, VoxAuditLogger $auditLogger): RedirectResponse
     {
-        $result = $publisher->publish();
+        try {
+            $result = $publisher->publish();
+        } catch (\RuntimeException $exception) {
+            return redirect()->back()->withErrors(['publish' => $exception->getMessage()]);
+        }
 
         $auditLogger->record('publish', [
             'deleted_keys' => $result->deletedKeys(),
@@ -107,6 +114,9 @@ class PublishController
                     continue;
                 }
 
+                if (app(TranslationFallbackRules::class)->usesDefault($translationValue->locale, $translation->group, $translation->key)) {
+                    continue;
+                }
                 if (! $translationValue->hasApprovedChange()) {
                     continue;
                 }

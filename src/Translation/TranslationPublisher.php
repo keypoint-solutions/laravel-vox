@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Events\TranslationsPublished;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Models\VoxTranslationRule;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
@@ -16,6 +17,8 @@ use RuntimeException;
 
 class TranslationPublisher
 {
+    private ?TranslationFallbackRules $previousRules = null;
+
     public function __construct(
         private TranslationFileRepository $files,
         private VoxLocaleResolver $localeResolver,
@@ -43,6 +46,14 @@ class TranslationPublisher
 
     private function publishPending(Collection $pending, ?array $valueIds, bool $regenerate = false): PublishResult
     {
+        app(TranslationFallbackRules::class)->all();
+        $this->previousRules = clone app(TranslationFallbackRules::class);
+        foreach ($pending as $row) {
+            VoxTranslationRule::query()->where('scope', 'key')->where('group', $row->group ?? 'json')->where('key', $row->key)->delete();
+        }
+        if (! $regenerate && $valueIds === null) {
+            app(TranslationFallbackRules::class)->publish();
+        }
         $langPath = $this->files->langPath();
         $stagingPath = storage_path('vox/publish-'.Str::uuid());
         $this->validator->validateDirectory($langPath);
@@ -143,6 +154,8 @@ class TranslationPublisher
 
             return $result;
         } finally {
+            app(TranslationFallbackRules::class)->clear();
+            $this->previousRules = null;
             File::deleteDirectory($stagingPath);
         }
     }
@@ -190,10 +203,34 @@ class TranslationPublisher
             }
 
             $values = $translation->values->keyBy('locale');
+            $base = $values->get($baseLocale);
+            $baseSelected = $base !== null && ($valueIds === null || in_array($base->id, $valueIds, true));
+            $baseDraft = ! $overridesOnly && $baseSelected && $base->hasApprovedChange()
+                && ! app(TranslationEligibility::class)->isMissing($base->value);
+            $defaultValue = $baseDraft ? $base->value : $base?->liveValue();
+            $rules = app(TranslationFallbackRules::class);
             $incomplete = false;
 
-            foreach ($values as $locale => $translationValue) {
-                if (! in_array($locale, $locales, true) || ($valueIds !== null && ! in_array($translationValue->id, $valueIds, true))) {
+            foreach ($locales as $locale) {
+                $translationValue = $values->get($locale);
+                $usesDefault = $rules->usesDefault($locale, $translation->group, $translation->key, true);
+                if ($usesDefault) {
+                    if (app(TranslationEligibility::class)->isMissing($defaultValue)) {
+                        throw new RuntimeException("Default translation missing for [{$translation->key}]. Add and approve its default wording before publishing.");
+                    }
+                    if ($translation->group === null || $translation->group === 'json') {
+                        [$namespace, $key] = $this->splitJsonKey($translation->key);
+                        $jsonUpdates[$locale][$namespace ?? ''][$key] = $defaultValue;
+                    } else {
+                        $groupUpdates[$locale][$translation->group][$translation->key] = $defaultValue;
+                    }
+
+                    continue;
+                }
+                if ($translationValue === null && $includeDefaults && $this->previousRules?->usesDefault($locale, $translation->group, $translation->key, true)) {
+                    $translationValue = new VoxTranslationValue(['locale' => $locale]);
+                }
+                if ($translationValue === null || ($valueIds !== null && ! in_array($translationValue->id, $valueIds, true))) {
                     continue;
                 }
                 $publishDraft = ! $overridesOnly && $translationValue->hasApprovedChange();
@@ -208,6 +245,9 @@ class TranslationPublisher
                     $publishedValues[$translationValue->id] = $value;
                 } elseif ($overridesOnly || $includeDefaults) {
                     $value = $translationValue->published_override ?? ($includeDefaults ? $translationValue->file_value : null);
+                    if ($value === null && $includeDefaults && $this->previousRules?->usesDefault($locale, $translation->group, $translation->key, true)) {
+                        $value = $prefix.($defaultValue ?? $translation->key);
+                    }
                     if ($value === null) {
                         continue;
                     }
@@ -292,6 +332,10 @@ class TranslationPublisher
             }
         }
 
+        $manifest = app(TranslationFallbackRules::class)->writeManifest($files->langPath());
+        if ($manifest !== null) {
+            $changedFiles[] = $manifest;
+        }
         sort($changedFiles);
 
         return new PublishResult(

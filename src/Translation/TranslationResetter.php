@@ -41,6 +41,7 @@ class TranslationResetter
             $connection->table('vox_environments')->orderBy('id')->lockForUpdate()->get();
 
             $tables = [
+                'vox_translation_rules',
                 'vox_remote_translations',
                 'vox_translation_occurrences',
                 'vox_translation_values',
@@ -80,6 +81,8 @@ class TranslationResetter
                 throw new RuntimeException('Vox database reset completed, but the discovery manifest could not be deleted: '.$path);
             }
         }
+
+        app(TranslationFallbackRules::class)->clear();
 
         return $deleted;
     }

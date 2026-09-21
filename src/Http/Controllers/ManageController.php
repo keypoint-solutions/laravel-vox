@@ -16,6 +16,7 @@ use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\TranslationDeletionEligibility;
+use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 use KeypointSolutions\LaravelVox\Translation\TranslationKey;
 
 class ManageController
@@ -45,6 +46,7 @@ class ManageController
             'translations' => $this->loadTranslations($request, $filters, $locales, $lastSyncBoundary),
             'locales' => $locales,
             'baseLocale' => $baseLocale,
+            'fallbackRules' => app(TranslationFallbackRules::class)->all(),
             'missingTranslationPrefix' => (string) config('vox.parse.missing_translation_prefix', '🚩'),
             'filters' => $filters,
             'statusOptions' => $this->statusOptions(),
@@ -254,6 +256,11 @@ class ManageController
                     'source' => $translation->source,
                     'updated_at' => $translation->updated_at?->toIso8601String(),
                     'values' => $values,
+                    'fallback' => collect($locales)->mapWithKeys(fn (string $locale): array => [$locale => [
+                        'mode' => app(TranslationFallbackRules::class)->mode($locale, $translation->group ?? 'json', $translation->key),
+                        'published_mode' => app(TranslationFallbackRules::class)->mode($locale, $translation->group ?? 'json', $translation->key, true),
+                        'selection' => app(TranslationFallbackRules::class)->selection($locale, 'key', $translation->group, $translation->key),
+                    ]])->all(),
                     'file_values' => $translation->values->pluck('file_value', 'locale')->all(),
                     'published_overrides' => $translation->values->pluck('published_override', 'locale')->all(),
                     'draft_locales' => $translation->values->where('is_pending_publish', true)->where('is_approved', false)->pluck('locale')->all(),
@@ -423,18 +430,23 @@ class ManageController
 
         $query->where(function (Builder $builder) use ($locales, $flagPrefix): void {
             foreach ($locales as $locale) {
-                $builder->orWhereDoesntHave('values', function (Builder $valueQuery) use ($locale): void {
-                    $valueQuery->where('locale', $locale);
-                });
-
-                $builder->orWhereHas('values', function (Builder $valueQuery) use ($locale, $flagPrefix): void {
-                    $valueQuery
-                        ->where('locale', $locale)
-                        ->where(function (Builder $q) use ($flagPrefix): void {
-                            $q->where('value', '')
-                                ->orWhereNull('value')
-                                ->orWhere('value', 'like', $flagPrefix.'%');
+                $builder->orWhere(function (Builder $missing) use ($locale, $flagPrefix): void {
+                    app(TranslationFallbackRules::class)->whereTranslated($missing, $locale);
+                    $missing->where(function (Builder $builder) use ($locale, $flagPrefix): void {
+                        $builder->whereDoesntHave('values', function (Builder $valueQuery) use ($locale): void {
+                            $valueQuery->where('locale', $locale);
                         });
+
+                        $builder->orWhereHas('values', function (Builder $valueQuery) use ($locale, $flagPrefix): void {
+                            $valueQuery
+                                ->where('locale', $locale)
+                                ->where(function (Builder $q) use ($flagPrefix): void {
+                                    $q->where('value', '')
+                                        ->orWhereNull('value')
+                                        ->orWhere('value', 'like', $flagPrefix.'%');
+                                });
+                        });
+                    });
                 });
             }
         });
@@ -519,6 +531,9 @@ class ManageController
         }
 
         foreach ($locales as $locale) {
+            if (app(TranslationFallbackRules::class)->usesDefault($locale, $translation->group, $translation->key)) {
+                continue;
+            }
             $value = $values->get($locale)?->value;
 
             if (! is_string($value) || $value === '' || Str::startsWith($value, $flagPrefix)) {

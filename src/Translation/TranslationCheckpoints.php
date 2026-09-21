@@ -14,7 +14,7 @@ use WeakMap;
 
 class TranslationCheckpoints
 {
-    private const TABLES = ['vox_translations', 'vox_translation_values', 'vox_translation_occurrences', 'vox_remote_translations', 'vox_settings'];
+    private const TABLES = ['vox_translations', 'vox_translation_values', 'vox_translation_occurrences', 'vox_remote_translations', 'vox_translation_rules', 'vox_settings'];
 
     private bool $active = false;
 
@@ -210,6 +210,7 @@ class TranslationCheckpoints
                 }
             }
             $this->connection()->table('vox_environments')->increment('sync_revision');
+            app(TranslationFallbackRules::class)->clear();
         }, 'restoring checkpoint #'.$id);
     }
 

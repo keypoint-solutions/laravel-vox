@@ -27,6 +27,7 @@ use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationCheckpoints;
+use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileTransaction;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -35,6 +36,7 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
 {
     public function packageRegistered(): void
     {
+        $this->app->scoped(TranslationFallbackRules::class);
         $this->app->singleton(TranslationCheckpoints::class);
         $this->app->singleton(VoxMutationLock::class);
         $this->app->singleton(TranslationFileTransaction::class);

@@ -56,7 +56,7 @@ export default function laravelVox(options = {}) {
     function jsonFiles() {
         return existsSync(langPath)
             ? readdirSync(langPath)
-                  .filter((file) => file.endsWith('.json') && !file.startsWith('php_'))
+                  .filter((file) => file.endsWith('.json') && !file.startsWith('php_') && file !== 'vox-fallback.json')
                   .sort()
             : [];
     }
@@ -162,6 +162,7 @@ export async function loadVoxLocale(locale) { return loaders[locale] ? await loa
                     const isPhp = catalogue.describe(file) !== null;
                     const isJson =
                         normalizePath(file).startsWith(`${normalizePath(langPath)}/`) &&
+                        file !== normalizePath(resolve(langPath, 'vox-fallback.json')) &&
                         file.slice(langPath.length + 1).match(/^(?!php_)[^/\\]+\.json$/u);
                     const isManifest = file === manifestPath && !Array.isArray(options.frontendGroups);
                     if (!isPhp && !isJson && !isManifest) return;

@@ -38,6 +38,8 @@ class TranslationSyncer
     {
         $langPath = $this->files->langPath();
         $result = new SyncResult;
+        $rules = app(TranslationFallbackRules::class);
+        $rules->importManifest($langPath);
 
         $groupFiles = $this->collectGroupFiles($langPath, $locales);
         $jsonFiles = $this->collectJsonFiles($langPath, $locales);
@@ -103,6 +105,14 @@ class TranslationSyncer
 
                 if ($translationValue->exists) {
                     $seenValueIds[$translationValue->id] = true;
+                }
+                if ($rules->usesDefault($locale, $translation->group, $translation->key, true)) {
+                    if (! $translationValue->exists) {
+                        $translationValue->fill(['value' => '', 'is_approved' => true, 'is_pending_publish' => false, 'is_obsolete' => false])->save();
+                    }
+                    $seenValueIds[$translationValue->id] = true;
+
+                    continue;
                 }
                 $oldFileValue = $translationValue->file_value;
                 $current = $translationValue->value;

@@ -13,6 +13,7 @@ use KeypointSolutions\LaravelVox\Translation\Drivers\OpenAiTranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
 use KeypointSolutions\LaravelVox\Translation\TranslationEligibility;
+use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
 use KeypointSolutions\LaravelVox\Translation\TranslationGroupFormat;
@@ -132,6 +133,10 @@ class TranslateMissingTranslationsCommand extends Command
                         continue;
                     }
 
+                    if (app(TranslationFallbackRules::class)->usesDefault($locale, $group, $key)
+                        || app(TranslationFallbackRules::class)->usesDefault($locale, $group, $key, true)) {
+                        continue;
+                    }
                     $current = $flatExisting[$key] ?? Arr::get($existing, $key);
 
                     if ($current !== null && ! is_string($current)) {
@@ -178,6 +183,10 @@ class TranslateMissingTranslationsCommand extends Command
                         continue;
                     }
 
+                    if (app(TranslationFallbackRules::class)->usesDefault($locale, 'json', $key)
+                        || app(TranslationFallbackRules::class)->usesDefault($locale, 'json', $key, true)) {
+                        continue;
+                    }
                     $current = $targetJson[$key] ?? null;
 
                     if ($current !== null && ! is_string($current)) {
@@ -223,6 +232,10 @@ class TranslateMissingTranslationsCommand extends Command
                             continue;
                         }
 
+                        if (app(TranslationFallbackRules::class)->usesDefault($locale, 'json', $namespace.'::'.$key)
+                        || app(TranslationFallbackRules::class)->usesDefault($locale, 'json', $namespace.'::'.$key, true)) {
+                            continue;
+                        }
                         $current = $targetJson[$key] ?? null;
 
                         if ($current !== null && ! is_string($current)) {

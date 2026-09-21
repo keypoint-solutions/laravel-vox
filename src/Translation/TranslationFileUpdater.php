@@ -31,6 +31,13 @@ class TranslationFileUpdater
      */
     private function updateFiles(array $scanResults, array $locales, string $baseLocale): TranslationUpdateResult
     {
+        $rules = app(TranslationFallbackRules::class);
+        $rules->importManifest($this->files->langPath());
+        $locales = array_values(array_filter($locales, fn (string $locale): bool => ! (
+            $rules->selection($locale, 'locale') === 'default'
+            && $rules->selection($locale, 'locale', published: true) === 'inherit'
+            && $this->files->groups($locale) === [] && $this->files->jsonNamespaces($locale) === []
+        )));
         $this->pendingDeletionKeys = [];
         $connection = config('vox.database.connection', 'vox');
         if (Schema::connection($connection)->hasTable('vox_translations') && Schema::connection($connection)->hasColumn('vox_translations', 'is_pending_delete')) {
@@ -222,7 +229,7 @@ class TranslationFileUpdater
                         continue;
                     }
 
-                    $value = $this->buildNewValue($key, $locale, $baseLocale, null, $baseJson[$key] ?? null);
+                    $value = $this->buildNewValue($key, $locale, $baseLocale, null, $baseJson[$key] ?? null, $namespace.'::'.$key);
                     $updated[$key] = $value;
                     $result->incrementAdded();
                 }
@@ -260,13 +267,13 @@ class TranslationFileUpdater
      * @param  array<string, mixed>  $existing
      * @param  array<string, mixed>  $flatExisting
      */
-    private function buildNewValue(string $key, string $locale, string $baseLocale, ?string $group, mixed $baseValue = null): string
+    private function buildNewValue(string $key, string $locale, string $baseLocale, ?string $group, mixed $baseValue = null, ?string $ruleKey = null): string
     {
         $value = is_string($baseValue) && $baseValue !== ''
             ? $baseValue
             : $this->defaultValueForKey($key, $group);
 
-        if ($locale !== $baseLocale) {
+        if ($locale !== $baseLocale && ! app(TranslationFallbackRules::class)->usesDefault($locale, $group, $ruleKey ?? $key, true)) {
             $prefix = config('vox.parse.missing_translation_prefix', '🚩');
             $value = $prefix.$value;
         }
