@@ -4,6 +4,7 @@ namespace KeypointSolutions\LaravelVox\Support;
 
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use KeypointSolutions\LaravelVox\Translation\TranslationFileTransaction;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileValidator;
 use RuntimeException;
 use ZipArchive;
@@ -77,9 +78,15 @@ class VoxArchive
                 File::makeDirectory($destinationPath, 0755, true);
             }
 
-            if (! File::copyDirectory($stagingPath, $destinationPath)) {
-                throw new RuntimeException('Unable to copy extracted translations.');
-            }
+            app(VoxMutationLock::class)->run(fn () => app(TranslationFileTransaction::class)->run(function () use ($stagingPath, $destinationPath): void {
+                foreach (File::allFiles($stagingPath) as $file) {
+                    $relativePath = $file->getRelativePathname();
+                    app(TranslationFileTransaction::class)->replace(
+                        rtrim($destinationPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$relativePath,
+                        File::get($file->getPathname())
+                    );
+                }
+            }));
 
             return $fileCount;
         } finally {
