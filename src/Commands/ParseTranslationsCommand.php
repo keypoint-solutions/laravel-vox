@@ -22,6 +22,8 @@ use function Laravel\Prompts\warning;
 
 class ParseTranslationsCommand extends Command
 {
+    use RecordsTranslationCheckpoint;
+
     public $signature = 'vox:parse';
 
     public $description = 'Parse codebase and update language files.';

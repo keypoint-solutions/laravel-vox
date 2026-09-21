@@ -9,6 +9,8 @@ use function Laravel\Prompts\info;
 
 class CleanupCommand extends Command
 {
+    use RecordsTranslationCheckpoint;
+
     public $signature = 'vox:cleanup';
 
     public $description = 'Clean up old Vox audit records.';

@@ -66,6 +66,10 @@ class TranslationResetter
                 ]);
             }
 
+            if ($connection->getSchemaBuilder()->hasTable('vox_checkpoints')) {
+                $connection->table('vox_checkpoints')->delete();
+            }
+
             $this->audit->record('data-reset', ['scope' => $scope, 'deleted' => $deleted]);
 
             return $deleted;

@@ -24,6 +24,7 @@
             translate_guidance: string;
             sync_enabled: boolean;
             sync_key_set: boolean;
+            checkpoint_limit: number;
         };
         dynamicPatterns: {
             pattern: string;
@@ -62,6 +63,19 @@
         model: ai.value.model,
         translate_guidance: settings.value.translate_guidance,
     });
+    const checkpointForm = useForm({ section: 'checkpoints', checkpoint_limit: settings.value.checkpoint_limit });
+    const checkpointSaved = ref(false);
+    function saveCheckpointSettings(): void {
+        checkpointSaved.value = false;
+        checkpointForm.post(settingsUpdateRoute.value, {
+            preserveScroll: true,
+            onSuccess: () => {
+                checkpointForm.defaults();
+                checkpointSaved.value = true;
+            },
+        });
+    }
+
     const syncForm = useForm({
         section: 'sync',
         sync_enabled: settings.value.sync_enabled,
@@ -573,6 +587,51 @@
                 </div>
             </form>
         </section>
+        <section class="bg-card space-y-4 rounded-xl border p-6">
+            <div>
+                <h2 class="font-semibold">Checkpoint retention</h2>
+                <p class="text-muted-foreground mt-1 text-sm">
+                    Keep the most recent checkpoints, including manual and automatic ones. Older checkpoints are removed
+                    daily and when a new checkpoint is recorded.
+                </p>
+            </div>
+            <form
+                class="space-y-3"
+                @submit.prevent="saveCheckpointSettings"
+            >
+                <label
+                    for="checkpoint-limit"
+                    class="text-sm font-medium"
+                    >Checkpoints to keep</label
+                >
+                <Input
+                    id="checkpoint-limit"
+                    v-model="checkpointForm.checkpoint_limit"
+                    type="number"
+                    min="1"
+                    max="1000"
+                    class="max-w-32"
+                />
+                <p
+                    v-if="checkpointForm.errors.checkpoint_limit"
+                    class="text-destructive text-sm"
+                >
+                    {{ checkpointForm.errors.checkpoint_limit }}
+                </p>
+                <Button
+                    type="submit"
+                    :disabled="checkpointForm.processing"
+                    >Save checkpoint settings</Button
+                >
+                <p
+                    v-if="checkpointSaved"
+                    role="status"
+                    class="text-sm text-emerald-600"
+                >
+                    Checkpoint retention saved.
+                </p>
+            </form>
+        </section>
         <section
             aria-labelledby="reset-heading"
             class="border-destructive/40 bg-card rounded-xl border"
@@ -592,8 +651,8 @@
                 <p class="text-sm font-medium">Published language files will not be changed or deleted.</p>
                 <p class="text-muted-foreground text-sm">
                     Runtime translation files, application configuration, and application credentials also stay
-                    unchanged. A later local sync can reimport published translations, but cannot recover unpublished
-                    work.
+                    unchanged. Checkpoint history is also cleared. A later local sync can reimport published
+                    translations, but cannot recover unpublished work.
                 </p>
                 <p
                     v-if="resetComplete"

@@ -18,7 +18,7 @@ class SerializeVoxWrites
         }
 
         try {
-            return app(VoxMutationLock::class)->run(fn (): Response => $next($request));
+            return app(VoxMutationLock::class)->run(fn (): Response => $next($request), (string) $request->route()?->getName());
         } catch (VoxMutationConflict $exception) {
             throw ValidationException::withMessages(['vox' => $exception->getMessage()]);
         }

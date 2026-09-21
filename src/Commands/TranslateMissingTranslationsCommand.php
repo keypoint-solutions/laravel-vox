@@ -24,6 +24,8 @@ use function Laravel\Prompts\table;
 
 class TranslateMissingTranslationsCommand extends Command
 {
+    use RecordsTranslationCheckpoint;
+
     public $signature = 'vox:translate {--path= : Relative path inside the lang directory for a single file to process} {--key= : Translation key to process} {--force : Retranslate existing values}';
 
     public $description = 'Translate missing keys using the configured driver.';

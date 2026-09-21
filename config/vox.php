@@ -39,6 +39,9 @@ return [
         ],
         'bypass_auth_in_local' => env('VOX_BYPASS_AUTH_IN_LOCAL', true),
     ],
+    'checkpoints' => [
+        'limit' => 10,
+    ],
     'database' => [
         'connection' => env('VOX_DB_CONNECTION', 'vox'),
         'path' => env('VOX_DB_PATH', storage_path('vox/vox.sqlite')),

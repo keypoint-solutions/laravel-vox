@@ -4,6 +4,7 @@
         FileText,
         GitBranch,
         Heart,
+        History,
         Home,
         Laptop,
         Layers,
@@ -45,6 +46,7 @@
                 icon: UploadCloud,
                 feature: 'publish',
             },
+            { label: 'Checkpoints', href: routes.value?.checkpoints ?? '', icon: History, feature: 'manage' },
             { label: 'Audit', href: routes.value?.audit ?? '', icon: FileText, feature: 'audit' },
             {
                 label: 'Settings',

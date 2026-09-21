@@ -12,6 +12,8 @@ use function Laravel\Prompts\table;
 
 class SyncTranslationsCommand extends Command
 {
+    use RecordsTranslationCheckpoint;
+
     public $signature = 'vox:sync
         {--parse : Update language files from discovered source keys before syncing}';
 

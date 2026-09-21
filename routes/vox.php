@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use KeypointSolutions\LaravelVox\Http\Controllers\AuditController;
+use KeypointSolutions\LaravelVox\Http\Controllers\CheckpointController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ChooseRemoteTranslationController;
 use KeypointSolutions\LaravelVox\Http\Controllers\DashboardController;
 use KeypointSolutions\LaravelVox\Http\Controllers\DownloadTranslationArchiveController;
@@ -75,6 +76,10 @@ Route::middleware([...$configMiddleware, SerializeVoxWrites::class])
 
         Route::get('/publish', [PublishController::class, 'index'])->name('publish');
         Route::post('/publish', [PublishController::class, 'store'])->name('publish.store');
+
+        Route::get('/checkpoints', [CheckpointController::class, 'index'])->name('checkpoints');
+        Route::post('/checkpoints', [CheckpointController::class, 'store'])->name('checkpoints.store');
+        Route::post('/checkpoints/{checkpoint}/restore', [CheckpointController::class, 'restore'])->whereNumber('checkpoint')->name('checkpoints.restore');
 
         Route::get('/audit', AuditController::class)->name('audit');
 

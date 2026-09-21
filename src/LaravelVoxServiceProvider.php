@@ -2,12 +2,15 @@
 
 namespace KeypointSolutions\LaravelVox;
 
+use Illuminate\Console\Scheduling\Schedule;
+use KeypointSolutions\LaravelVox\Commands\CheckpointCommand;
 use KeypointSolutions\LaravelVox\Commands\CleanupCommand;
 use KeypointSolutions\LaravelVox\Commands\CompileCommand;
 use KeypointSolutions\LaravelVox\Commands\DeployCommand;
 use KeypointSolutions\LaravelVox\Commands\DiscoverFrontendCommand;
 use KeypointSolutions\LaravelVox\Commands\GenerateSyncKeyCommand;
 use KeypointSolutions\LaravelVox\Commands\ParseTranslationsCommand;
+use KeypointSolutions\LaravelVox\Commands\PruneCheckpointsCommand;
 use KeypointSolutions\LaravelVox\Commands\PublishCommand;
 use KeypointSolutions\LaravelVox\Commands\ResetCommand;
 use KeypointSolutions\LaravelVox\Commands\ReviewCommand;
@@ -23,6 +26,7 @@ use KeypointSolutions\LaravelVox\Support\VoxDatabaseManager;
 use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
+use KeypointSolutions\LaravelVox\Translation\TranslationCheckpoints;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileTransaction;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -31,6 +35,7 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
 {
     public function packageRegistered(): void
     {
+        $this->app->singleton(TranslationCheckpoints::class);
         $this->app->singleton(VoxMutationLock::class);
         $this->app->singleton(TranslationFileTransaction::class);
         $this->app->singleton(
@@ -65,8 +70,14 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
             __DIR__.'/../dist/vox' => public_path('vendor/vox'),
         ], 'vox-assets');
 
+        $this->callAfterResolving(Schedule::class, function ($schedule): void {
+            $schedule->command('vox:checkpoint-prune')->daily()->withoutOverlapping();
+        });
+
         if ($this->app->runningInConsole()) {
             $this->commands([
+                CheckpointCommand::class,
+                PruneCheckpointsCommand::class,
                 CleanupCommand::class,
                 ResetCommand::class,
                 SetupCommand::class,

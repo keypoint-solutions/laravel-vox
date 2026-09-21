@@ -9,6 +9,8 @@ use Throwable;
 
 class PublishCommand extends Command
 {
+    use RecordsTranslationCheckpoint;
+
     public $signature = 'vox:publish {--published-only : Rewrite recorded defaults and published overrides without publishing pending edits or deletions}';
 
     public $description = 'Publish approved translation edits, or rewrite only previously published wording.';

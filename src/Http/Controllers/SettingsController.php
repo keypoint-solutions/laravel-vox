@@ -31,8 +31,17 @@ class SettingsController
     public function update(Request $request): RedirectResponse
     {
         $section = $request->validate([
-            'section' => ['required', 'string', Rule::in(['ai', 'dynamic_keys', 'sync'])],
+            'section' => ['required', 'string', Rule::in(['ai', 'dynamic_keys', 'sync', 'checkpoints'])],
         ])['section'];
+
+        if ($section === 'checkpoints') {
+            $data = $request->validate(['checkpoint_limit' => ['required', 'integer', 'min:1', 'max:1000']]);
+            if (! $this->settings->save(['checkpoint_limit' => (int) $data['checkpoint_limit']])) {
+                return redirect()->back()->withErrors(['checkpoint_limit' => 'Settings storage is unavailable.']);
+            }
+
+            return Inertia::flash('success', 'Checkpoint retention saved. Older checkpoints will be removed by daily cleanup or the next translation change.')->back();
+        }
 
         if ($section === 'ai') {
             return $this->updateAiSettings($request);

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
@@ -26,6 +27,14 @@ class LocaleProvisioner
     ) {}
 
     public function provision(string $locale, bool $autoTranslate = false): LocaleProvisionResult
+    {
+        return app(VoxMutationLock::class)->run(
+            fn (): LocaleProvisionResult => $this->provisionUsing($locale, $autoTranslate),
+            'adding locale '.$locale
+        );
+    }
+
+    private function provisionUsing(string $locale, bool $autoTranslate): LocaleProvisionResult
     {
         $locale = $this->localeResolver->normalizeLocaleCode($locale);
 
@@ -127,9 +136,7 @@ class LocaleProvisioner
 
                         File::ensureDirectoryExists(dirname($destination));
 
-                        if (! File::copy($stagedPath, $destination)) {
-                            throw new RuntimeException("Unable to create locale file [{$relativePath}].");
-                        }
+                        app(TranslationFileTransaction::class)->replace($destination, File::get($stagedPath));
 
                         $installedFiles[] = $destination;
                     }

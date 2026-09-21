@@ -17,6 +17,7 @@ class VoxSettingsRepository
         'dynamic_key_patterns',
         'provisioned_locales',
         'sync_enabled',
+        'checkpoint_limit',
     ];
 
     /**
@@ -32,8 +33,14 @@ class VoxSettingsRepository
             'dynamic_key_patterns' => $this->editableDynamicKeyPatterns(),
             'configured_dynamic_key_patterns' => $this->configuredDynamicKeyPatterns(),
             'sync_enabled' => (bool) $this->get('sync_enabled', config('vox.sync.enabled', true)),
+            'checkpoint_limit' => $this->checkpointLimit(),
             'sync_key_set' => filled(config('vox.sync.key')),
         ];
+    }
+
+    public function checkpointLimit(): int
+    {
+        return max(1, min(1000, (int) $this->get('checkpoint_limit', config('vox.checkpoints.limit', 10))));
     }
 
     /**

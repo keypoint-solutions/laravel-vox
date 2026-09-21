@@ -25,6 +25,9 @@ export interface AppPageProps {
             manage_translation_translate: string;
             publish: string;
             publish_store: string;
+            checkpoints: string;
+            checkpoints_store: string;
+            checkpoints_restore: string;
             audit: string;
             settings: string;
             settings_update: string;

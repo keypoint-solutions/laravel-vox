@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia;
 use KeypointSolutions\LaravelVox\Models\VoxSetting;
+use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 
 beforeEach(function (): void {
     $this->withoutVite();
@@ -127,4 +128,11 @@ it('refreshes models and reports a verified connection', function (): void {
         ->assertInertiaFlash('success', 'AI provider connection verified and available models refreshed.');
 
     Http::assertSentCount(1);
+});
+
+it('validates and saves checkpoint count retention', function (): void {
+    $this->get('/vox/settings')->assertInertia(fn (AssertableInertia $page) => $page->where('settings.checkpoint_limit', 10));
+    $this->post('/vox/settings', ['section' => 'checkpoints', 'checkpoint_limit' => 25])->assertSessionHasNoErrors();
+    expect(app(VoxSettingsRepository::class)->checkpointLimit())->toBe(25);
+    $this->post('/vox/settings', ['section' => 'checkpoints', 'checkpoint_limit' => 0])->assertSessionHasErrors('checkpoint_limit');
 });

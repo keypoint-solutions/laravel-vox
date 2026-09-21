@@ -8,6 +8,8 @@ use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
 
 class DiscoverFrontendCommand extends Command
 {
+    use RecordsTranslationCheckpoint;
+
     public $signature = 'vox:frontend-discover';
 
     public $description = 'Refresh the frontend group manifest from source without changing translations or database values.';

@@ -7,6 +7,8 @@ use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
 
 class ReviewCommand extends Command
 {
+    use RecordsTranslationCheckpoint;
+
     public $signature = 'vox:review
         {--environment=files : Source environment ID, files, or all}
         {--accept-all : Accept and approve all incoming changes from this source}

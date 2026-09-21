@@ -59,6 +59,9 @@ class TranslationFileTransaction
 
     public function replace(string $path, string $contents): void
     {
+        if (File::isFile($path) && File::get($path) === $contents) {
+            return;
+        }
         $this->remember($path);
         File::ensureDirectoryExists(dirname($path));
         File::replace($path, $contents, $this->permissions($path));
@@ -77,6 +80,7 @@ class TranslationFileTransaction
 
     private function remember(string $path): void
     {
+        app(TranslationCheckpoints::class)->rememberFile($path);
         if ($this->active && ! array_key_exists($path, $this->originals)) {
             $this->originals[$path] = File::exists($path) ? [
                 'contents' => File::get($path),

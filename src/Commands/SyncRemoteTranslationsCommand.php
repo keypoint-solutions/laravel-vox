@@ -14,6 +14,8 @@ use function Laravel\Prompts\warning;
 
 class SyncRemoteTranslationsCommand extends Command
 {
+    use RecordsTranslationCheckpoint;
+
     public $signature = 'vox:sync-remote
         {--include-drafts : Fetch editable remote values instead of published wording}
         {--environment= : Environment ID for non-interactive pulls}

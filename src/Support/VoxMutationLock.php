@@ -4,13 +4,14 @@ namespace KeypointSolutions\LaravelVox\Support;
 
 use Closure;
 use Illuminate\Support\Facades\File;
+use KeypointSolutions\LaravelVox\Translation\TranslationCheckpoints;
 use RuntimeException;
 
 class VoxMutationLock
 {
     private int $depth = 0;
 
-    public function run(Closure $callback): mixed
+    public function run(Closure $callback, string $label = 'translation changes'): mixed
     {
         if ($this->depth > 0) {
             return $callback();
@@ -31,7 +32,7 @@ class VoxMutationLock
 
             $this->depth++;
 
-            return $callback();
+            return app(TranslationCheckpoints::class)->run($label, $callback);
         } finally {
             $this->depth = 0;
             flock($handle, LOCK_UN);

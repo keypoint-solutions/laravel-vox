@@ -8,6 +8,8 @@ use Throwable;
 
 class DeployCommand extends Command
 {
+    use RecordsTranslationCheckpoint;
+
     public $signature = 'vox:deploy';
 
     public $description = 'Import freshly installed translation files and generate live files preserving published overrides and drafts.';
