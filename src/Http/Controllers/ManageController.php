@@ -80,7 +80,7 @@ class ManageController
         $scope = $request->input('scope');
         $scope = is_string($scope) ? $scope : null;
 
-        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing', 'empty', 'orphan', 'dynamic', 'retained', 'pending-deletion'];
+        $allowedStatus = ['new', 'updated', 'pending', 'approved', 'missing', 'empty', 'orphan', 'dynamic', 'retained', 'pending-deletion', 'published-overrides', 'drafts'];
         if (! in_array($status, $allowedStatus, true)) {
             $status = null;
         }
@@ -256,6 +256,8 @@ class ManageController
                     'values' => $values,
                     'file_values' => $translation->values->pluck('file_value', 'locale')->all(),
                     'published_overrides' => $translation->values->pluck('published_override', 'locale')->all(),
+                    'draft_locales' => $translation->values->where('is_pending_publish', true)->where('is_approved', false)->pluck('locale')->all(),
+                    'pending_publish_locales' => $translation->values->filter(fn ($value): bool => $value->hasApprovedChange())->pluck('locale')->all(),
                     'approved_locales' => $translation->values->where('is_approved', true)->pluck('locale')->all(),
                     'values_count' => $translation->values->count(),
                     'occurrences' => $translation->occurrences->reject(fn ($occurrence): bool => collect($dynamicMatch['occurrences'] ?? [])->contains(fn (array $possible): bool => $possible['file'] === $occurrence->file_path && ($possible['line'] ?? null) === $occurrence->line_number))->values()->map(function ($occurrence): array {
@@ -281,6 +283,18 @@ class ManageController
             return;
         }
         if ($status === null) {
+            return;
+        }
+
+        if ($status === 'published-overrides') {
+            $query->whereHas('values', fn (Builder $values) => $values->whereNotNull('published_override'));
+
+            return;
+        }
+
+        if ($status === 'drafts') {
+            $query->whereHas('values', fn (Builder $values) => $values->where('is_pending_publish', true)->where('is_approved', false));
+
             return;
         }
 
@@ -523,7 +537,9 @@ class ManageController
         return [
             ['value' => 'new', 'label' => 'New'],
             ['value' => 'updated', 'label' => 'Updated'],
-            ['value' => 'pending', 'label' => 'Pending'],
+            ['value' => 'published-overrides', 'label' => 'Published overrides'],
+            ['value' => 'drafts', 'label' => 'Drafts'],
+            ['value' => 'pending', 'label' => 'Pending review'],
             ['value' => 'approved', 'label' => 'Approved'],
             ['value' => 'missing', 'label' => 'Missing'],
             ['value' => 'empty', 'label' => 'Empty'],

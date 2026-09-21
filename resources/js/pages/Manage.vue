@@ -80,6 +80,8 @@
         updated_at: string | null;
         values_count: number;
         values: Record<string, string>;
+        draft_locales: string[];
+        pending_publish_locales: string[];
         published_overrides: Record<string, string | null>;
         file_values: Record<string, string | null>;
         occurrences: OccurrenceItem[];
@@ -157,7 +159,9 @@
         { value: 'dynamic', label: 'Dynamic usage' },
         { value: 'retained', label: 'Retained by rule' },
         { value: 'pending-deletion', label: 'Pending deletion' },
-        { value: 'pending', label: 'Pending' },
+        { value: 'published-overrides', label: 'Published overrides' },
+        { value: 'drafts', label: 'Drafts' },
+        { value: 'pending', label: 'Pending review' },
         { value: 'approved', label: 'Approved' },
     ]);
 
@@ -551,6 +555,12 @@
 
     function handleBulkError(errors: Record<string, string>): void {
         showToast(Object.values(errors)[0] ?? 'Request failed.', 'error');
+    }
+
+    function overrideLocales(translation: TranslationItem): string[] {
+        return Object.keys(translation.published_overrides ?? {}).filter(
+            (locale) => translation.published_overrides[locale] != null
+        );
     }
 
     function workflowStatusLabel(translation: TranslationItem): string {
@@ -1299,6 +1309,29 @@
                                             Orphan
                                         </Badge>
                                     </div>
+                                    <div class="mt-1 flex flex-wrap gap-1.5">
+                                        <Badge
+                                            v-if="overrideLocales(translation).length"
+                                            variant="secondary"
+                                            :title="`Published overrides: ${overrideLocales(translation).join(', ').toUpperCase()}`"
+                                        >
+                                            Published override ·
+                                            {{ overrideLocales(translation).join(', ').toUpperCase() }}
+                                        </Badge>
+                                        <Badge
+                                            v-if="translation.draft_locales?.length"
+                                            variant="warning"
+                                        >
+                                            Draft · {{ translation.draft_locales.join(', ').toUpperCase() }}
+                                        </Badge>
+                                        <Badge
+                                            v-if="translation.pending_publish_locales?.length"
+                                            variant="outline"
+                                        >
+                                            Unpublished ·
+                                            {{ translation.pending_publish_locales.join(', ').toUpperCase() }}
+                                        </Badge>
+                                    </div>
                                     <p class="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
                                         {{ translation.values?.[baseLocale] || '—' }}
                                     </p>
@@ -1647,7 +1680,9 @@
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <p class="text-sm font-semibold">Translations</p>
-                    <p class="text-muted-foreground text-xs">Edit values for each locale.</p>
+                    <p class="text-muted-foreground text-xs">
+                        Changes are saved as drafts. Approve and publish them to update the application.
+                    </p>
                 </div>
                 <div
                     v-if="aiStatus.available"
@@ -1710,13 +1745,15 @@
                     class="bg-muted/40 space-y-3 rounded-lg border p-3 text-sm"
                 >
                     <div>
-                        <p class="text-muted-foreground text-xs font-medium">Live Vox override</p>
+                        <p class="text-muted-foreground text-xs font-medium">Published override · currently live</p>
                         <p class="mt-1 [overflow-wrap:anywhere] whitespace-pre-wrap">
                             {{ editTranslation.published_overrides[locale] }}
                         </p>
                     </div>
                     <div>
-                        <p class="text-muted-foreground text-xs font-medium">Application wording</p>
+                        <p class="text-muted-foreground text-xs font-medium">
+                            Application default · without the override
+                        </p>
                         <p class="mt-1 [overflow-wrap:anywhere] whitespace-pre-wrap">
                             {{ editTranslation.file_values?.[locale] ?? 'No application value' }}
                         </p>
@@ -1728,10 +1765,26 @@
                         variant="outline"
                         @click="useApplicationWording(locale)"
                     >
-                        {{ usingApplicationLocale === locale ? 'Restoring…' : 'Use application wording' }}
+                        {{ usingApplicationLocale === locale ? 'Removing…' : 'Remove published override' }}
                     </Button>
-                    <p class="text-muted-foreground text-xs">Removes this live override and keeps your draft.</p>
+                    <p class="text-muted-foreground text-xs">
+                        {{
+                            editTranslation.published_overrides[locale] === editTranslation.file_values?.[locale]
+                                ? 'The override matches the application default. Removing it will not change the live wording.'
+                                : 'Immediately restores the application default in the live translation files.'
+                        }}
+                        Any unpublished edits are preserved.
+                    </p>
                 </div>
+                <p class="text-muted-foreground text-xs">
+                    {{
+                        editTranslation?.draft_locales?.includes(locale)
+                            ? 'Draft · awaiting approval'
+                            : editTranslation?.pending_publish_locales?.includes(locale)
+                              ? 'Approved · not yet published'
+                              : 'Current wording'
+                    }}
+                </p>
                 <Textarea
                     v-model="editValues[locale]"
                     :data-test="`translation-value-${locale}`"

@@ -580,3 +580,18 @@ it('skips unusable sources in bulk AI translation using the shared eligibility r
         ->assertInertiaFlash('success', 'No missing target values were found in the selected translations.');
     Http::assertNothingSent();
 });
+
+it('exposes published overrides independently of drafts and approval', function (): void {
+    $published = VoxTranslation::factory()->approved()->withValues(['en' => 'Hello', 'fr' => 'Bonjour'])->create(['group' => 'messages', 'key' => 'published']);
+    $published->values()->where('locale', 'fr')->update(['file_value' => 'Bonjour', 'published_override' => 'Bonjour', 'is_pending_publish' => false, 'is_approved' => true]);
+    $draft = VoxTranslation::factory()->withValues(['en' => 'Draft'])->create(['group' => 'messages', 'key' => 'draft']);
+    $draft->values()->where('locale', 'en')->firstOrFail()->saveDraft('Changed draft');
+
+    $rows = manageTranslations($this->get('/vox/manage'))->keyBy('display_key');
+    expect($rows['messages.published']['published_overrides']['fr'])->toBe('Bonjour')
+        ->and($rows['messages.published']['draft_locales'])->toBe([])
+        ->and($rows['messages.draft']['draft_locales'])->toBe(['en']);
+
+    expect(manageTranslations($this->get('/vox/manage?status=published-overrides'))->pluck('id')->all())->toBe([$published->id])
+        ->and(manageTranslations($this->get('/vox/manage?status=drafts'))->pluck('id')->all())->toBe([$draft->id]);
+});
