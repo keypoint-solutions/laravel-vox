@@ -63,3 +63,37 @@ it('restores original contents and permissions and removes new files on rollback
         ->and(fileperms($deleted) & 0777)->toBe(0664)
         ->and(File::exists($created))->toBeFalse();
 });
+
+it('restores nested and empty directories with their permissions on rollback', function (): void {
+    $directory = $this->transactionPath.'/de';
+    File::ensureDirectoryExists($directory.'/nested/empty');
+    File::put($directory.'/nested/messages.php', 'original');
+    chmod($directory.'/nested', 0700);
+    chmod($directory.'/nested/messages.php', 0600);
+    $transaction = app(TranslationFileTransaction::class);
+
+    expect(fn () => $transaction->run(function () use ($transaction, $directory): void {
+        $transaction->deleteDirectory($directory);
+        expect(File::exists($directory))->toBeFalse();
+        throw new RuntimeException('Rollback');
+    }))->toThrow(RuntimeException::class, 'Rollback');
+
+    clearstatcache();
+    expect(File::isDirectory($directory.'/nested/empty'))->toBeTrue()
+        ->and(File::get($directory.'/nested/messages.php'))->toBe('original')
+        ->and(fileperms($directory.'/nested') & 0777)->toBe(0700)
+        ->and(fileperms($directory.'/nested/messages.php') & 0777)->toBe(0600);
+});
+
+it('refuses to follow symlinks when removing a directory', function (): void {
+    $directory = $this->transactionPath.'/de';
+    File::ensureDirectoryExists($directory);
+    File::put($this->transactionPath.'/keep.php', 'keep');
+    symlink($this->transactionPath.'/keep.php', $directory.'/linked.php');
+    $transaction = app(TranslationFileTransaction::class);
+
+    expect(fn () => $transaction->run(fn () => $transaction->deleteDirectory($directory)))
+        ->toThrow(RuntimeException::class, 'Cannot remove a symbolic link');
+    expect(File::get($this->transactionPath.'/keep.php'))->toBe('keep')
+        ->and(is_link($directory.'/linked.php'))->toBeTrue();
+});

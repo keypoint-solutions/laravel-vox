@@ -16,7 +16,7 @@
     import { computed, markRaw, nextTick, ref } from 'vue';
 
     import RemoteReconciliationPanel, { type ReconciliationPage } from '@/components/RemoteReconciliationPanel.vue';
-    import { Badge, Button, Input, Label, Tooltip } from '@/components/ui';
+    import { Badge, Button, Input, Label, SlidePanel, Tooltip } from '@/components/ui';
     import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
 
@@ -43,6 +43,7 @@
             is_default: boolean;
             has_runtime_translations: boolean;
         }[];
+        localeRemovalReasons: Record<string, string | null>;
         baseLocale: string;
         ai: {
             available: boolean;
@@ -76,6 +77,29 @@
         auto_translate: false,
         use_default: false,
     });
+
+    const removingLocale = ref<SyncPageProps['locales'][number] | null>(null);
+    const removalForm = useForm({ locale: '' });
+
+    function reviewLocaleRemoval(locale: SyncPageProps['locales'][number]): void {
+        removalForm.reset();
+        removalForm.clearErrors();
+        removalForm.locale = locale.code;
+        removingLocale.value = locale;
+    }
+
+    function removeLocale(): void {
+        success.value = null;
+        actionError.value = null;
+        removalForm.delete(routes.value?.sync_locale_destroy ?? '', {
+            preserveScroll: true,
+            onSuccess: (responsePage) => {
+                success.value = (responsePage.flash?.success as string | undefined) ?? 'Language removed.';
+                removingLocale.value = null;
+                removalForm.reset();
+            },
+        });
+    }
 
     function environmentRoute(template: string | undefined, id: number): string {
         return template?.replace('__environment__', String(id)) ?? '';
@@ -353,6 +377,21 @@
                         :variant="locale.is_default ? 'default' : 'secondary'"
                     >
                         {{ locale.name }} · {{ locale.code }}
+                        <Tooltip
+                            v-if="page.props.localeRemovalReasons[locale.code] === null"
+                            :text="`Remove ${locale.name}`"
+                        >
+                            <button
+                                type="button"
+                                class="hover:bg-destructive/10 ml-1 rounded-sm p-1 focus-visible:outline-2"
+                                :aria-label="`Remove ${locale.name} (${locale.code})`"
+                                :data-test="`remove-locale-${locale.code}`"
+                                :disabled="localeForm.processing || removalForm.processing"
+                                @click="reviewLocaleRemoval(locale)"
+                            >
+                                <Trash2 class="size-3" />
+                            </button>
+                        </Tooltip>
                     </Badge>
                 </div>
             </div>
@@ -703,4 +742,43 @@
             :environments="environments"
         />
     </div>
+    <SlidePanel
+        :open="removingLocale !== null"
+        :title="`Remove ${removingLocale?.name ?? 'language'}`"
+        @close="!removalForm.processing && (removingLocale = null)"
+    >
+        <div class="space-y-4 text-sm">
+            <p>
+                Permanently remove {{ removingLocale?.name }} ({{ removingLocale?.code }}), including its translations,
+                unpublished edits, fallback rules, sync review data, and generated language files.
+            </p>
+            <p class="font-semibold">This takes effect immediately. You do not need to Publish.</p>
+            <p>Other languages and shared translation keys will be kept.</p>
+            <p
+                v-for="(error, field) in removalForm.errors"
+                :key="field"
+                role="alert"
+                class="text-destructive"
+            >
+                {{ error }}
+            </p>
+        </div>
+        <template #footer>
+            <div class="flex justify-end gap-2">
+                <Button
+                    variant="outline"
+                    :disabled="removalForm.processing"
+                    @click="removingLocale = null"
+                    >Cancel</Button
+                >
+                <Button
+                    variant="destructive"
+                    data-test="confirm-remove-locale"
+                    :disabled="removalForm.processing"
+                    @click="removeLocale"
+                    >{{ removalForm.processing ? 'Removing…' : 'Remove language' }}</Button
+                >
+            </div>
+        </template>
+    </SlidePanel>
 </template>

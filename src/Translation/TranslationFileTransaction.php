@@ -12,6 +12,9 @@ class TranslationFileTransaction
     /** @var array<string, array{contents: string, mode: int}|null> */
     private array $originals = [];
 
+    /** @var array<string, int> */
+    private array $directories = [];
+
     private bool $active = false;
 
     /** @var array<int, Closure> */
@@ -27,10 +30,15 @@ class TranslationFileTransaction
             $result = $callback();
             $afterCommit = $this->afterCommit;
         } catch (Throwable $exception) {
+            foreach ($this->directories as $path => $mode) {
+                File::ensureDirectoryExists($path, $mode);
+                chmod($path, $mode);
+            }
             foreach (array_reverse($this->originals, true) as $path => $original) {
                 if ($original === null) {
                     File::delete($path);
                 } else {
+                    File::ensureDirectoryExists(dirname($path));
                     File::replace($path, $original['contents'], $original['mode']);
                 }
             }
@@ -38,6 +46,7 @@ class TranslationFileTransaction
         } finally {
             $this->active = false;
             $this->originals = [];
+            $this->directories = [];
             $this->afterCommit = [];
         }
 
@@ -75,6 +84,32 @@ class TranslationFileTransaction
         $this->remember($path);
         if (File::exists($path) && ! File::delete($path)) {
             throw new RuntimeException('Unable to remove translation file: '.$path);
+        }
+    }
+
+    public function deleteDirectory(string $path): void
+    {
+        if (is_link($path)) {
+            throw new RuntimeException('Cannot remove a symbolic link: '.$path);
+        }
+        if (! File::isDirectory($path)) {
+            return;
+        }
+        if ($this->active && ! array_key_exists($path, $this->directories)) {
+            $this->directories[$path] = $this->permissions($path);
+        }
+        foreach (new \FilesystemIterator($path) as $entry) {
+            if ($entry->isLink()) {
+                throw new RuntimeException('Cannot remove a symbolic link: '.$entry->getPathname());
+            }
+            if ($entry->isDir()) {
+                $this->deleteDirectory($entry->getPathname());
+            } else {
+                $this->delete($entry->getPathname());
+            }
+        }
+        if (! rmdir($path)) {
+            throw new RuntimeException('Unable to remove translation directory: '.$path);
         }
     }
 

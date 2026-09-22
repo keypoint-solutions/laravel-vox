@@ -333,6 +333,7 @@ class TranslationCheckpoints
             'sync.local' => 'syncing local files',
             'sync.archive.import' => 'importing translation files',
             'sync.locales.store' => 'adding a language',
+            'sync.locales.destroy' => 'removing a language',
             'sync.reconcile' => 'accepting incoming wording',
             'manage.translations.update' => 'editing translations',
             'manage.translations.toggle-approval' => 'changing approval',

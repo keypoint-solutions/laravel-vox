@@ -10,11 +10,12 @@ use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Support\VoxLocaleCatalog;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationChoiceDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
+use KeypointSolutions\LaravelVox\Translation\LocaleRemover;
 use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
 
 class SyncPageController
 {
-    public function __invoke(Request $request, VoxLocaleCatalog $localeCatalog, RemoteReconciliation $reconciliation): Response
+    public function __invoke(Request $request, VoxLocaleCatalog $localeCatalog, RemoteReconciliation $reconciliation, LocaleRemover $localeRemover): Response
     {
         $catalog = $localeCatalog->all();
         $driver = (string) config('vox.translate.driver', 'openai');
@@ -47,6 +48,7 @@ class SyncPageController
                 ->latest('created_at')
                 ->first()?->created_at?->toIso8601String(),
             'locales' => $catalog['locales'],
+            'localeRemovalReasons' => collect($catalog['locales'])->mapWithKeys(fn (array $locale): array => [$locale['code'] => $localeRemover->unavailableReason($locale['code'])])->all(),
             'baseLocale' => $catalog['default_locale'],
             'ai' => [
                 'available' => $aiAvailable,

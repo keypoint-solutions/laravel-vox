@@ -4,6 +4,12 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.14 — 2026-09-22
+
+- Add language removal in Sync with a simple confirmation and no typed confirmation phrase.
+- Remove dashboard-added language files, runtime catalogues, translation values, fallback rules, and sync review data together, while preserving other languages and shared keys.
+- Protect default, fallback, and application-configured languages; roll back failed removals and support restoration through automatic checkpoints.
+
 ## 1.0.13 — 2026-09-22
 
 - Place language and group fallback controls after the Groups selection on the Manage page.

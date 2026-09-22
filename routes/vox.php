@@ -13,6 +13,7 @@ use KeypointSolutions\LaravelVox\Http\Controllers\ProvisionLocaleController;
 use KeypointSolutions\LaravelVox\Http\Controllers\PublishController;
 use KeypointSolutions\LaravelVox\Http\Controllers\PullRemoteTranslationsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ReconcileRemoteTranslationsController;
+use KeypointSolutions\LaravelVox\Http\Controllers\RemoveLocaleController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ResetController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SettingsController;
 use KeypointSolutions\LaravelVox\Http\Controllers\SyncController;
@@ -42,6 +43,7 @@ Route::middleware([...$configMiddleware, SerializeVoxWrites::class])
         Route::post('/sync/choose', ChooseRemoteTranslationController::class)->middleware('throttle:30,1')->name('sync.choose');
         Route::post('/sync/reconcile', ReconcileRemoteTranslationsController::class)->name('sync.reconcile');
         Route::post('/sync/locales', ProvisionLocaleController::class)->name('sync.locales.store');
+        Route::delete('/sync/locales', RemoveLocaleController::class)->name('sync.locales.destroy');
         Route::get('/sync/archive', DownloadTranslationArchiveController::class)->name('sync.archive.download');
         Route::post('/sync/archive', ImportTranslationArchiveController::class)->name('sync.archive.import');
         Route::post('/sync/environments', [SyncEnvironmentController::class, 'store'])

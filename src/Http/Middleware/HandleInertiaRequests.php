@@ -79,6 +79,7 @@ class HandleInertiaRequests extends Middleware
             'sync_local' => route($routeNamePrefix.'sync.local', absolute: false),
             'sync_choose' => route($routeNamePrefix.'sync.choose', absolute: false),
             'sync_reconcile' => route($routeNamePrefix.'sync.reconcile', absolute: false),
+            'sync_locale_destroy' => route($routeNamePrefix.'sync.locales.destroy', absolute: false),
             'sync_locale_store' => route($routeNamePrefix.'sync.locales.store', absolute: false),
             'sync_archive_download' => route($routeNamePrefix.'sync.archive.download', absolute: false),
             'sync_archive_import' => route($routeNamePrefix.'sync.archive.import', absolute: false),

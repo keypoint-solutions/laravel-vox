@@ -337,6 +337,10 @@ Delete any key from Manage, then Publish to remove all its locale values. Cancel
 
 In Sync, **Application languages** creates a locale from the configured base locale, including nested PHP groups and vendor JSON. Without AI, nonempty source wording receives the missing marker. Optional AI skips unusable sources. These generated files become live application defaults immediately; this is different from Manage's AI draft workflow.
 
+To remove a language added through Vox, open **Sync → Application languages**, click its trash icon, then confirm **Remove language**. No typing is required; **Cancel** leaves it unchanged. Removal takes effect immediately without Publish and deletes that language's PHP/JSON files (including vendor translations), runtime catalogue, saved translations and drafts, fallback rules, and sync review data. Other languages and shared translation keys remain intact. Failed removals roll back, and the automatic checkpoint can restore the removed language while that checkpoint is retained.
+
+Default and fallback languages cannot be removed. Application-configured languages must first be removed from the application's locale configuration; the dashboard removal action is available only for languages originally added through Vox. Languages discovered solely from existing application files are not removable through this action.
+
 ## Typical Developer Workflow
 
 After [installation and configuration](#installation), the usual loop is:

@@ -7,6 +7,7 @@ use KeypointSolutions\LaravelVox\Database\Factories\VoxTranslationFactory;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Translation\LocaleProvisioner;
 use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
 
 beforeEach(function (): void {
@@ -58,6 +59,28 @@ it('provisions a new application language from the source locale', function (): 
     expect(File::isFile(lang_path('de/frontend.php')))->toBeTrue()
         ->and((require lang_path('de/frontend.php'))['Regular translation'])
         ->toStartWith('🚩');
+});
+
+it('confirms language removal without typing and supports cancellation', function (): void {
+    app(LocaleProvisioner::class)->provision('de');
+    $page = visit('/vox/sync')
+        ->assertSee('German · de')
+        ->click('[data-test="remove-locale-de"]')
+        ->assertSee('Remove German')
+        ->assertSee('This takes effect immediately.')
+        ->press('Cancel')
+        ->assertSee('German · de');
+
+    expect(File::isDirectory(lang_path('de')))->toBeTrue();
+
+    $page->click('[data-test="remove-locale-de"]')
+        ->click('[data-test="confirm-remove-locale"]')
+        ->assertSee('Removed German (de).')
+        ->assertDontSee('German · de')
+        ->assertSee('English · en')
+        ->assertNoJavaScriptErrors();
+
+    expect(File::isDirectory(lang_path('de')))->toBeFalse();
 });
 
 it('selects a translation archive and enables the import action', function (): void {
