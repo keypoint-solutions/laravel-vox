@@ -275,8 +275,12 @@ function discoveryFixture(t) {
             const groups = JSON.parse(fs.readFileSync('selection.json', 'utf8'));
             const manifest = JSON.stringify({ groups });
             fs.mkdirSync('storage/vox', { recursive: true });
-            if (!fs.existsSync('storage/vox/frontend.json') || fs.readFileSync('storage/vox/frontend.json', 'utf8') !== manifest)
-                fs.writeFileSync('storage/vox/frontend.json', manifest);
+            const manifestPath = 'storage/vox/frontend.json';
+            if (!fs.existsSync(manifestPath) || fs.readFileSync(manifestPath, 'utf8') !== manifest) {
+                const temporaryPath = manifestPath + '.' + process.pid + '.tmp';
+                fs.writeFileSync(temporaryPath, manifest);
+                fs.renameSync(temporaryPath, manifestPath);
+            }
             console.log(JSON.stringify({ paths: [path.resolve('source')], extensions: ['vue', 'ts'], manifest: path.resolve('storage/vox/frontend.json') }));
         }
     `);
