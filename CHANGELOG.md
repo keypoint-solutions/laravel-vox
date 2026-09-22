@@ -4,6 +4,17 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.13 — 2026-09-22
+
+- Place language and group fallback controls after the Groups selection on the Manage page.
+
+## 1.0.12 — 2026-09-22
+
+- Add publishable fallback rules for entire languages, groups, and individual translation keys, with controls on the Manage and Publish pages.
+- Add incremental translation checkpoints with configurable retention, defaulting to the latest 50 checkpoints.
+- Make translation archive imports atomic so a failed import leaves existing translations intact.
+- Show published overrides alongside drafts and clarify translation wording states during management and sync review.
+
 ## 1.0.11 — 2026-09-15
 
 - Query review states, counts, and pages without hydrating the entire translation snapshot; preserve stale-decision checks and limit individual reviews to selected candidates.

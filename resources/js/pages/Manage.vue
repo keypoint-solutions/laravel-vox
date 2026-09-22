@@ -874,56 +874,6 @@
             </Button>
         </div>
 
-        <details class="bg-card rounded-xl border p-4">
-            <summary class="cursor-pointer text-sm font-semibold">Language and group fallback</summary>
-            <div class="mt-4 max-w-xl space-y-4">
-                <p class="text-muted-foreground text-sm">
-                    Use {{ baseLocale }} wording for a language or group. Individual keys can override these choices.
-                    Publish to apply changes.
-                </p>
-                <Select
-                    v-model="fallbackLocale"
-                    :options="targetLocales.map((locale) => ({ value: locale, label: locale }))"
-                    placeholder="Choose language"
-                    aria-label="Fallback language"
-                />
-                <template v-if="fallbackLocale">
-                    <div class="space-y-2">
-                        <p class="text-sm font-medium">Entire language · {{ fallbackLocale }}</p>
-                        <FallbackChoice
-                            :key="fallbackLocale + '-locale'"
-                            :locale="fallbackLocale"
-                            scope="locale"
-                            :selection="scopeRule('locale')"
-                            :published="scopeRule('locale', true)"
-                            :base-locale="baseLocale"
-                        />
-                    </div>
-                    <div
-                        v-if="selectedGroup"
-                        class="space-y-2 border-t pt-4"
-                    >
-                        <p class="text-sm font-medium">Group · {{ selectedGroup }}</p>
-                        <FallbackChoice
-                            :key="fallbackLocale + selectedGroup"
-                            :locale="fallbackLocale"
-                            scope="group"
-                            :group="selectedGroup === 'default' ? 'json' : selectedGroup"
-                            :selection="scopeRule('group')"
-                            :published="scopeRule('group', true)"
-                            :base-locale="baseLocale"
-                        />
-                    </div>
-                    <p
-                        v-else
-                        class="text-muted-foreground text-xs"
-                    >
-                        Select a group below to configure a group override.
-                    </p>
-                </template>
-            </div>
-        </details>
-
         <!-- Stats Cards -->
         <div class="grid gap-4 sm:grid-cols-3">
             <div class="bg-card rounded-xl border p-4">
@@ -1183,6 +1133,56 @@
                         </button>
                     </div>
                 </section>
+
+                <details class="bg-card rounded-xl border p-4">
+                    <summary class="cursor-pointer text-sm font-semibold">Language and group fallback</summary>
+                    <div class="mt-4 max-w-xl space-y-4">
+                        <p class="text-muted-foreground text-sm">
+                            Use {{ baseLocale }} wording for a language or group. Individual keys can override these
+                            choices. Publish to apply changes.
+                        </p>
+                        <Select
+                            v-model="fallbackLocale"
+                            :options="targetLocales.map((locale) => ({ value: locale, label: locale }))"
+                            placeholder="Choose language"
+                            aria-label="Fallback language"
+                        />
+                        <template v-if="fallbackLocale">
+                            <div class="space-y-2">
+                                <p class="text-sm font-medium">Entire language · {{ fallbackLocale }}</p>
+                                <FallbackChoice
+                                    :key="fallbackLocale + '-locale'"
+                                    :locale="fallbackLocale"
+                                    scope="locale"
+                                    :selection="scopeRule('locale')"
+                                    :published="scopeRule('locale', true)"
+                                    :base-locale="baseLocale"
+                                />
+                            </div>
+                            <div
+                                v-if="selectedGroup"
+                                class="space-y-2 border-t pt-4"
+                            >
+                                <p class="text-sm font-medium">Group · {{ selectedGroup }}</p>
+                                <FallbackChoice
+                                    :key="fallbackLocale + selectedGroup"
+                                    :locale="fallbackLocale"
+                                    scope="group"
+                                    :group="selectedGroup === 'default' ? 'json' : selectedGroup"
+                                    :selection="scopeRule('group')"
+                                    :published="scopeRule('group', true)"
+                                    :base-locale="baseLocale"
+                                />
+                            </div>
+                            <p
+                                v-else
+                                class="text-muted-foreground text-xs"
+                            >
+                                Select a group above to configure a group override.
+                            </p>
+                        </template>
+                    </div>
+                </details>
             </aside>
 
             <!-- Main: Translations List -->
