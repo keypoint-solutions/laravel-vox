@@ -131,6 +131,22 @@ OPENAI_API_KEY=your-api-key
 
 To use another database, define a connection in `config/database.php` and set `VOX_DB_CONNECTION` to its name. To relocate the default SQLite file, set `VOX_DB_PATH`. Changing connections does not transfer existing Vox data.
 
+### Memory limit
+
+Before mutation operations such as sync, deploy, publish, and checkpoint restoration, Vox raises the current PHP process's memory limit to at least `256M`. Higher or unlimited limits are preserved. This is a minimum PHP limit, not a guarantee that every dataset fits within 256 MB.
+
+Configure the minimum through `VOX_MEMORY_LIMIT` or `vox.memory_limit`:
+
+```dotenv
+VOX_MEMORY_LIMIT=256M
+```
+
+Use a larger value such as `512M` when needed. Set `VOX_MEMORY_LIMIT=null` (unquoted), or set `vox.memory_limit` to PHP `null`, to leave memory management to PHP. Rebuild Laravel's configuration cache after changing the setting if configuration is cached.
+
+The increase remains in effect for the current process and does not modify `php.ini`. If the server prevents the requested increase, Vox stops with a configuration error.
+
+### Translation options
+
 The base locale defaults to `app.locale`; it does not have to be English. Locale and frontend-group lists use `mode: auto|configured` and `values`. In PHP config, `values` may be an array; environment values are comma-separated. `configured` replaces automatic discovery.
 
 | Setting                                      | Purpose                                                    |

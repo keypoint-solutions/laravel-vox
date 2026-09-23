@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationOccurrence;
@@ -44,6 +45,96 @@ it('syncs translation files into the vox database', function () {
         ->first();
 
     expect($vendorTranslation)->not->toBeNull();
+});
+
+it('preserves unchanged occurrences and replaces changed occurrences in bounded inserts', function (): void {
+    $targetRoot = prepareVoxFixtures();
+    $syncer = app(TranslationSyncer::class);
+    $occurrences = [];
+    for ($line = 1; $line <= 120; $line++) {
+        $occurrences[] = [
+            'file' => $targetRoot.'/app/Example.php',
+            'line' => $line,
+            'before' => 'before '.$line,
+            'after' => 'after '.$line,
+        ];
+    }
+    $scanResults = [
+        'messages.hello' => [
+            'group' => 'messages',
+            'key' => 'hello',
+            'is_frontend' => false,
+            'source' => '__',
+            'occurrences' => $occurrences,
+        ],
+    ];
+
+    $syncer->sync(['en', 'fr'], $scanResults);
+    $translation = VoxTranslation::query()->where('group', 'messages')->where('key', 'hello')->firstOrFail();
+    $originalIds = $translation->occurrences()->orderBy('line_number')->pluck('id')->all();
+    $translation->occurrences()->update(['updated_at' => '2000-01-01 00:00:00']);
+
+    $syncer->sync(['en', 'fr'], $scanResults);
+
+    expect($translation->occurrences()->orderBy('line_number')->pluck('id')->all())->toBe($originalIds)
+        ->and($translation->occurrences()->firstOrFail()->updated_at->toDateTimeString())->toBe('2000-01-01 00:00:00');
+
+    $scanResults['messages.hello']['occurrences'] = array_reverse($occurrences);
+    $syncer->sync(['en', 'fr'], $scanResults);
+
+    expect($translation->occurrences()->orderBy('line_number')->pluck('id')->all())->toBe($originalIds);
+
+    $scanResults['messages.hello']['occurrences'] = $occurrences;
+    $scanResults['messages.hello']['occurrences'][0]['after'] = 'updated context';
+    $syncer->sync(['en', 'fr'], $scanResults);
+
+    expect($translation->occurrences()->count())->toBe(120)
+        ->and($translation->occurrences()->orderBy('line_number')->pluck('id')->all())->not->toBe($originalIds)
+        ->and($translation->occurrences()->where('line_number', 1)->firstOrFail()->context_after)->toBe('updated context');
+
+    $scanResults['messages.hello']['occurrences'] = [];
+    $syncer->sync(['en', 'fr'], $scanResults);
+
+    expect($translation->occurrences()->count())->toBe(0);
+});
+
+it('hydrates only unseen cleanup candidates during deployment', function (): void {
+    $targetRoot = prepareVoxFixtures();
+    $entries = [];
+    for ($index = 0; $index < 205; $index++) {
+        $entries['key_'.$index] = 'Value '.$index;
+    }
+    File::put($targetRoot.'/lang/en/messages.php', '<?php return '.var_export($entries, true).';');
+    $syncer = app(TranslationSyncer::class);
+    $syncer->sync(['en', 'fr'], [], true);
+
+    $absent = VoxTranslation::factory()->withValues(['en' => 'Previous'])->create([
+        'group' => 'removed',
+        'key' => 'absent',
+    ]);
+    $absentValue = $absent->values()->firstOrFail();
+    $absentValue->update(['file_value' => 'Previous']);
+    $queries = [];
+    $recordQueries = true;
+    DB::connection(config('vox.database.connection'))->listen(function ($query) use (&$queries, &$recordQueries): void {
+        if ($recordQueries) {
+            $queries[] = $query->sql;
+        }
+    });
+
+    $syncer->sync(['en', 'fr'], [], true);
+    $recordQueries = false;
+
+    $valueHydration = array_values(array_filter($queries, fn (string $sql): bool => str_contains($sql, 'vox_translation_values"."id" in (')));
+    $translationHydration = array_values(array_filter($queries, fn (string $sql): bool => str_contains($sql, 'vox_translations"."id" in (')));
+
+    expect($valueHydration)->toHaveCount(1)
+        ->and($valueHydration[0])->toContain('in ('.$absentValue->id.')')
+        ->and($translationHydration)->toHaveCount(1)
+        ->and($translationHydration[0])->toContain('in ('.$absent->id.')')
+        ->and(implode("\n", $queries))->not->toContain('vox_remote_translations')
+        ->and($absentValue->fresh()->file_value)->toBeNull()
+        ->and($absent->fresh()->is_orphan)->toBeTrue();
 });
 
 it('refreshes runtime frontend artifacts when local sync is enabled', function (): void {

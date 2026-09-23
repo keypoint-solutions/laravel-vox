@@ -4,6 +4,8 @@ use KeypointSolutions\LaravelVox\Http\Middleware\Authorize;
 use KeypointSolutions\LaravelVox\Http\Middleware\HandleInertiaRequests;
 
 return [
+    /** Minimum PHP memory limit for Vox mutations; null keeps the existing limit. */
+    'memory_limit' => env('VOX_MEMORY_LIMIT', '256M'),
     'gui' => [
         'enabled' => env('VOX_GUI_ENABLED', true),
     ],

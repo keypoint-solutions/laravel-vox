@@ -243,32 +243,43 @@ class TranslationCheckpoints
     private function rememberTable(string $table): void
     {
         if (! array_key_exists($table, $this->originalRows)) {
-            $this->originalRows[$table] = $this->readRows($table);
+            $this->originalRows[$table] = [];
+            foreach ($this->readRows($table) as $key => $row) {
+                $this->originalRows[$table][$key] = $row;
+            }
         }
     }
 
-    /** @return array<string|int, array<string, mixed>> */
-    private function readRows(string $table): array
+    /** @return iterable<string|int, array<string, mixed>> */
+    private function readRows(string $table): iterable
     {
         $query = $this->connection()->table($table);
         if ($table === 'vox_settings') {
             $query->where('key', 'provisioned_locales');
         }
 
-        return $query->get()->mapWithKeys(fn ($row): array => [$row->{$this->keyColumn($table)} => (array) $row])->all();
+        $keyColumn = $this->keyColumn($table);
+        foreach ($query->lazyById(200, $keyColumn) as $row) {
+            yield $row->{$keyColumn} => (array) $row;
+        }
     }
 
     /** @return array{rows: array, files: array} */
     private function changes(): array
     {
         $rows = [];
-        foreach ($this->originalRows as $table => $before) {
-            $after = $this->readRows($table);
-            foreach (array_unique([...array_keys($before), ...array_keys($after)]) as $key) {
-                if (! $this->sameRow($before[$key] ?? null, $after[$key] ?? null)) {
-                    $rows[$table][$key] = ['before' => $before[$key] ?? null, 'after' => $after[$key] ?? null];
+        foreach (array_keys($this->originalRows) as $table) {
+            foreach ($this->readRows($table) as $key => $after) {
+                $before = $this->originalRows[$table][$key] ?? null;
+                if (! $this->sameRow($before, $after)) {
+                    $rows[$table][$key] = ['before' => $before, 'after' => $after];
                 }
+                unset($this->originalRows[$table][$key]);
             }
+            foreach ($this->originalRows[$table] as $key => $before) {
+                $rows[$table][$key] = ['before' => $before, 'after' => null];
+            }
+            unset($this->originalRows[$table]);
         }
         $files = [];
         foreach ($this->originalFiles as $path => $before) {

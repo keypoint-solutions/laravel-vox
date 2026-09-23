@@ -186,10 +186,24 @@ class TranslationPublisher
         $publishedValues = [];
         $incompleteTranslations = 0;
         $orphanTranslations = 0;
+        $scopeOverrides = $overridesOnly && ! $includeDefaults && ! collect(app(TranslationFallbackRules::class)->all())
+            ->contains('published_mode', 'default');
+
+        if ($scopeOverrides) {
+            $orphanTranslations = VoxTranslation::query()->where('is_orphan', true)->count();
+        }
 
         $translations = VoxTranslation::query()
             ->when(! $overridesOnly, fn ($query) => $query->where('is_pending_delete', false))
-            ->with('values')
+            ->when($scopeOverrides, fn ($query) => $query
+                ->where('is_orphan', false)
+                ->whereHas('values', fn ($values) => $values
+                    ->whereIn('locale', $locales)
+                    ->whereNotNull('published_override')))
+            ->with(['values' => fn ($query) => $query
+                ->when($scopeOverrides, fn ($values) => $values
+                    ->whereIn('locale', $locales)
+                    ->whereNotNull('published_override'))])
             ->orderBy('group')
             ->orderBy('key')
             ->orderBy('id')

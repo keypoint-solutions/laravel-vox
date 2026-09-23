@@ -152,3 +152,40 @@ it('does not cascade-delete translations added outside the checkpoint history', 
     expect(fn () => $this->checkpoints->restore($id))->toThrow(RuntimeException::class, 'outside');
     expect($created->fresh()->values()->where('locale', 'fr')->value('value'))->toBe('External');
 });
+
+it('captures and restores inserts updates and deletions across checkpoint read batches', function (): void {
+    $values = $this->connection->table('vox_translation_values');
+    $translationId = $this->translation->id;
+    for ($index = 0; $index < 450; $index++) {
+        $values->insert([
+            'translation_id' => $translationId,
+            'locale' => 'test_'.$index,
+            'value' => 'Original '.$index,
+        ]);
+    }
+    $before = $values->orderBy('id')->get()->map(fn ($row): array => (array) $row)->all();
+    $snapshotQueries = [];
+    $this->connection->beforeExecuting(function (string $query) use (&$snapshotQueries): void {
+        if (str_starts_with($query, 'select * from "vox_translation_values"')) {
+            $snapshotQueries[] = $query;
+        }
+    });
+
+    app(VoxMutationLock::class)->run(function () use ($values, $translationId): void {
+        (clone $values)->where('locale', 'test_205')->update(['value' => 'Changed']);
+        (clone $values)->whereIn('locale', ['test_0', 'test_399', 'test_449'])->delete();
+        $values->insert(['translation_id' => $translationId, 'locale' => 'new', 'value' => 'Added']);
+    });
+
+    expect(count($snapshotQueries))->toBeGreaterThanOrEqual(6);
+    foreach ($snapshotQueries as $query) {
+        expect($query)->toContain('limit 200');
+    }
+    $checkpoint = $this->connection->table('vox_checkpoints')->latest('id')->first();
+    $changes = json_decode($checkpoint->changes, true);
+    expect($changes['rows']['vox_translation_values'])->toHaveCount(5);
+
+    $this->checkpoints->restore($checkpoint->id);
+
+    expect($values->orderBy('id')->get()->map(fn ($row): array => (array) $row)->all())->toBe($before);
+});

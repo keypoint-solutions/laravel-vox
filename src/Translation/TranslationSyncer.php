@@ -49,7 +49,9 @@ class TranslationSyncer
         $translations = $this->applyDynamicMetadata($translations);
         $seenTranslationIds = [];
         $seenValueIds = [];
-        $fileCandidates = VoxRemoteTranslation::query()->whereNull('environment_id')->pluck('identity')->flip();
+        $fileCandidates = $deployment
+            ? collect()
+            : VoxRemoteTranslation::query()->whereNull('environment_id')->pluck('identity')->flip();
 
         foreach ($translations as $fullKey => $payload) {
             $translation = VoxTranslation::query()->lockForUpdate()->firstOrNew([
@@ -158,98 +160,162 @@ class TranslationSyncer
             }
             $translation->refreshApproval();
 
-            VoxTranslationOccurrence::query()
-                ->where('translation_id', $translation->id)
-                ->delete();
-
-            foreach ($payload['occurrences'] ?? [] as $occurrence) {
-                VoxTranslationOccurrence::query()->create([
-                    'translation_id' => $translation->id,
-                    'file_path' => $occurrence['file'],
-                    'line_number' => $occurrence['line'],
-                    'context_before' => $occurrence['before'],
-                    'context_after' => $occurrence['after'],
-                ]);
-            }
+            $this->syncOccurrences($translation, $payload['occurrences'] ?? []);
 
             $seenTranslationIds[$translation->id] = true;
             $result->incrementTranslations();
         }
 
         if ($deployment) {
-            $absent = VoxTranslationValue::query()
-                ->whereHas('translation', fn ($query) => $query->where('is_pending_delete', false))->lockForUpdate()->lazyById(200);
-            foreach ($absent as $value) {
-                if (isset($seenValueIds[$value->id])) {
-                    continue;
+            $lastValueId = 0;
+            do {
+                $valueIds = VoxTranslationValue::query()
+                    ->whereHas('translation', fn ($query) => $query->where('is_pending_delete', false))
+                    ->where('id', '>', $lastValueId)
+                    ->orderBy('id')
+                    ->limit(200)
+                    ->toBase()
+                    ->pluck('id')
+                    ->all();
+
+                if ($valueIds === []) {
+                    break;
                 }
 
-                $value->file_value = null;
-                $value->is_obsolete = $value->published_override === null && ! $value->is_pending_publish;
-                $value->save();
-            }
-        }
+                $lastValueId = $valueIds[array_key_last($valueIds)];
+                $absentIds = array_values(array_filter($valueIds, fn (int $id): bool => ! isset($seenValueIds[$id])));
 
-        $orphanQuery = VoxTranslation::query()->where('is_pending_delete', false);
+                if ($absentIds !== []) {
+                    foreach (VoxTranslationValue::query()->whereKey($absentIds)->lockForUpdate()->get() as $value) {
+                        $value->file_value = null;
+                        $value->is_obsolete = $value->published_override === null && ! $value->is_pending_publish;
+                        $value->save();
+                    }
+                }
+            } while (count($valueIds) === 200);
+        }
 
         $orphanCount = 0;
-        $orphans = $orphanQuery
-            ->lockForUpdate()
-            ->with('values')
-            ->lazyById(200)
-            ->filter(function (VoxTranslation $translation) use ($deployment, $seenTranslationIds): bool {
-                if (isset($seenTranslationIds[$translation->id])) {
-                    return false;
-                }
-
-                if (! $translation->is_orphan && $translation->values->contains(
-                    fn ($value): bool => $value->is_pending_publish && $value->file_value === null && $value->published_override === null
-                )) {
-                    return false;
-                }
-
-                if ($deployment && ! $translation->is_orphan && ($translation->values->contains('is_pending_publish', true) || $translation->values->contains(fn ($value): bool => $value->published_override !== null))) {
-                    return false;
-                }
-
-                $match = $this->dynamicKeys->match(
-                    $translation->key,
-                    $translation->group === 'json' ? null : $translation->group
-                );
-
-                if ($match === null) {
-                    return true;
-                }
-
-                $translation->timestamps = false;
-                $translation->is_frontend = $match['is_frontend'];
-                $translation->is_orphan = false;
-                $translation->source = 'dynamic';
-                $translation->save();
-                $translation->timestamps = true;
-
-                return false;
-            });
-
-        foreach ($orphans as $translation) {
-            $orphanCount++;
-            VoxTranslation::query()
-                ->whereKey($translation->id)
+        $lastTranslationId = 0;
+        do {
+            $translationIds = VoxTranslation::query()
+                ->where('is_pending_delete', false)
+                ->where('id', '>', $lastTranslationId)
+                ->orderBy('id')
+                ->limit(200)
                 ->toBase()
-                ->update([
-                    'is_frontend' => false,
-                    'is_orphan' => true,
-                    'source' => null,
-                ]);
+                ->pluck('id')
+                ->all();
 
-            VoxTranslationOccurrence::query()
-                ->where('translation_id', $translation->id)
-                ->delete();
-        }
+            if ($translationIds === []) {
+                break;
+            }
+
+            $lastTranslationId = $translationIds[array_key_last($translationIds)];
+            $candidateIds = array_values(array_filter($translationIds, fn (int $id): bool => ! isset($seenTranslationIds[$id])));
+
+            if ($candidateIds !== []) {
+                $candidates = VoxTranslation::query()
+                    ->whereKey($candidateIds)
+                    ->with('values')
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($candidates as $translation) {
+                    if (! $translation->is_orphan && $translation->values->contains(
+                        fn ($value): bool => $value->is_pending_publish && $value->file_value === null && $value->published_override === null
+                    )) {
+                        continue;
+                    }
+
+                    if ($deployment && ! $translation->is_orphan && ($translation->values->contains('is_pending_publish', true) || $translation->values->contains(fn ($value): bool => $value->published_override !== null))) {
+                        continue;
+                    }
+
+                    $match = $this->dynamicKeys->match(
+                        $translation->key,
+                        $translation->group === 'json' ? null : $translation->group
+                    );
+
+                    if ($match !== null) {
+                        $translation->timestamps = false;
+                        $translation->is_frontend = $match['is_frontend'];
+                        $translation->is_orphan = false;
+                        $translation->source = 'dynamic';
+                        $translation->save();
+
+                        continue;
+                    }
+
+                    $orphanCount++;
+                    VoxTranslation::query()
+                        ->whereKey($translation->id)
+                        ->toBase()
+                        ->update([
+                            'is_frontend' => false,
+                            'is_orphan' => true,
+                            'source' => null,
+                        ]);
+
+                    VoxTranslationOccurrence::query()
+                        ->where('translation_id', $translation->id)
+                        ->delete();
+                }
+            }
+        } while (count($translationIds) === 200);
 
         $result->setOrphanTranslations($orphanCount);
 
         return $result;
+    }
+
+    /**
+     * @param  array<int, array{file: string, line: int|null, before: string|null, after: string|null}>  $occurrences
+     */
+    private function syncOccurrences(VoxTranslation $translation, array $occurrences): void
+    {
+        $existing = VoxTranslationOccurrence::query()
+            ->where('translation_id', $translation->id)
+            ->toBase()
+            ->get(['file_path', 'line_number', 'context_before', 'context_after'])
+            ->map(fn (object $occurrence): array => [
+                'file_path' => $occurrence->file_path,
+                'line_number' => $occurrence->line_number === null ? null : (int) $occurrence->line_number,
+                'context_before' => $occurrence->context_before,
+                'context_after' => $occurrence->context_after,
+            ])->all();
+
+        $desired = array_map(static fn (array $occurrence): array => [
+            'file_path' => $occurrence['file'],
+            'line_number' => $occurrence['line'],
+            'context_before' => $occurrence['before'],
+            'context_after' => $occurrence['after'],
+        ], $occurrences);
+
+        $existingContent = array_map(serialize(...), $existing);
+        $desiredContent = array_map(serialize(...), $desired);
+        sort($existingContent);
+        sort($desiredContent);
+
+        if ($existingContent === $desiredContent) {
+            return;
+        }
+
+        VoxTranslationOccurrence::query()->where('translation_id', $translation->id)->delete();
+
+        if ($desired === []) {
+            return;
+        }
+
+        $timestamp = now()->toDateTimeString();
+        foreach (array_chunk($desired, 50) as $chunk) {
+            VoxTranslationOccurrence::query()->insert(array_map(static fn (array $occurrence): array => [
+                ...$occurrence,
+                'translation_id' => $translation->id,
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ], $chunk));
+        }
     }
 
     /**

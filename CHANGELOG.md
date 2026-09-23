@@ -4,6 +4,13 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.15 — 2026-09-23
+
+- Reduce sync memory use by filtering seen translation and value IDs before loading models, preserving unchanged source occurrences, and batching occurrence inserts.
+- Read and compare checkpoint tables in chunks, releasing unchanged snapshot rows during comparison while preserving the checkpoint format and restoration behavior.
+- Skip unused remote candidate reads during deployment and restrict override publishing reads when fallback rules permit.
+- Add a configurable `VOX_MEMORY_LIMIT` minimum of `256M` for mutation operations, preserving higher or unlimited PHP limits. Set it to `null` to keep PHP's existing limit; report a configuration error if the server prevents an increase.
+
 ## 1.0.14 — 2026-09-22
 
 - Add language removal in Sync with a simple confirmation and no typed confirmation phrase.
