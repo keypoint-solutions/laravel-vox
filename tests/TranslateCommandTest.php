@@ -1,6 +1,33 @@
 <?php
 
 use Illuminate\Support\Facades\File;
+use KeypointSolutions\LaravelVox\Commands\TranslateMissingTranslationsCommand;
+
+it('keeps translation spinner messages within the terminal width', function (int $columns, string $label): void {
+    $previousColumns = getenv('COLUMNS');
+    putenv("COLUMNS={$columns}");
+
+    try {
+        $command = new TranslateMissingTranslationsCommand;
+        $method = new ReflectionMethod($command, 'formatSpinnerMessage');
+        $message = $method->invoke($command, $label, 'fr');
+
+        expect(mb_strwidth(' ⠋ '.$message, 'UTF-8'))->toBeLessThan($columns)
+            ->and($message)->not->toContain("\n");
+
+        if ($label === 'messages.save') {
+            expect($message)->toBe('Translating messages.save to fr');
+        }
+    } finally {
+        putenv($previousColumns === false ? 'COLUMNS' : "COLUMNS={$previousColumns}");
+    }
+})->with([
+    'short label' => [80, 'messages.save'],
+    'long label' => [80, str_repeat('long-key-', 15)],
+    'narrow terminal' => [30, str_repeat('long-key-', 15)],
+    'wide Unicode label' => [80, str_repeat('翻訳', 40)],
+    'very narrow terminal' => [5, 'long-key'],
+]);
 
 it('skips placeholder keys that are not translated in the base locale', function () {
     $targetRoot = prepareVoxFixtures();

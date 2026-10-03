@@ -18,6 +18,7 @@ use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
 use KeypointSolutions\LaravelVox\Translation\TranslationGroupFormat;
 use KeypointSolutions\LaravelVox\Translation\TranslationPromptBuilder;
+use Symfony\Component\Console\Terminal;
 
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\spin;
@@ -381,7 +382,7 @@ class TranslateMissingTranslationsCommand extends Command
         if (! $this->output->isVerbose()) {
             return spin(
                 fn () => $driver->translate($text, $sourceLocale, $targetLocale, $context),
-                "Translating {$displayLabel} to {$targetLocale}"
+                $this->formatSpinnerMessage($displayLabel, $targetLocale)
             );
         }
 
@@ -406,6 +407,14 @@ class TranslateMissingTranslationsCommand extends Command
         table(['Role', 'Content'], $this->formatPromptRows($rows));
 
         return $translation;
+    }
+
+    private function formatSpinnerMessage(string $label, string $targetLocale): string
+    {
+        $message = "Translating {$label} to {$targetLocale}";
+        $width = max(0, (new Terminal)->getWidth() - 4);
+
+        return mb_strimwidth($message, 0, $width, $width >= 3 ? '...' : '', 'UTF-8');
     }
 
     private function formatLabelForOutput(string $label): string

@@ -4,6 +4,10 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.16 — 2026-10-03
+
+- Fit translation spinner messages to the terminal width, accounting for the spinner symbol and Unicode display width, to prevent wrapped messages from leaving blank lines during translation.
+
 ## 1.0.15 — 2026-09-23
 
 - Reduce sync memory use by filtering seen translation and value IDs before loading models, preserving unchanged source occurrences, and batching occurrence inserts.
