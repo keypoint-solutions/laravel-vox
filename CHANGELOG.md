@@ -4,6 +4,11 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.17 — 2026-10-10
+
+- Offer to install the `laravel-vue-i18n` npm package during interactive `vox:setup` for Vue applications that lack it, choosing npm, pnpm, Yarn, or Bun from the lockfile. Unattended runs (`--force` or `--no-interaction`) only print the command.
+- Stop the Vite plugin with the install command when `laravel-vue-i18n` is missing, instead of failing with a module resolution error.
+
 ## 1.0.16 — 2026-10-03
 
 - Fit translation spinner messages to the terminal width, accounting for the spinner symbol and Unicode display width, to prevent wrapped messages from leaving blank lines during translation.

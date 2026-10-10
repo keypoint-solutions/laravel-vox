@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { loadEnv, normalizePath } from 'vite';
 
+import { assertFrontendDependency } from './dependencies.js';
 import { frontendDiscovery } from './frontend-discovery.js';
 import { PhpTranslationCatalogue } from './php-catalogue.js';
 import { runtimeHotReload } from './runtime-hot-reload.js';
@@ -44,6 +45,7 @@ function resolveFrontendGroups(root, options) {
  * @returns {import('vite').PluginOption[]}
  */
 export default function laravelVox(options = {}) {
+    assertFrontendDependency();
     let root = process.cwd();
     let langPath;
     let manifestPath;

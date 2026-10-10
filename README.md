@@ -232,6 +232,8 @@ Vox integrates with `laravel-vue-i18n`. Choose Composer sources or the npm packa
 npm install laravel-vue-i18n
 ```
 
+Composer cannot install npm packages, so `php artisan vox:setup` offers to run this for Vue applications that lack it, using your npm, pnpm, Yarn, or Bun lockfile to choose the command. With `--force` or `--no-interaction` it only prints the command. The Vite plugin stops with the same instruction if the package is missing.
+
 Add Vox alongside your existing Laravel and Vue Vite plugins:
 
 ```js

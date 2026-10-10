@@ -1,7 +1,11 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
-import { parse } from 'laravel-vue-i18n/loader';
+const require = createRequire(import.meta.url);
+
+/** Loaded on first use so the plugin can report a missing dependency instead of failing Vite's config import. */
+const parse = (source) => require('laravel-vue-i18n/loader').parse(source);
 
 /** Parsed source files are shared by the Vite environments, independently of their module graphs. */
 export class PhpTranslationCatalogue {

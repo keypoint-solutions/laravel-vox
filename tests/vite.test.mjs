@@ -7,6 +7,7 @@ import { parse } from 'laravel-vue-i18n/loader';
 import { build, createServer, resolveConfig } from 'vite';
 import vox from '../resources/js/consumer/vite.js';
 import { PhpTranslationCatalogue } from '../resources/js/consumer/php-catalogue.js';
+import { assertFrontendDependency, installCommand } from '../resources/js/consumer/dependencies.js';
 
 const phpId = (locale) => `\0virtual:laravel-vox/php/${locale}`;
 const catalogueId = '\0virtual:laravel-vox/translations';
@@ -393,4 +394,16 @@ test('does not expose fallback metadata as a translation locale', t => {
     write('lang/vox-fallback.json', JSON.stringify({version: 1, rules: []}));
     const { p } = plugin(root);
     assert.doesNotMatch(p.load(catalogueId), /vox-fallback/);
+});
+
+test('reports a missing laravel-vue-i18n with the install command for the application package manager', t => {
+    const { root, write } = fixture(t);
+    const range = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).dependencies['laravel-vue-i18n'];
+    const missing = () => { throw new Error('Cannot find module'); };
+    assert.doesNotThrow(() => assertFrontendDependency(root));
+    assert.throws(() => assertFrontendDependency(root, missing), {
+        message: `Laravel Vox needs the "laravel-vue-i18n" npm package, which is not installed. Run: npm install "laravel-vue-i18n@${range}"`,
+    });
+    write('pnpm-lock.yaml', '');
+    assert.equal(installCommand(root), `pnpm add "laravel-vue-i18n@${range}"`);
 });

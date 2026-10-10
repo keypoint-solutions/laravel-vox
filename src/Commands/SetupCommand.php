@@ -3,8 +3,11 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Process;
 use KeypointSolutions\LaravelVox\Support\VoxDatabaseManager;
+use KeypointSolutions\LaravelVox\Support\VoxFrontendDependency;
 
+use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\table;
@@ -77,6 +80,40 @@ class SetupCommand extends Command
             ['Migrations path', $migrationPath],
         ]);
 
+        $this->ensureFrontendDependency(app(VoxFrontendDependency::class));
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Unattended runs only report the command, so Composer hooks and deployments never change npm dependencies.
+     */
+    private function ensureFrontendDependency(VoxFrontendDependency $dependency): void
+    {
+        if (! $dependency->isMissing()) {
+            return;
+        }
+
+        $command = $dependency->installCommandLine();
+        $unattended = $this->option('force') || ! $this->input->isInteractive();
+
+        if ($unattended || ! confirm("Vox's Vue integration needs laravel-vue-i18n. Run {$command} now?")) {
+            warning("Vox's Vue integration needs laravel-vue-i18n. Install it with: {$command}");
+
+            return;
+        }
+
+        $result = spin(
+            fn () => Process::path($dependency->root())->timeout(300)->run($dependency->installCommand()),
+            'Installing laravel-vue-i18n'
+        );
+
+        if ($result->failed()) {
+            warning("Unable to install laravel-vue-i18n. Install it with: {$command}");
+
+            return;
+        }
+
+        info('Installed laravel-vue-i18n.');
     }
 }
