@@ -4,28 +4,23 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
-use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
-use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
-use KeypointSolutions\LaravelVox\Translation\TranslationEligibility;
-use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\Publishing\VoxFrontendManifest;
+use KeypointSolutions\LaravelVox\Translation\Scanning\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Translation\TranslationKey;
-use Throwable;
 
 class ManageTranslationController
 {
     public function __construct(
         private VoxLocaleResolver $localeResolver,
         private VoxDynamicKeyRegistry $dynamicKeys,
-        private TranslationEligibility $eligibility,
     ) {}
 
     public function store(
@@ -54,7 +49,7 @@ class ManageTranslationController
             ]);
         }
 
-        [$locales, $baseLocale] = $this->resolveLocales();
+        [$locales, $baseLocale] = $this->localeResolver->resolveLocalesWithBase();
         $baseValue = $validated['values'][$baseLocale] ?? null;
 
         if (! is_string($baseValue) || trim($baseValue) === '') {
@@ -83,7 +78,7 @@ class ManageTranslationController
             ]);
         }
 
-        $translation = DB::connection(config('vox.database.connection', 'vox'))
+        $translation = VoxConfig::connection()
             ->transaction(function () use (
                 $translationKey,
                 $group,
@@ -104,10 +99,14 @@ class ManageTranslationController
                 foreach ($locales as $locale) {
                     $value = $validated['values'][$locale] ?? '';
 
+                    if (! is_string($value) || trim($value) === '') {
+                        continue;
+                    }
+
                     VoxTranslationValue::query()->create([
                         'translation_id' => $translation->id,
                         'locale' => $locale,
-                        'value' => is_string($value) ? $value : '',
+                        'value' => $value,
                         'is_pending_publish' => true,
                         'is_approved' => false,
                         'is_obsolete' => false,
@@ -130,65 +129,6 @@ class ManageTranslationController
         return Inertia::flash('success', "Dynamic translation {$fullKey} created.")->back();
     }
 
-    public function translateDraft(
-        Request $request,
-        TranslationDriverFactory $driverFactory,
-    ): RedirectResponse {
-        $validated = $request->validate([
-            'locales' => ['nullable', 'array'],
-            'locales.*' => ['string'],
-            'base_value' => ['required', 'string'],
-            'key' => ['nullable', 'string', 'max:500'],
-        ]);
-
-        if (config('vox.translate.driver', 'openai') === 'null') {
-            return redirect()->back()->withErrors(['translate' => 'AI translation is not configured.']);
-        }
-
-        [$availableLocales, $baseLocale] = $this->resolveLocales();
-        $targetLocales = $this->resolveTargetLocales(
-            $validated['locales'] ?? [],
-            $availableLocales,
-            $baseLocale
-        );
-
-        if ($targetLocales === []) {
-            return redirect()->back()->withErrors(['translate' => 'No target locales selected.']);
-        }
-
-        $baseValue = $validated['base_value'];
-
-        if (! $this->eligibility->canTranslateSource((string) ($validated['key'] ?? ''), $baseValue)) {
-            return redirect()->back()->withErrors([
-                'translate' => 'Base locale value is required before translating.',
-            ]);
-        }
-
-        $key = trim((string) ($validated['key'] ?? ''));
-        $context = $key === '' ? [] : ['context' => "Laravel translation key: {$key}"];
-        $driver = $driverFactory->make();
-        $translatedValues = [];
-
-        try {
-            foreach ($targetLocales as $locale) {
-                $identity = TranslationKey::fromRaw($key);
-                if (app(TranslationFallbackRules::class)->usesDefault($locale, $identity->group, $identity->key)) {
-                    continue;
-                }
-                $translatedValues[$locale] = $driver->translate(
-                    $baseValue,
-                    $baseLocale,
-                    $locale,
-                    $context
-                );
-            }
-        } catch (Throwable $exception) {
-            return redirect()->back()->withErrors(['translate' => $exception->getMessage()]);
-        }
-
-        return Inertia::flash('translated_values', $translatedValues)->back();
-    }
-
     public function update(
         Request $request,
         VoxTranslation $translation,
@@ -200,17 +140,24 @@ class ManageTranslationController
             'values.*' => ['nullable', 'string'],
         ]);
 
-        [$locales] = $this->resolveLocales();
+        [$locales] = $this->localeResolver->resolveLocalesWithBase();
 
         foreach ($validated['values'] as $locale => $value) {
             if (! is_string($locale) || ! in_array($locale, $locales, true)) {
                 continue;
             }
 
-            VoxTranslationValue::query()->firstOrNew([
+            $value = is_string($value) ? $value : '';
+            $translationValue = VoxTranslationValue::query()->firstOrNew([
                 'translation_id' => $translation->id,
                 'locale' => $locale,
-            ])->saveDraft(is_string($value) ? $value : '');
+            ]);
+
+            if (! $translationValue->exists && trim($value) === '') {
+                continue;
+            }
+
+            $translationValue->saveDraft($value);
         }
 
         $translation->touch();
@@ -220,24 +167,6 @@ class ManageTranslationController
         ]);
 
         return Inertia::flash('success', 'Translations saved.')->back();
-    }
-
-    /**
-     * @return array{0: array<int, string>, 1: string}
-     */
-    private function resolveLocales(): array
-    {
-        $locales = $this->localeResolver->resolveLocales();
-        $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
-
-        if (! in_array($baseLocale, $locales, true)) {
-            $locales[] = $baseLocale;
-        }
-
-        $locales = array_values(array_unique($locales));
-        $locales = array_values(array_unique(array_merge([$baseLocale], $locales)));
-
-        return [$locales, $baseLocale];
     }
 
     public function toggleApproval(VoxTranslation $translation, VoxAuditLogger $auditLogger): RedirectResponse
@@ -292,240 +221,5 @@ class ManageTranslationController
         $noun = count($ids) === 1 ? 'translation' : 'translations';
 
         return Inertia::flash('success', "{$verb} ".count($ids)." {$noun}.")->back();
-    }
-
-    public function bulkTranslate(
-        Request $request,
-        TranslationDriverFactory $driverFactory,
-        VoxAuditLogger $auditLogger,
-    ): RedirectResponse {
-        $validated = $request->validate([
-            'ids' => ['required', 'array', 'min:1', 'max:100'],
-            'ids.*' => ['required', 'integer', 'distinct'],
-        ]);
-
-        if (config('vox.translate.driver', 'openai') === 'null') {
-            return redirect()->back()->withErrors(['translate' => 'AI translation is not configured.']);
-        }
-
-        [$availableLocales, $baseLocale] = $this->resolveLocales();
-        $targetLocales = array_values(array_filter(
-            $availableLocales,
-            fn (string $locale): bool => $locale !== $baseLocale
-        ));
-        $translations = VoxTranslation::query()
-            ->with(['values', 'occurrences'])
-            ->where('is_pending_delete', false)
-            ->whereIn('id', $validated['ids'])
-            ->get();
-        $driver = $driverFactory->make();
-
-        /** @var array<int, array{translation: VoxTranslation, values: array<string, string>}> $translated */
-        $translated = [];
-
-        try {
-            foreach ($translations as $translation) {
-                if ($translation->is_orphan || $translation->is_pending_delete) {
-                    continue;
-                }
-
-                $values = $translation->values->keyBy('locale');
-                $baseValue = $values->get($baseLocale)?->value;
-
-                if (! $this->eligibility->canTranslateSource($translation->key, $baseValue)) {
-                    continue;
-                }
-
-                $translatedValues = [];
-                $context = $this->buildTranslationContext($translation);
-
-                foreach ($targetLocales as $locale) {
-                    if (app(TranslationFallbackRules::class)->usesDefault($locale, $translation->group, $translation->key)) {
-                        continue;
-                    }
-                    if (! $this->eligibility->isMissing($values->get($locale)?->value)) {
-                        continue;
-                    }
-
-                    $translatedValues[$locale] = $driver->translate(
-                        $baseValue,
-                        $baseLocale,
-                        $locale,
-                        $context
-                    );
-                }
-
-                if ($translatedValues !== []) {
-                    $translated[] = [
-                        'translation' => $translation,
-                        'values' => $translatedValues,
-                    ];
-                }
-            }
-        } catch (Throwable $exception) {
-            return redirect()->back()->withErrors(['translate' => $exception->getMessage()]);
-        }
-
-        if ($translated === []) {
-            return Inertia::flash(
-                'success',
-                'No missing target values were found in the selected translations.'
-            )->back();
-        }
-
-        $translatedValueCount = array_sum(array_map(
-            fn (array $result): int => count($result['values']),
-            $translated
-        ));
-        $translatedIds = array_map(
-            fn (array $result): int => $result['translation']->id,
-            $translated
-        );
-
-        DB::connection(config('vox.database.connection', 'vox'))
-            ->transaction(function () use ($translated, $translatedIds, $translatedValueCount, $auditLogger): void {
-                foreach ($translated as $result) {
-                    foreach ($result['values'] as $locale => $value) {
-                        VoxTranslationValue::query()->firstOrNew([
-                            'translation_id' => $result['translation']->id,
-                            'locale' => $locale,
-                        ])->saveDraft($value);
-                    }
-
-                    $result['translation']->status = 'pending';
-                    $result['translation']->save();
-                }
-
-                $auditLogger->record('translations-bulk-translated', [
-                    'translation_ids' => $translatedIds,
-                    'translations' => count($translatedIds),
-                    'values' => $translatedValueCount,
-                ]);
-            });
-
-        $translationNoun = count($translatedIds) === 1 ? 'translation' : 'translations';
-        $valueNoun = $translatedValueCount === 1 ? 'value' : 'values';
-
-        return Inertia::flash(
-            'success',
-            "AI translated {$translatedValueCount} missing {$valueNoun} across "
-                .count($translatedIds)." {$translationNoun}."
-        )->back();
-    }
-
-    public function translate(
-        Request $request,
-        VoxTranslation $translation,
-        TranslationDriverFactory $driverFactory
-    ): RedirectResponse {
-        abort_if($translation->is_pending_delete, 422, 'Cancel deletion before editing this key.');
-        $validated = $request->validate([
-            'locales' => ['nullable', 'array'],
-            'locales.*' => ['string'],
-            'base_value' => ['nullable', 'string'],
-        ]);
-
-        $driverName = (string) config('vox.translate.driver', 'openai');
-        if ($driverName === 'null') {
-            return redirect()->back()->withErrors(['translate' => 'AI translation is not configured.']);
-        }
-
-        [$availableLocales, $baseLocale] = $this->resolveLocales();
-        $targetLocales = $this->resolveTargetLocales(
-            $validated['locales'] ?? [],
-            $availableLocales,
-            $baseLocale
-        );
-
-        if ($targetLocales === []) {
-            return redirect()->back()->withErrors(['translate' => 'No target locales selected.']);
-        }
-
-        $baseValue = $validated['base_value'] ?? null;
-        if (! is_string($baseValue) || $baseValue === '') {
-            $baseValue = $translation->values()->where('locale', $baseLocale)->value('value');
-        }
-
-        if (! $this->eligibility->canTranslateSource($translation->key, $baseValue)) {
-            return redirect()->back()->withErrors(['translate' => 'Base locale value is required before translating.']);
-        }
-
-        $context = $this->buildTranslationContext($translation);
-        $driver = $driverFactory->make();
-
-        /** @var array<string, string> $translatedValues */
-        $translatedValues = [];
-
-        try {
-            foreach ($targetLocales as $locale) {
-                if (app(TranslationFallbackRules::class)->usesDefault($locale, $translation->group, $translation->key)) {
-                    continue;
-                }
-                $translated = $driver->translate($baseValue, $baseLocale, $locale, $context);
-                $translatedValues[$locale] = $translated;
-            }
-        } catch (Throwable $exception) {
-            return redirect()->back()->withErrors(['translate' => $exception->getMessage()]);
-        }
-
-        return Inertia::flash('translated_values', $translatedValues)->back();
-    }
-
-    /**
-     * @param  array<int, string>  $requested
-     * @param  array<int, string>  $available
-     * @return array<int, string>
-     */
-    private function resolveTargetLocales(array $requested, array $available, string $baseLocale): array
-    {
-        $requested = array_values(array_filter($requested, fn ($locale) => is_string($locale) && $locale !== ''));
-
-        if ($requested === []) {
-            $requested = $available;
-        }
-
-        $targets = array_values(array_intersect($available, $requested));
-        $targets = array_values(array_filter($targets, fn ($locale) => $locale !== $baseLocale));
-
-        return $targets;
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function buildTranslationContext(VoxTranslation $translation): array
-    {
-        if (! config('vox.translate.use_context', true)) {
-            return [];
-        }
-
-        $occurrence = $translation->occurrences()->orderBy('id')->first();
-        if ($occurrence === null) {
-            return [];
-        }
-
-        $segments = [];
-
-        if (is_string($occurrence->context_before) && $occurrence->context_before !== '') {
-            $segments[] = $occurrence->context_before;
-        }
-
-        if (is_string($occurrence->context_after) && $occurrence->context_after !== '') {
-            $segments[] = $occurrence->context_after;
-        }
-
-        if ($segments === []) {
-            return [];
-        }
-
-        $context = trim(implode(' ', $segments));
-
-        if (is_string($occurrence->file_path) && $occurrence->file_path !== '') {
-            $line = $occurrence->line_number;
-            $prefix = $line !== null ? $occurrence->file_path.':'.$line : $occurrence->file_path;
-            $context = $prefix.' '.$context;
-        }
-
-        return ['context' => $context];
     }
 }

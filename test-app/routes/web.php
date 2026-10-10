@@ -3,9 +3,9 @@
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
-use KeypointSolutions\LaravelVox\Support\VoxArchive;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
-use KeypointSolutions\LaravelVox\Translation\RemoteTranslationSnapshot;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\Remote\RemoteTranslationSnapshot;
+use KeypointSolutions\LaravelVox\Translation\Remote\VoxArchive;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 $localeResolver = app(VoxLocaleResolver::class);

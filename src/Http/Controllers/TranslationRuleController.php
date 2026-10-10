@@ -8,7 +8,7 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 
 class TranslationRuleController

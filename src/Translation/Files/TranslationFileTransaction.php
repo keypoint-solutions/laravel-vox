@@ -1,0 +1,144 @@
+<?php
+
+namespace KeypointSolutions\LaravelVox\Translation\Files;
+
+use Closure;
+use Illuminate\Support\Facades\File;
+use KeypointSolutions\LaravelVox\Translation\TranslationCheckpoints;
+use RuntimeException;
+use Throwable;
+
+class TranslationFileTransaction
+{
+    /** @var array<string, array{contents: string, mode: int}|null> */
+    private array $originals = [];
+
+    /** @var array<string, int> */
+    private array $directories = [];
+
+    private bool $active = false;
+
+    /** @var array<int, Closure> */
+    private array $afterCommit = [];
+
+    public function run(Closure $callback): mixed
+    {
+        if ($this->active) {
+            return $callback();
+        }
+        $this->active = true;
+        try {
+            $result = $callback();
+            $afterCommit = $this->afterCommit;
+        } catch (Throwable $exception) {
+            foreach ($this->directories as $path => $mode) {
+                File::ensureDirectoryExists($path, $mode);
+                chmod($path, $mode);
+            }
+            foreach (array_reverse($this->originals, true) as $path => $original) {
+                if ($original === null) {
+                    File::delete($path);
+                } else {
+                    File::ensureDirectoryExists(dirname($path));
+                    File::replace($path, $original['contents'], $original['mode']);
+                }
+            }
+            throw $exception;
+        } finally {
+            $this->active = false;
+            $this->originals = [];
+            $this->directories = [];
+            $this->afterCommit = [];
+        }
+
+        foreach ($afterCommit as $callback) {
+            $callback();
+        }
+
+        return $result;
+    }
+
+    public function afterCommit(Closure $callback): void
+    {
+        if ($this->active) {
+            $this->afterCommit[] = $callback;
+        } else {
+            $callback();
+        }
+    }
+
+    public function replace(string $path, string $contents): void
+    {
+        if (File::isFile($path) && File::get($path) === $contents) {
+            return;
+        }
+        $this->remember($path);
+        File::ensureDirectoryExists(dirname($path));
+        File::replace($path, $contents, $this->permissions($path));
+        if (! File::exists($path) || File::get($path) !== $contents) {
+            throw new RuntimeException('Unable to write translation file: '.$path);
+        }
+    }
+
+    public function delete(string $path): void
+    {
+        $this->remember($path);
+        if (File::exists($path) && ! File::delete($path)) {
+            throw new RuntimeException('Unable to remove translation file: '.$path);
+        }
+    }
+
+    public function deleteDirectory(string $path): void
+    {
+        if (is_link($path)) {
+            throw new RuntimeException('Cannot remove a symbolic link: '.$path);
+        }
+        if (! File::isDirectory($path)) {
+            return;
+        }
+        if ($this->active && ! array_key_exists($path, $this->directories)) {
+            $this->directories[$path] = $this->permissions($path);
+        }
+        foreach (new \FilesystemIterator($path) as $entry) {
+            if ($entry->isLink()) {
+                throw new RuntimeException('Cannot remove a symbolic link: '.$entry->getPathname());
+            }
+            if ($entry->isDir()) {
+                $this->deleteDirectory($entry->getPathname());
+            } else {
+                $this->delete($entry->getPathname());
+            }
+        }
+        if (! rmdir($path)) {
+            throw new RuntimeException('Unable to remove translation directory: '.$path);
+        }
+    }
+
+    private function remember(string $path): void
+    {
+        app(TranslationCheckpoints::class)->rememberFile($path);
+        if ($this->active && ! array_key_exists($path, $this->originals)) {
+            $this->originals[$path] = File::exists($path) ? [
+                'contents' => File::get($path),
+                'mode' => $this->permissions($path),
+            ] : null;
+        }
+    }
+
+    private function permissions(string $path): int
+    {
+        clearstatcache(true, $path);
+
+        if (! File::exists($path)) {
+            return 0666 & ~umask();
+        }
+
+        $permissions = fileperms($path);
+
+        if ($permissions === false) {
+            throw new RuntimeException('Unable to read translation file permissions: '.$path);
+        }
+
+        return $permissions & 07777;
+    }
+}

@@ -19,15 +19,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        stability: [prefer-lowest, prefer-stable]
-        target:
-          - { php: '8.2', laravel: '12.*', testbench: '10.*', pest: '3.*', inertia: '^2.0.20' }
-          - { php: '8.3', laravel: '12.*', testbench: '10.*', pest: '3.*', inertia: '^2.0.20' }
-          - { php: '8.4', laravel: '12.*', testbench: '10.*', pest: '4.*', inertia: '3.*' }
-          - { php: '8.5', laravel: '12.*', testbench: '10.*', pest: '4.*', inertia: '3.*' }
-          - { php: '8.3', laravel: '13.*', testbench: '11.*', pest: '4.*', inertia: '3.*' }
-          - { php: '8.4', laravel: '13.*', testbench: '11.*', pest: '4.*', inertia: '3.*' }
-          - { php: '8.5', laravel: '13.*', testbench: '11.*', pest: '4.*', inertia: '3.*' }
+        # Lowest and highest supported PHP per Laravel line, plus PHP 8.4, the version used in production.
+        # Lowest dependencies are only installed on the lowest PHP.
+        include:
+          - { stability: prefer-lowest, target: { php: '8.2', laravel: '12.*', testbench: '10.*', pest: '3.*', inertia: '^2.0.20' } }
+          - { stability: prefer-stable, target: { php: '8.2', laravel: '12.*', testbench: '10.*', pest: '3.*', inertia: '^2.0.20' } }
+          - { stability: prefer-stable, target: { php: '8.4', laravel: '12.*', testbench: '10.*', pest: '4.*', inertia: '3.*' } }
+          - { stability: prefer-stable, target: { php: '8.5', laravel: '12.*', testbench: '10.*', pest: '4.*', inertia: '3.*' } }
+          - { stability: prefer-lowest, target: { php: '8.3', laravel: '13.*', testbench: '11.*', pest: '4.*', inertia: '3.*' } }
+          - { stability: prefer-stable, target: { php: '8.3', laravel: '13.*', testbench: '11.*', pest: '4.*', inertia: '3.*' } }
+          - { stability: prefer-stable, target: { php: '8.4', laravel: '13.*', testbench: '11.*', pest: '4.*', inertia: '3.*' } }
+          - { stability: prefer-stable, target: { php: '8.5', laravel: '13.*', testbench: '11.*', pest: '4.*', inertia: '3.*' } }
     name: PHP ${{ matrix.target.php }} / Laravel ${{ matrix.target.laravel }} / ${{ matrix.stability }}
     steps:
       - uses: actions/checkout@v6
@@ -61,5 +63,6 @@ jobs:
       - run: npm run test:consumer
       - run: npx eslint resources/js/consumer
       - run: npx tsc --ignoreConfig --noEmit --skipLibCheck --moduleResolution bundler --module esnext --target es2022 resources/js/consumer/vue.d.ts resources/js/consumer/runtime.d.ts resources/js/consumer/vite.d.ts
+      - run: npm run type-check
       - run: npm run build
       - run: npm pack --dry-run

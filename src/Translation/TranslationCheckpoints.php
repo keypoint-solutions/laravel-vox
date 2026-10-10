@@ -4,10 +4,11 @@ namespace KeypointSolutions\LaravelVox\Translation;
 
 use Closure;
 use Illuminate\Database\Connection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileTransaction;
 use RuntimeException;
 use Throwable;
 use WeakMap;
@@ -304,7 +305,7 @@ class TranslationCheckpoints
 
     private function removeEmptyLanguageDirectories(string $directory): void
     {
-        $root = rtrim((string) config('vox.paths.lang', lang_path()), DIRECTORY_SEPARATOR);
+        $root = VoxConfig::langPath();
         while (str_starts_with($directory, $root.DIRECTORY_SEPARATOR) && is_dir($directory) && ! is_link($directory)) {
             if (count(scandir($directory) ?: []) !== 2 || ! rmdir($directory)) {
                 break;
@@ -321,7 +322,7 @@ class TranslationCheckpoints
     private function tracksPath(string $path): bool
     {
         $directories = [
-            (string) config('vox.paths.lang', lang_path()),
+            VoxConfig::langPath(),
             (string) config('vox.frontend.runtime.path', storage_path('vox/frontend-translations')),
         ];
         foreach ($directories as $directory) {
@@ -365,7 +366,7 @@ class TranslationCheckpoints
 
     private function connection(): Connection
     {
-        return DB::connection(config('vox.database.connection', 'vox'));
+        return VoxConfig::connection();
     }
 
     private function store(string $label, bool $manual, array $changes): int

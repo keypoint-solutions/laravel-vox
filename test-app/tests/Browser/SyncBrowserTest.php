@@ -7,8 +7,8 @@ use KeypointSolutions\LaravelVox\Database\Factories\VoxTranslationFactory;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
-use KeypointSolutions\LaravelVox\Translation\LocaleProvisioner;
-use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
+use KeypointSolutions\LaravelVox\Translation\Locales\LocaleProvisioner;
+use KeypointSolutions\LaravelVox\Translation\Remote\RemoteReconciliation;
 
 beforeEach(function (): void {
     config()->set('vox.translate.locales.mode', 'configured');
@@ -33,13 +33,10 @@ afterEach(function (): void {
     );
 });
 
-it('asks whether to update language files before local sync', function (): void {
+it('syncs local files as they are and offers parsing first as a separate action', function (): void {
     visit('/vox/sync')
-        ->press('Sync local files')
-        ->assertSee('Update language files from source first?')
-        ->assertSee('Sync files as they are')
-        ->assertSee('Update files & sync')
-        ->pressAndWaitFor('Sync files as they are')
+        ->assertSee('Parse and sync')
+        ->pressAndWaitFor('Sync local files')
         ->assertSee('Synchronized')
         ->assertSee('Download publishable files')
         ->assertSee('Import language files')
@@ -180,8 +177,8 @@ it('pulls production candidates and accepts them without changing local files be
         ->pressAndWaitFor('Pull published')
         ->assertSee('Local translations and files were not changed')
         ->assertSee('Incoming translations')
-        ->assertSee('Local stale value')
-        ->assertSee('Production value')
+        ->assertValue('textarea[aria-label="Current wording for message en"]', 'Local stale value')
+        ->assertValue('textarea[aria-label="Incoming wording for message en"]', 'Production value')
         ->assertNoJavaScriptErrors();
 
     $english = require lang_path('en/vox_browser_sync.php');

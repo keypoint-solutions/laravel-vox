@@ -4,12 +4,12 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
+use KeypointSolutions\LaravelVox\Translation\Scanning\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Translation\TranslationDeletionEligibility;
 
 class TranslationCleanupController
@@ -22,7 +22,7 @@ class TranslationCleanupController
             'action' => ['required', Rule::in(['delete', 'restore'])],
             'confirmation' => ['required', Rule::in(['CONFIRM'])],
         ]);
-        DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($data, $registry, $eligibility, $audit): void {
+        VoxConfig::connection()->transaction(function () use ($data, $registry, $eligibility, $audit): void {
             $rows = VoxTranslation::query()->whereIn('id', $data['ids'])->lockForUpdate()->with('values')->get();
             if ($rows->count() !== count($data['ids'])) {
                 throw ValidationException::withMessages(['cleanup' => 'The selection changed. Refresh and try again.']);

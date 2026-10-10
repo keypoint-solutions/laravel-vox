@@ -3,6 +3,10 @@
 namespace KeypointSolutions\LaravelVox;
 
 use Illuminate\Console\Scheduling\Schedule;
+use KeypointSolutions\LaravelVox\Ai\AiModelDiscovery;
+use KeypointSolutions\LaravelVox\Ai\ClaudeModelDiscovery;
+use KeypointSolutions\LaravelVox\Ai\OpenAiModelDiscovery;
+use KeypointSolutions\LaravelVox\Ai\UnavailableAiModelDiscovery;
 use KeypointSolutions\LaravelVox\Commands\CheckpointCommand;
 use KeypointSolutions\LaravelVox\Commands\CleanupCommand;
 use KeypointSolutions\LaravelVox\Commands\CompileCommand;
@@ -19,16 +23,14 @@ use KeypointSolutions\LaravelVox\Commands\SetupCommand;
 use KeypointSolutions\LaravelVox\Commands\SyncRemoteTranslationsCommand;
 use KeypointSolutions\LaravelVox\Commands\SyncTranslationsCommand;
 use KeypointSolutions\LaravelVox\Commands\TranslateMissingTranslationsCommand;
-use KeypointSolutions\LaravelVox\Support\AiModelDiscovery;
-use KeypointSolutions\LaravelVox\Support\OpenAiModelDiscovery;
-use KeypointSolutions\LaravelVox\Support\UnavailableAiModelDiscovery;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
 use KeypointSolutions\LaravelVox\Support\VoxDatabaseManager;
-use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileTransaction;
+use KeypointSolutions\LaravelVox\Translation\Scanning\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Translation\TranslationCheckpoints;
 use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileTransaction;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -48,8 +50,12 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
         );
 
         $this->app->bind(AiModelDiscovery::class, function ($app): AiModelDiscovery {
-            if (config('vox.translate.driver', 'openai') === 'openai') {
+            if (VoxConfig::translateDriver() === 'openai') {
                 return $app->make(OpenAiModelDiscovery::class);
+            }
+
+            if (VoxConfig::translateDriver() === 'claude') {
+                return $app->make(ClaudeModelDiscovery::class);
             }
 
             return $app->make(UnavailableAiModelDiscovery::class);

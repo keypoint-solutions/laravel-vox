@@ -2,7 +2,7 @@
 
 namespace KeypointSolutions\LaravelVox\Events;
 
-use KeypointSolutions\LaravelVox\Translation\PublishResult;
+use KeypointSolutions\LaravelVox\Translation\Publishing\PublishResult;
 
 class TranslationsPublished
 {

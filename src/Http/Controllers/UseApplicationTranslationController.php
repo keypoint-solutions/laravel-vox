@@ -4,17 +4,17 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
-use KeypointSolutions\LaravelVox\Translation\FrontendTranslationArtifacts;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileRepository;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileTransaction;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationGroupFormat;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\Publishing\FrontendTranslationArtifacts;
 use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileTransaction;
-use KeypointSolutions\LaravelVox\Translation\TranslationGroupFormat;
 
 class UseApplicationTranslationController
 {
@@ -23,7 +23,7 @@ class UseApplicationTranslationController
         abort_if($translation->is_pending_delete, 422, 'Restore this translation before changing its published wording.');
         $data = $request->validate(['locale' => ['required', Rule::in($locales->resolveLocales())]]);
 
-        app(TranslationFileTransaction::class)->run(fn () => DB::connection(config('vox.database.connection', 'vox'))->transaction(function () use ($translation, $files, $data): void {
+        app(TranslationFileTransaction::class)->run(fn () => VoxConfig::connection()->transaction(function () use ($translation, $files, $data): void {
             $value = $translation->values()->where('locale', $data['locale'])->lockForUpdate()->firstOrFail();
             $locale = $value->locale;
             abort_if(app(TranslationFallbackRules::class)->usesDefault($locale, $translation->group, $translation->key, true), 422, 'Publish a choice to use own translation before restoring application wording.');

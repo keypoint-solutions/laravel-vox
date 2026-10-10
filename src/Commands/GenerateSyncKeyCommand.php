@@ -5,7 +5,7 @@ namespace KeypointSolutions\LaravelVox\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Support\VoxSyncKey;
+use KeypointSolutions\LaravelVox\Translation\Remote\VoxSyncKey;
 
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\warning;

@@ -7,8 +7,9 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use KeypointSolutions\LaravelVox\Support\VoxArchive;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
+use KeypointSolutions\LaravelVox\Translation\Remote\VoxArchive;
 use RuntimeException;
 
 class ImportTranslationArchiveController
@@ -45,7 +46,7 @@ class ImportTranslationArchiveController
         try {
             $fileCount = $archive->extractArchive(
                 $path,
-                (string) config('vox.paths.lang', lang_path())
+                VoxConfig::langPath()
             );
         } catch (RuntimeException $exception) {
             throw ValidationException::withMessages([

@@ -3,8 +3,8 @@
 namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Illuminate\Http\Request;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleCatalog;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleCatalog;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
 use Symfony\Component\HttpFoundation\Response;
 
 class FrontendLocalesController

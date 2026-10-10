@@ -1,11 +1,14 @@
 <script setup lang="ts">
-    import { router, usePage } from '@inertiajs/vue3';
+    import { router } from '@inertiajs/vue3';
     import { Sparkles } from '@lucide/vue';
     import { computed, ref, watch } from 'vue';
 
     import { Badge, Button, Checkbox, Input, Label, Select, Textarea } from '@/components/ui';
     import FontAwesomeCheck from '@/components/ui/FontAwesomeCheck.vue';
     import PageSizeSelect from '@/components/ui/PageSizeSelect.vue';
+    import PaginationNav from '@/components/ui/PaginationNav.vue';
+    import { useVoxRoutes } from '@/composables/useVoxRoutes';
+    import { firstError, flashSuccess } from '@/lib/inertia';
 
     interface Candidate {
         id: number;
@@ -46,7 +49,7 @@
         canChooseWithAi?: boolean;
         environments: { id: number; name: string }[];
     }>();
-    const page = usePage();
+    const routes = useVoxRoutes();
     const environment = ref(String(props.review.filters.environment_id ?? ''));
     const state = ref(props.review.filters.state);
     const locale = ref(props.review.filters.locale);
@@ -170,7 +173,7 @@
 
     function filter(reviewPage = 1): void {
         router.get(
-            page.props.vox?.routes?.sync ?? '',
+            routes.value?.sync ?? '',
             {
                 environment_id: environment.value || undefined,
                 state: state.value,
@@ -228,7 +231,7 @@
         busy.value = true;
         choosingId.value = row?.id ?? -1;
         error.value = '';
-        router.post(page.props.vox?.routes?.sync_choose ?? '', row ? entries[0] : { entries }, {
+        router.post(routes.value?.sync_choose ?? '', row ? entries[0] : { entries }, {
             preserveScroll: true,
             preserveState: true,
             onSuccess: (response) => {
@@ -260,7 +263,7 @@
                 }
             },
             onError: (errors) => {
-                error.value = Object.values(errors)[0] ?? 'AI could not choose wording.';
+                error.value = firstError(errors, 'AI could not choose wording.');
             },
             onFinish: () => {
                 busy.value = false;
@@ -278,12 +281,12 @@
         busy.value = true;
         error.value = '';
         router.post(
-            page.props.vox?.routes?.sync_reconcile ?? '',
+            routes.value?.sync_reconcile ?? '',
             { action: 'confirm', entries, publish: false },
             {
                 preserveScroll: true,
                 onSuccess: (response) => {
-                    message.value = (response.flash?.success as string) ?? 'Selections confirmed.';
+                    message.value = flashSuccess(response, 'Selections confirmed.');
                     for (const entry of entries) {
                         delete choices.value[entry.id];
                         delete aiReasons.value[entry.id];
@@ -291,7 +294,7 @@
                     clearSelection();
                 },
                 onError: (errors) => {
-                    error.value = Object.values(errors)[0] ?? 'Selections could not be confirmed.';
+                    error.value = firstError(errors, 'Selections could not be confirmed.');
                 },
                 onFinish: () => {
                     busy.value = false;
@@ -319,7 +322,7 @@
             : Object.entries(selected.value).map(([id, token]) => ({ id: Number(id), token }));
 
         router.post(
-            page.props.vox?.routes?.sync_reconcile ?? '',
+            routes.value?.sync_reconcile ?? '',
             {
                 action,
                 publish: false,
@@ -332,14 +335,14 @@
             {
                 preserveScroll: true,
                 onSuccess: (response) => {
-                    message.value = (response.flash?.success as string | undefined) ?? 'Review decisions saved.';
+                    message.value = flashSuccess(response, 'Review decisions saved.');
                     clearSelection();
                     if (row) {
                         delete choices.value[row.id];
                     }
                 },
                 onError: (errors) => {
-                    error.value = Object.values(errors)[0] ?? 'The review decision could not be saved.';
+                    error.value = firstError(errors, 'The review decision could not be saved.');
                 },
                 onFinish: () => {
                     busy.value = false;
@@ -777,20 +780,14 @@
                 @update:model-value="filter(1)"
             />
             <div class="flex gap-2">
-                <Button
+                <PaginationNav
+                    variant="text"
                     size="sm"
-                    variant="outline"
-                    :disabled="busy || review.current_page <= 1"
-                    @click="filter(review.current_page - 1)"
-                    >Previous</Button
-                >
-                <Button
-                    size="sm"
-                    variant="outline"
-                    :disabled="busy || review.current_page >= review.last_page"
-                    @click="filter(review.current_page + 1)"
-                    >Next</Button
-                >
+                    :current-page="review.current_page"
+                    :last-page="review.last_page"
+                    :disabled="busy"
+                    @change="filter"
+                />
             </div>
         </div>
     </section>

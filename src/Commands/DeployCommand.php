@@ -3,7 +3,8 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
-use KeypointSolutions\LaravelVox\Translation\TranslationDeployment;
+use KeypointSolutions\LaravelVox\Commands\Concerns\RecordsTranslationCheckpoint;
+use KeypointSolutions\LaravelVox\Translation\Publishing\TranslationDeployment;
 use Throwable;
 
 class DeployCommand extends Command

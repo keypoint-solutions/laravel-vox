@@ -5,11 +5,11 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
 use KeypointSolutions\LaravelVox\Translation\TranslationCheckpoints;
 use RuntimeException;
 
@@ -21,7 +21,7 @@ class CheckpointController
 
         return Inertia::render('Checkpoints', [
             'available' => $available,
-            'checkpoints' => $available ? DB::connection(config('vox.database.connection', 'vox'))
+            'checkpoints' => $available ? VoxConfig::connection()
                 ->table('vox_checkpoints')->latest('id')->paginate(25)->through(function ($checkpoint): array {
                     $changes = json_decode($checkpoint->changes, true, flags: JSON_THROW_ON_ERROR);
 

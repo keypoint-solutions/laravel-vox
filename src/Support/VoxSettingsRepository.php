@@ -5,6 +5,7 @@ namespace KeypointSolutions\LaravelVox\Support;
 use Illuminate\Support\Facades\Schema;
 use JsonException;
 use KeypointSolutions\LaravelVox\Models\VoxSetting;
+use KeypointSolutions\LaravelVox\Translation\Scanning\VoxDynamicKeyRegistry;
 
 class VoxSettingsRepository
 {
@@ -142,7 +143,7 @@ class VoxSettingsRepository
 
     private function tableExists(): bool
     {
-        return Schema::connection(config('vox.database.connection', 'vox'))->hasTable('vox_settings');
+        return Schema::connection(VoxConfig::connectionName())->hasTable('vox_settings');
     }
 
     /**

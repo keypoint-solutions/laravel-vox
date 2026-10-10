@@ -6,287 +6,308 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
-use KeypointSolutions\LaravelVox\Support\TranslationFileChangeReporter;
+use KeypointSolutions\LaravelVox\Ai\AiAvailability;
+use KeypointSolutions\LaravelVox\Ai\TranslationPromptBuilder;
+use KeypointSolutions\LaravelVox\Commands\Concerns\RecordsTranslationCheckpoint;
+use KeypointSolutions\LaravelVox\Commands\Concerns\RendersAiTranslationOutput;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
-use KeypointSolutions\LaravelVox\Translation\Drivers\OpenAiTranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileChangeReporter;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileRepository;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileWriter;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationGroupFormat;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\TranslationEligibility;
 use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
-use KeypointSolutions\LaravelVox\Translation\TranslationGroupFormat;
-use KeypointSolutions\LaravelVox\Translation\TranslationPromptBuilder;
-use Symfony\Component\Console\Terminal;
+use KeypointSolutions\LaravelVox\Translation\TranslationKeyFilter;
+use Throwable;
 
 use function Laravel\Prompts\info;
-use function Laravel\Prompts\spin;
 use function Laravel\Prompts\table;
 
 class TranslateMissingTranslationsCommand extends Command
 {
     use RecordsTranslationCheckpoint;
+    use RendersAiTranslationOutput;
 
-    public $signature = 'vox:translate {--path= : Relative path inside the lang directory for a single file to process} {--key= : Translation key to process} {--force : Retranslate existing values}';
+    public $signature = 'vox:translate {--path= : Relative path inside the lang directory for a single file to process} {--key= : Translation key to process} {--force : Retranslate existing wording; deliberately blank values are kept}';
 
     public $description = 'Translate missing keys using the configured driver.';
 
+    private TranslationFileRepository $files;
+
+    private TranslationDriver $driver;
+
+    private TranslationPromptBuilder $promptBuilder;
+
+    private TranslationEligibility $eligibility;
+
+    private TranslationGroupFormat $format;
+
+    private string $baseLocale;
+
+    private bool $force = false;
+
+    private int $translated = 0;
+
+    private ?Throwable $failure = null;
+
     public function handle(TranslationEligibility $eligibility, TranslationGroupFormat $format): int
     {
-        $localeResolver = app(VoxLocaleResolver::class);
-        $locales = $localeResolver->resolveLocales();
-        $baseLocale = $localeResolver->resolveBaseLocale($locales);
+        if (($reason = app(AiAvailability::class)->reason()) !== null) {
+            $this->error($reason);
 
-        if (! in_array($baseLocale, $locales, true)) {
-            $locales[] = $baseLocale;
+            return self::FAILURE;
         }
 
-        $fileRepository = new TranslationFileRepository(new TranslationFileWriter);
-        $driver = app(TranslationDriverFactory::class)->make();
-        $promptBuilder = app(TranslationPromptBuilder::class);
-        $useContext = config('vox.translate.use_context', true);
-        $force = (bool) $this->option('force');
-        $requestedKey = $this->normalizeKeyOption((string) $this->option('key'));
+        [$locales, $this->baseLocale] = app(VoxLocaleResolver::class)->resolveLocalesWithBase();
 
-        $translated = 0;
-        $beforeSnapshot = app(TranslationFileChangeReporter::class)->snapshot($fileRepository->langPath());
+        $this->files = new TranslationFileRepository(new TranslationFileWriter);
+        $this->driver = app(TranslationDriverFactory::class)->make();
+        $this->promptBuilder = app(TranslationPromptBuilder::class);
+        $this->eligibility = $eligibility;
+        $this->format = $format;
+        $this->force = (bool) $this->option('force');
+        $this->translated = 0;
+        $this->failure = null;
+
+        $requestedKey = trim((string) $this->option('key'));
+        $beforeSnapshot = app(TranslationFileChangeReporter::class)->snapshot($this->files->langPath());
         $target = $this->resolveTargetPath((string) $this->option('path'));
-        $baseGroups = [];
-        $baseJson = [];
-        $vendorJsonNamespaces = [];
-        $baseVendorJson = [];
-        $baseGroupComments = [];
+        $base = $this->loadBaseTranslations($target);
 
-        if ($target === null) {
-            $baseGroups = $this->collectGroups($fileRepository, $baseLocale);
-            $baseJson = $fileRepository->loadJson($baseLocale);
-            $vendorJsonNamespaces = $this->collectVendorJsonNamespaces($fileRepository, $baseLocale);
-
-            if ($useContext) {
-                foreach (array_keys($baseGroups) as $group) {
-                    $baseGroupComments[$group] = $fileRepository->loadLineComments($baseLocale, $group);
-                }
-            }
-
-            foreach ($vendorJsonNamespaces as $namespace) {
-                $baseVendorJson[$namespace] = $fileRepository->loadJson($baseLocale, $namespace);
-            }
-        } elseif ($target['type'] === 'group') {
-            $path = $fileRepository->groupPath($baseLocale, $target['group']);
-
-            if (! File::exists($path)) {
-                $this->error("Base locale file not found: {$path}");
-
-                return self::FAILURE;
-            }
-
-            $entries = $fileRepository->loadGroup($baseLocale, $target['group']);
-            $baseGroups[$target['group']] = Arr::dot($entries);
-
-            if ($useContext) {
-                $baseGroupComments[$target['group']] = $fileRepository->loadLineComments($baseLocale, $target['group']);
-            }
-        } else {
-            $path = $fileRepository->jsonPath($baseLocale, $target['namespace']);
-
-            if (! File::exists($path)) {
-                $this->error("Base locale file not found: {$path}");
-
-                return self::FAILURE;
-            }
-
-            if ($target['namespace'] !== null) {
-                $vendorJsonNamespaces = [$target['namespace']];
-                $baseVendorJson[$target['namespace']] = $fileRepository->loadJson($baseLocale, $target['namespace']);
-            } else {
-                $baseJson = $fileRepository->loadJson($baseLocale);
-            }
+        if ($base === null) {
+            return self::FAILURE;
         }
 
-        [$keyFilter, $groupFilter, $jsonNamespaceFilter] = $this->resolveKeyFilters($requestedKey, $target, $baseGroups);
+        $filter = TranslationKeyFilter::resolve($requestedKey === '' ? null : $requestedKey, $target, $base['groups']);
 
-        if (! $this->hasRequestedKey($baseGroups, $baseJson, $baseVendorJson, $target, $keyFilter, $groupFilter, $jsonNamespaceFilter)) {
+        if (! $filter->matchesAny($base['groups'], $base['json'], $base['vendorJson'], $target)) {
             $this->error('Translation key not found in base locale.');
 
             return self::FAILURE;
         }
 
         foreach ($locales as $locale) {
-            if ($locale === $baseLocale) {
+            if ($locale === $this->baseLocale) {
                 continue;
             }
 
-            foreach ($baseGroups as $group => $entries) {
-                if (! $this->shouldTranslateGroup($group, $groupFilter)) {
-                    continue;
+            foreach ($base['groups'] as $group => $entries) {
+                if ($this->failure === null && $filter->allowsGroup($group)) {
+                    $this->translateGroup($locale, $group, $entries, $base['comments'][$group] ?? [], $filter);
                 }
-
-                $existing = $fileRepository->loadGroup($locale, $group);
-
-                $existing = $format->normalize($existing);
-
-                $flatExisting = Arr::dot($existing);
-                $updated = $existing;
-
-                foreach ($entries as $key => $value) {
-                    if (! $this->shouldTranslateKey($key, $keyFilter)) {
-                        continue;
-                    }
-
-                    if (app(TranslationFallbackRules::class)->usesDefault($locale, $group, $key)
-                        || app(TranslationFallbackRules::class)->usesDefault($locale, $group, $key, true)) {
-                        continue;
-                    }
-                    $current = $flatExisting[$key] ?? Arr::get($existing, $key);
-
-                    if ($current !== null && ! is_string($current)) {
-                        continue;
-                    }
-
-                    if (! $force && ! $eligibility->isMissing($current)) {
-                        continue;
-                    }
-
-                    if (! is_string($value)) {
-                        continue;
-                    }
-
-                    if (! $eligibility->canTranslateSource($key, $value)) {
-                        continue;
-                    }
-
-                    $translation = $this->translateValue(
-                        $driver,
-                        $promptBuilder,
-                        (string) $value,
-                        $baseLocale,
-                        $locale,
-                        "{$group}.{$key}",
-                        $this->buildTranslationContext($baseGroupComments[$group] ?? [], $key)
-                    );
-                    $format->set($updated, $key, $translation);
-                    $translated++;
-                }
-
-                $lineComments = $fileRepository->loadLineComments($locale, $group);
-                $rawCommented = $fileRepository->loadObsoleteComments($locale, $group);
-
-                $fileRepository->saveGroup($locale, $group, $updated, [], $lineComments, array_values($rawCommented));
             }
 
-            if ($groupFilter === null) {
-                $targetJson = $fileRepository->loadJson($locale);
-                $updatedJson = $targetJson;
+            if ($this->failure !== null) {
+                break;
+            }
 
-                foreach ($baseJson as $key => $value) {
-                    if (! $this->shouldTranslateJsonKey(null, $key, $keyFilter, $jsonNamespaceFilter)) {
-                        continue;
-                    }
+            if ($filter->group !== null) {
+                continue;
+            }
 
-                    if (app(TranslationFallbackRules::class)->usesDefault($locale, 'json', $key)
-                        || app(TranslationFallbackRules::class)->usesDefault($locale, 'json', $key, true)) {
-                        continue;
-                    }
-                    $current = $targetJson[$key] ?? null;
+            $this->translateJson($locale, null, $base['json'], $filter);
 
-                    if ($current !== null && ! is_string($current)) {
-                        continue;
-                    }
-
-                    if (! $force && ! $eligibility->isMissing($current)) {
-                        continue;
-                    }
-
-                    if (! is_string($value)) {
-                        continue;
-                    }
-
-                    if (! $eligibility->canTranslateSource($key, $value)) {
-                        continue;
-                    }
-
-                    $translation = $this->translateValue(
-                        $driver,
-                        $promptBuilder,
-                        (string) $value,
-                        $baseLocale,
-                        $locale,
-                        $key
-                    );
-                    $updatedJson[$key] = $translation;
-                    $translated++;
+            foreach ($base['vendorJson'] as $namespace => $entries) {
+                if ($this->failure === null && $filter->allowsVendorJsonNamespace($namespace)) {
+                    $this->translateJson($locale, $namespace, $entries, $filter);
                 }
+            }
 
-                $fileRepository->saveJson($locale, $updatedJson);
-
-                foreach ($baseVendorJson as $namespace => $entries) {
-                    if (! $this->shouldTranslateVendorJsonNamespace($namespace, $jsonNamespaceFilter)) {
-                        continue;
-                    }
-
-                    $targetJson = $fileRepository->loadJson($locale, $namespace);
-                    $updatedJson = $targetJson;
-
-                    foreach ($entries as $key => $value) {
-                        if (! $this->shouldTranslateJsonKey($namespace, $key, $keyFilter, $jsonNamespaceFilter)) {
-                            continue;
-                        }
-
-                        if (app(TranslationFallbackRules::class)->usesDefault($locale, 'json', $namespace.'::'.$key)
-                        || app(TranslationFallbackRules::class)->usesDefault($locale, 'json', $namespace.'::'.$key, true)) {
-                            continue;
-                        }
-                        $current = $targetJson[$key] ?? null;
-
-                        if ($current !== null && ! is_string($current)) {
-                            continue;
-                        }
-
-                        if (! $force && ! $eligibility->isMissing($current)) {
-                            continue;
-                        }
-
-                        if (! is_string($value)) {
-                            continue;
-                        }
-
-                        if (! $eligibility->canTranslateSource($key, $value)) {
-                            continue;
-                        }
-
-                        $translation = $this->translateValue(
-                            $driver,
-                            $promptBuilder,
-                            (string) $value,
-                            $baseLocale,
-                            $locale,
-                            "{$namespace}::{$key}"
-                        );
-                        $updatedJson[$key] = $translation;
-                        $translated++;
-                    }
-
-                    $fileRepository->saveJson($locale, $updatedJson, $namespace);
-                }
+            if ($this->failure !== null) {
+                break;
             }
         }
 
         app(VoxAuditLogger::class)->record('translate', [
-            'translated' => $translated,
+            'translated' => $this->translated,
         ]);
 
         info('Translations updated.');
         table(['Metric', 'Count'], [
-            ['Translated keys', (string) $translated],
+            ['Translated keys', (string) $this->translated],
         ]);
         app(TranslationFileChangeReporter::class)->report(
-            $fileRepository->langPath(),
+            $this->files->langPath(),
             $beforeSnapshot,
-            app(TranslationFileChangeReporter::class)->snapshot($fileRepository->langPath())
+            app(TranslationFileChangeReporter::class)->snapshot($this->files->langPath())
         );
 
+        if ($this->failure !== null) {
+            $this->error('Stopped early: '.$this->failure->getMessage());
+            $this->line('Translations completed before this point were saved. Run the command again to continue.');
+
+            return self::FAILURE;
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Load the base locale entries for the whole lang directory, or only for the targeted file.
+     *
+     * @param  array{type: string, group?: string, namespace?: string|null}|null  $target
+     * @return array{groups: array<string, array<string, mixed>>, json: array<string, mixed>, vendorJson: array<string, array<string, mixed>>, comments: array<string, array<string, array<int, string>>>}|null
+     */
+    private function loadBaseTranslations(?array $target): ?array
+    {
+        $useContext = config('vox.translate.use_context', true);
+        $base = ['groups' => [], 'json' => [], 'vendorJson' => [], 'comments' => []];
+
+        if ($target === null) {
+            $base['groups'] = $this->collectGroups($this->files, $this->baseLocale);
+            $base['json'] = $this->files->loadJson($this->baseLocale);
+
+            foreach ($this->collectVendorJsonNamespaces($this->files, $this->baseLocale) as $namespace) {
+                $base['vendorJson'][$namespace] = $this->files->loadJson($this->baseLocale, $namespace);
+            }
+        } elseif ($target['type'] === 'group') {
+            if (! $this->baseFileExists($this->files->groupPath($this->baseLocale, $target['group']))) {
+                return null;
+            }
+
+            $base['groups'][$target['group']] = Arr::dot($this->files->loadGroup($this->baseLocale, $target['group']));
+        } else {
+            if (! $this->baseFileExists($this->files->jsonPath($this->baseLocale, $target['namespace']))) {
+                return null;
+            }
+
+            if ($target['namespace'] !== null) {
+                $base['vendorJson'][$target['namespace']] = $this->files->loadJson($this->baseLocale, $target['namespace']);
+            } else {
+                $base['json'] = $this->files->loadJson($this->baseLocale);
+            }
+        }
+
+        if ($useContext) {
+            foreach (array_keys($base['groups']) as $group) {
+                $base['comments'][$group] = $this->files->loadLineComments($this->baseLocale, $group);
+            }
+        }
+
+        return $base;
+    }
+
+    private function baseFileExists(string $path): bool
+    {
+        if (File::exists($path)) {
+            return true;
+        }
+
+        $this->error("Base locale file not found: {$path}");
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $entries
+     * @param  array<string, array<int, string>>  $baseComments
+     */
+    private function translateGroup(string $locale, string $group, array $entries, array $baseComments, TranslationKeyFilter $filter): void
+    {
+        $existing = $this->format->normalize($this->files->loadGroup($locale, $group));
+        $flatExisting = Arr::dot($existing);
+        $updated = $existing;
+
+        foreach ($entries as $key => $value) {
+            if (! $filter->allowsKey($key)) {
+                continue;
+            }
+
+            $current = $flatExisting[$key] ?? Arr::get($existing, $key);
+
+            if (! $this->needsTranslation($locale, $group, $key, $key, $current, $value)) {
+                continue;
+            }
+
+            try {
+                $this->format->set($updated, $key, $this->translateValue(
+                    $value,
+                    $locale,
+                    "{$group}.{$key}",
+                    $this->buildTranslationContext($baseComments, $key)
+                ));
+            } catch (Throwable $exception) {
+                $this->failure = $exception;
+
+                break;
+            }
+        }
+
+        $this->files->saveGroup(
+            $locale,
+            $group,
+            $updated,
+            [],
+            $this->files->loadLineComments($locale, $group),
+            array_values($this->files->loadObsoleteComments($locale, $group))
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $entries
+     */
+    private function translateJson(string $locale, ?string $namespace, array $entries, TranslationKeyFilter $filter): void
+    {
+        $existing = $this->files->loadJson($locale, $namespace);
+        $updated = $existing;
+
+        foreach ($entries as $key => $value) {
+            if (! $filter->allowsJsonKey($namespace, $key)) {
+                continue;
+            }
+
+            $fullKey = $namespace === null ? $key : "{$namespace}::{$key}";
+
+            if (! $this->needsTranslation($locale, 'json', $fullKey, $key, $existing[$key] ?? null, $value)) {
+                continue;
+            }
+
+            try {
+                $updated[$key] = $this->translateValue($value, $locale, $fullKey);
+            } catch (Throwable $exception) {
+                $this->failure = $exception;
+
+                break;
+            }
+        }
+
+        $this->files->saveJson($locale, $updated, $namespace);
+    }
+
+    /**
+     * Whether a target value should be (re)translated from the given source value.
+     */
+    private function needsTranslation(string $locale, string $group, string $ruleKey, string $key, mixed $current, mixed $value): bool
+    {
+        $fallbackRules = app(TranslationFallbackRules::class);
+
+        if ($fallbackRules->usesDefault($locale, $group, $ruleKey) || $fallbackRules->usesDefault($locale, $group, $ruleKey, true)) {
+            return false;
+        }
+
+        if (($current !== null && ! is_string($current)) || $this->eligibility->isBlank($current)) {
+            return false;
+        }
+
+        if (! $this->force && ! $this->eligibility->isMissing($current)) {
+            return false;
+        }
+
+        return is_string($value) && $this->eligibility->canTranslateSource($key, $value);
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function translateValue(string $text, string $locale, string $label, array $context = []): string
+    {
+        $translation = $this->translateWithOutput($this->driver, $this->promptBuilder, $text, $this->baseLocale, $locale, $label, $context);
+        $this->translated++;
+
+        return $translation;
     }
 
     /**
@@ -363,322 +384,6 @@ class TranslateMissingTranslationsCommand extends Command
         }
 
         return null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $context
-     */
-    private function translateValue(
-        TranslationDriver $driver,
-        TranslationPromptBuilder $promptBuilder,
-        string $text,
-        string $sourceLocale,
-        string $targetLocale,
-        string $label,
-        array $context = []
-    ): string {
-        $displayLabel = $this->formatLabelForOutput($label);
-
-        if (! $this->output->isVerbose()) {
-            return spin(
-                fn () => $driver->translate($text, $sourceLocale, $targetLocale, $context),
-                $this->formatSpinnerMessage($displayLabel, $targetLocale)
-            );
-        }
-
-        $this->output->writeln('');
-        $this->output->writeln("AI translation: {$displayLabel}");
-
-        $rows = [];
-
-        if ($driver instanceof OpenAiTranslationDriver) {
-            $systemPrompt = $promptBuilder->build($text, $sourceLocale, $targetLocale, $context);
-            $rows[] = ['system', $systemPrompt];
-        } else {
-            $rows[] = ['note', 'Translation driver does not expose AI message payloads.'];
-        }
-
-        $rows[] = ['user', $text];
-
-        $translation = $driver->translate($text, $sourceLocale, $targetLocale, $context);
-
-        $rows[] = ['assistant', $translation];
-
-        table(['Role', 'Content'], $this->formatPromptRows($rows));
-
-        return $translation;
-    }
-
-    private function formatSpinnerMessage(string $label, string $targetLocale): string
-    {
-        $message = "Translating {$label} to {$targetLocale}";
-        $width = max(0, (new Terminal)->getWidth() - 4);
-
-        return mb_strimwidth($message, 0, $width, $width >= 3 ? '...' : '', 'UTF-8');
-    }
-
-    private function formatLabelForOutput(string $label): string
-    {
-        $collapsed = preg_replace('/\s+/', ' ', $label);
-        $collapsed = trim((string) $collapsed);
-
-        if ($collapsed === '') {
-            return $collapsed;
-        }
-
-        return Str::limit($collapsed, 120, '...');
-    }
-
-    /**
-     * @param  array<int, array{0: string, 1: string}>  $rows
-     * @return array<int, array<int, string>>
-     */
-    private function formatPromptRows(array $rows): array
-    {
-        $columns = getenv('COLUMNS');
-        $maxWidth = (is_string($columns) && ctype_digit($columns)) ? (int) $columns : 120;
-        $contentWidth = max(40, $maxWidth - 20);
-        $formatted = [];
-
-        foreach ($rows as $row) {
-            [$role, $content] = $row;
-            $lines = $this->wrapContent($content, $contentWidth);
-
-            foreach ($lines as $index => $line) {
-                $formatted[] = [$index === 0 ? $role : '', $line];
-            }
-        }
-
-        return $formatted;
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private function wrapContent(string $content, int $width): array
-    {
-        $content = str_replace("\r\n", "\n", $content);
-        $parts = explode("\n", $content);
-        $lines = [];
-
-        foreach ($parts as $part) {
-            if ($part === '') {
-                $lines[] = '';
-
-                continue;
-            }
-
-            $wrapped = wordwrap($part, $width, "\n", true);
-            $lines = array_merge($lines, explode("\n", $wrapped));
-        }
-
-        return $lines === [] ? [''] : $lines;
-    }
-
-    private function normalizeKeyOption(string $value): ?string
-    {
-        $normalized = trim($value);
-
-        if ($normalized === '') {
-            return null;
-        }
-
-        return $normalized;
-    }
-
-    /**
-     * @param  array<string, array<string, string>>  $baseGroups
-     * @return array{0: string|null, 1: string|null, 2: string|null}
-     */
-    private function resolveKeyFilters(?string $requestedKey, ?array $target, array $baseGroups): array
-    {
-        if ($requestedKey === null) {
-            return [null, null, null];
-        }
-
-        $keyFilter = $requestedKey;
-        $groupFilter = null;
-        $jsonNamespaceFilter = null;
-
-        if ($target !== null) {
-            if ($target['type'] === 'group') {
-                $keyFilter = $this->stripGroupPrefix($requestedKey, $target['group']);
-            } else {
-                $keyFilter = $this->stripJsonNamespacePrefix($requestedKey, $target['namespace']);
-            }
-
-            return [$keyFilter, $groupFilter, $jsonNamespaceFilter];
-        }
-
-        if (Str::contains($requestedKey, '::')) {
-            [$namespace, $rest] = explode('::', $requestedKey, 2);
-            $rest = ltrim($rest, '.');
-
-            if ($rest !== '' && Str::contains($rest, '.')) {
-                [$groupName, $restKey] = explode('.', $rest, 2);
-                $candidateGroup = $namespace.'::'.$groupName;
-
-                if (array_key_exists($candidateGroup, $baseGroups)) {
-                    return [$restKey, $candidateGroup, null];
-                }
-            }
-
-            return [$rest, null, $namespace];
-        }
-
-        if (Str::contains($requestedKey, '.')) {
-            [$groupName, $restKey] = explode('.', $requestedKey, 2);
-
-            if (array_key_exists($groupName, $baseGroups)) {
-                return [$restKey, $groupName, null];
-            }
-        }
-
-        return [$keyFilter, $groupFilter, $jsonNamespaceFilter];
-    }
-
-    private function stripGroupPrefix(string $key, string $group): string
-    {
-        $prefixes = [$group.'.'];
-        $plainGroup = Str::contains($group, '::') ? Str::after($group, '::') : null;
-
-        if ($plainGroup !== null && $plainGroup !== '') {
-            $prefixes[] = $plainGroup.'.';
-        }
-
-        foreach ($prefixes as $prefix) {
-            if (Str::startsWith($key, $prefix)) {
-                return substr($key, strlen($prefix));
-            }
-        }
-
-        return $key;
-    }
-
-    private function stripJsonNamespacePrefix(string $key, ?string $namespace): string
-    {
-        if ($namespace === null) {
-            return $key;
-        }
-
-        $prefix = $namespace.'::';
-
-        if (Str::startsWith($key, $prefix)) {
-            return substr($key, strlen($prefix));
-        }
-
-        return $key;
-    }
-
-    private function shouldTranslateGroup(string $group, ?string $groupFilter): bool
-    {
-        if ($groupFilter === null) {
-            return true;
-        }
-
-        return $group === $groupFilter;
-    }
-
-    private function shouldTranslateVendorJsonNamespace(string $namespace, ?string $namespaceFilter): bool
-    {
-        if ($namespaceFilter === null) {
-            return true;
-        }
-
-        return $namespace === $namespaceFilter;
-    }
-
-    private function shouldTranslateKey(string $key, ?string $keyFilter): bool
-    {
-        if ($keyFilter === null) {
-            return true;
-        }
-
-        return $key === $keyFilter;
-    }
-
-    private function shouldTranslateJsonKey(?string $namespace, string $key, ?string $keyFilter, ?string $namespaceFilter): bool
-    {
-        if ($keyFilter === null) {
-            return true;
-        }
-
-        if ($namespaceFilter !== null && $namespace !== $namespaceFilter) {
-            return false;
-        }
-
-        return $key === $keyFilter;
-    }
-
-    /**
-     * @param  array<string, array<string, string>>  $baseGroups
-     * @param  array<string, string>  $baseJson
-     * @param  array<string, array<string, string>>  $baseVendorJson
-     */
-    private function hasRequestedKey(
-        array $baseGroups,
-        array $baseJson,
-        array $baseVendorJson,
-        ?array $target,
-        ?string $keyFilter,
-        ?string $groupFilter,
-        ?string $jsonNamespaceFilter
-    ): bool {
-        if ($keyFilter === null) {
-            return true;
-        }
-
-        if ($target !== null) {
-            if ($target['type'] === 'group') {
-                $entries = $baseGroups[$target['group']] ?? [];
-
-                return array_key_exists($keyFilter, $entries);
-            }
-
-            $namespace = $target['namespace'];
-
-            if ($namespace !== null) {
-                $entries = $baseVendorJson[$namespace] ?? [];
-
-                return array_key_exists($keyFilter, $entries);
-            }
-
-            return array_key_exists($keyFilter, $baseJson);
-        }
-
-        if ($groupFilter !== null) {
-            $entries = $baseGroups[$groupFilter] ?? [];
-
-            if (array_key_exists($keyFilter, $entries)) {
-                return true;
-            }
-        } else {
-            foreach ($baseGroups as $entries) {
-                if (array_key_exists($keyFilter, $entries)) {
-                    return true;
-                }
-            }
-        }
-
-        if ($jsonNamespaceFilter !== null) {
-            $entries = $baseVendorJson[$jsonNamespaceFilter] ?? [];
-
-            if (array_key_exists($keyFilter, $entries)) {
-                return true;
-            }
-        } else {
-            if (array_key_exists($keyFilter, $baseJson)) {
-                return true;
-            }
-
-            foreach ($baseVendorJson as $entries) {
-                if (array_key_exists($keyFilter, $entries)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     /**

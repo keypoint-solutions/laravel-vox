@@ -1,10 +1,11 @@
 <script setup lang="ts">
     import { Head, router, usePage } from '@inertiajs/vue3';
-    import { ChevronLeft, ChevronRight, ClipboardList, UserRound } from '@lucide/vue';
+    import { ClipboardList, UserRound } from '@lucide/vue';
     import { computed, ref } from 'vue';
 
-    import { Badge, Button, Tooltip } from '@/components/ui';
+    import { Badge } from '@/components/ui';
     import PageSizeSelect from '@/components/ui/PageSizeSelect.vue';
+    import PaginationNav from '@/components/ui/PaginationNav.vue';
     import { useDateTime } from '@/composables/useDateTime';
     import Layout from '@/layouts/Layout.vue';
 
@@ -157,28 +158,11 @@
                     @update:model-value="goToPage(1)"
                 />
                 <div class="flex items-center gap-1">
-                    <Tooltip text="Previous page">
-                        <Button
-                            aria-label="Previous page"
-                            :disabled="audits.current_page <= 1"
-                            size="icon"
-                            variant="ghost"
-                            @click="goToPage(audits.current_page - 1)"
-                        >
-                            <ChevronLeft class="size-4" />
-                        </Button>
-                    </Tooltip>
-                    <Tooltip text="Next page">
-                        <Button
-                            aria-label="Next page"
-                            :disabled="audits.current_page >= audits.last_page"
-                            size="icon"
-                            variant="ghost"
-                            @click="goToPage(audits.current_page + 1)"
-                        >
-                            <ChevronRight class="size-4" />
-                        </Button>
-                    </Tooltip>
+                    <PaginationNav
+                        :current-page="audits.current_page"
+                        :last-page="audits.last_page"
+                        @change="goToPage"
+                    />
                 </div>
             </div>
         </section>

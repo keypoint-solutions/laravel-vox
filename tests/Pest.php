@@ -1,7 +1,12 @@
 <?php
 
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
+use KeypointSolutions\LaravelVox\Models\VoxAudit;
+use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Tests\TestCase;
 
 uses(TestCase::class)
@@ -40,4 +45,40 @@ function prepareVoxFixtures(): string
     test()->fixtureRoot = $targetRoot;
 
     return $targetRoot;
+}
+
+function seedManageTranslations(): void
+{
+    $syncAt = Carbon::now()->subDay();
+
+    VoxAudit::factory()->sync(3)->create(['created_at' => $syncAt]);
+
+    VoxTranslation::factory()
+        ->frontend()
+        ->withValues(['en' => 'Welcome', 'fr' => 'Bienvenue'])
+        ->withOccurrence('resources/views/welcome.blade.php', 12, '<h1>', '</h1>')
+        ->withTimestamps(Carbon::now()->subHours(2))
+        ->create(['group' => 'frontend', 'key' => 'welcome']);
+
+    VoxTranslation::factory()
+        ->withValues(['en' => 'Dashboard', 'fr' => 'Tableau de bord'])
+        ->withTimestamps(Carbon::now()->subDays(3), Carbon::now()->subHours(1))
+        ->create(['group' => 'backend', 'key' => 'dashboard']);
+
+    VoxTranslation::factory()
+        ->json()
+        ->approved()
+        ->withValues(['en' => 'Welcome JSON', 'fr' => 'Bienvenue JSON'])
+        ->withTimestamps(Carbon::now()->subDays(4))
+        ->create(['key' => 'Welcome JSON']);
+}
+
+/**
+ * @return Collection<int, array<string, mixed>>
+ */
+function manageTranslations(TestResponse $response): Collection
+{
+    $response->assertOk();
+
+    return collect($response->inertiaPage()['props']['translations']['data']);
 }

@@ -4,6 +4,7 @@ namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Process;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
 use KeypointSolutions\LaravelVox\Support\VoxDatabaseManager;
 use KeypointSolutions\LaravelVox\Support\VoxFrontendDependency;
 
@@ -23,7 +24,7 @@ class SetupCommand extends Command
 
     public function handle(): int
     {
-        $connection = (string) config('vox.database.connection', 'vox');
+        $connection = VoxConfig::connectionName();
         app(VoxDatabaseManager::class)->ensureConnection();
         $databasePath = config("database.connections.{$connection}.database");
 

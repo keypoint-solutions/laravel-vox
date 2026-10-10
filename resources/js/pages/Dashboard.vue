@@ -3,6 +3,7 @@
     import { FileText, Globe, Languages, Layers, RefreshCw, Settings, UploadCloud } from '@lucide/vue';
     import { computed } from 'vue';
 
+    import { useVoxRoutes } from '@/composables/useVoxRoutes';
     import Layout from '@/layouts/Layout.vue';
 
     defineOptions({
@@ -19,7 +20,7 @@
     const page = usePage<{ stats: StatsProps }>();
     const stats = computed(() => page.props.stats ?? {});
     const features = computed(() => page.props.vox?.features ?? {});
-    const routes = computed(() => page.props.vox?.routes);
+    const routes = useVoxRoutes();
 
     const modules = computed(() =>
         [

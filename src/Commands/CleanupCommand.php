@@ -3,6 +3,7 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
+use KeypointSolutions\LaravelVox\Commands\Concerns\RecordsTranslationCheckpoint;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 
 use function Laravel\Prompts\info;

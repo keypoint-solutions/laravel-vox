@@ -4,7 +4,9 @@
     import { computed, ref, watch } from 'vue';
 
     import { Badge, Button, Checkbox, FormField, Input, Select, Textarea } from '@/components/ui';
+    import Alert from '@/components/ui/Alert.vue';
     import { useDateTime } from '@/composables/useDateTime';
+    import { useVoxRoutes } from '@/composables/useVoxRoutes';
     import Layout from '@/layouts/Layout.vue';
 
     defineOptions({
@@ -17,7 +19,7 @@
         available: boolean;
     }
 
-    interface SettingsProps {
+    type SettingsProps = {
         settings: {
             dynamic_key_patterns: string[];
             configured_dynamic_key_patterns: string[];
@@ -47,15 +49,24 @@
             checked_at: string | null;
             models: ModelOption[];
         };
-    }
+    };
 
     const page = usePage<SettingsProps>();
+
+    /**
+     * Errors the server reports for a whole settings section, not a single field.
+     */
+    function generalError(form: { errors: object }): string | undefined {
+        return (form.errors as Record<string, string>).general;
+    }
+
+    const routes = useVoxRoutes();
     const { formatDateTime } = useDateTime();
     const settings = computed(() => page.props.settings);
     const ai = computed(() => page.props.ai);
-    const settingsUpdateRoute = computed(() => page.props.vox?.routes?.settings_update ?? page.url.split('?')[0]);
+    const settingsUpdateRoute = computed(() => routes.value?.settings_update ?? page.url.split('?')[0]);
     const modelsRefreshRoute = computed(
-        () => page.props.vox?.routes?.settings_ai_models_refresh ?? `${page.url.split('?')[0]}/ai/models`
+        () => routes.value?.settings_ai_models_refresh ?? `${page.url.split('?')[0]}/ai/models`
     );
 
     const aiForm = useForm({
@@ -114,7 +125,7 @@
         }
 
         resetComplete.value = false;
-        resetForm.post(page.props.vox?.routes?.settings_reset ?? `${page.url.split('?')[0]}/reset`, {
+        resetForm.post(routes.value?.settings_reset ?? `${page.url.split('?')[0]}/reset`, {
             preserveScroll: true,
             onSuccess: () => {
                 cancelReset();
@@ -301,13 +312,12 @@
                     class="space-y-6"
                     @submit.prevent="saveAiSettings"
                 >
-                    <div
-                        v-if="aiForm.errors.general"
-                        role="alert"
-                        class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border p-3 text-sm"
+                    <Alert
+                        v-if="generalError(aiForm)"
+                        tone="error"
                     >
-                        {{ aiForm.errors.general }}
-                    </div>
+                        {{ generalError(aiForm) }}
+                    </Alert>
 
                     <FormField
                         id="model"
@@ -428,13 +438,12 @@
                 class="space-y-6 p-6"
                 @submit.prevent="saveDynamicKeySettings"
             >
-                <div
-                    v-if="dynamicKeysForm.errors.general"
-                    role="alert"
-                    class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border p-3 text-sm"
+                <Alert
+                    v-if="generalError(dynamicKeysForm)"
+                    tone="error"
                 >
-                    {{ dynamicKeysForm.errors.general }}
-                </div>
+                    {{ generalError(dynamicKeysForm) }}
+                </Alert>
 
                 <FormField
                     id="dynamic_key_patterns"
@@ -530,13 +539,12 @@
                 class="space-y-6 p-6"
                 @submit.prevent="saveSyncSettings"
             >
-                <div
-                    v-if="syncForm.errors.general"
-                    role="alert"
-                    class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border p-3 text-sm"
+                <Alert
+                    v-if="generalError(syncForm)"
+                    tone="error"
                 >
-                    {{ syncForm.errors.general }}
-                </div>
+                    {{ generalError(syncForm) }}
+                </Alert>
 
                 <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                     <FormField

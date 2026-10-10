@@ -4,9 +4,9 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
-use KeypointSolutions\LaravelVox\Support\VoxArchive;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
-use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileRepository;
+use KeypointSolutions\LaravelVox\Translation\Publishing\TranslationPublisher;
+use KeypointSolutions\LaravelVox\Translation\Remote\VoxArchive;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 

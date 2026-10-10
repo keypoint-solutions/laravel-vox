@@ -3,7 +3,8 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
-use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
+use KeypointSolutions\LaravelVox\Commands\Concerns\RecordsTranslationCheckpoint;
+use KeypointSolutions\LaravelVox\Translation\Remote\RemoteReconciliation;
 
 class ReviewCommand extends Command
 {

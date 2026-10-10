@@ -8,7 +8,7 @@ class VoxDatabaseManager
 {
     public function ensureConnection(): void
     {
-        $connectionName = config('vox.database.connection', 'vox');
+        $connectionName = VoxConfig::connectionName();
         $databasePath = config('vox.database.path');
 
         if ($databasePath === null) {
@@ -28,7 +28,7 @@ class VoxDatabaseManager
     public function initializeDatabase(): void
     {
         $this->ensureConnection();
-        $connectionName = config('vox.database.connection', 'vox');
+        $connectionName = VoxConfig::connectionName();
         $connection = config("database.connections.{$connectionName}", []);
         $databasePath = $connection['database'] ?? null;
 

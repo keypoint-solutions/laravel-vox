@@ -3,24 +3,38 @@
 namespace KeypointSolutions\LaravelVox\Translation;
 
 use Illuminate\Support\Str;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
 
 class TranslationEligibility
 {
+    /**
+     * A value is missing when it was never provided or still carries the missing marker.
+     * An empty string is deliberate wording: it is saved, approved and published like any other.
+     */
     public function isMissing(mixed $value): bool
     {
-        $prefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
+        return ! is_string($value) || $this->isFlagged($value);
+    }
 
-        return ! is_string($value) || $value === ''
-            || ($prefix !== '' && str_starts_with($value, $prefix));
+    public function isFlagged(string $value): bool
+    {
+        $prefix = VoxConfig::missingPrefix();
+
+        return $prefix !== '' && str_starts_with($value, $prefix);
+    }
+
+    public function isBlank(mixed $value): bool
+    {
+        return is_string($value) && trim($value) === '';
     }
 
     public function canTranslateSource(string $key, mixed $value): bool
     {
-        return ! $this->isMissing($value) && trim($value) !== ''
+        return ! $this->isMissing($value) && ! $this->isBlank($value)
             && ! ($value === $key && $this->isPlaceholderKey($key));
     }
 
-    private function isPlaceholderKey(string $key): bool
+    public function isPlaceholderKey(string $key): bool
     {
         $segments = array_unique([$key, Str::afterLast($key, '.')]);
 

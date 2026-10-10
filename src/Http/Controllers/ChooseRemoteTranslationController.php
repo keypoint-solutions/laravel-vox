@@ -6,9 +6,10 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationChoiceDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
-use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
+use KeypointSolutions\LaravelVox\Translation\Remote\RemoteReconciliation;
 use Throwable;
 
 class ChooseRemoteTranslationController
@@ -45,7 +46,7 @@ class ChooseRemoteTranslationController
                 'default_locale' => $row['default_locale'],
                 'default_value' => $row['default_value'],
                 'key' => $row['group'].'.'.$row['key'],
-                'missing_prefix' => (string) config('vox.parse.missing_translation_prefix', '🚩'),
+                'missing_prefix' => VoxConfig::missingPrefix(),
             ];
         }
         if (strlen(json_encode($contexts, JSON_THROW_ON_ERROR)) > 120000) {

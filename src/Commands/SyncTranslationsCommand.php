@@ -3,8 +3,9 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
+use KeypointSolutions\LaravelVox\Commands\Concerns\RecordsTranslationCheckpoint;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Translation\TranslationDatabaseSynchronizer;
+use KeypointSolutions\LaravelVox\Translation\Sync\TranslationDatabaseSynchronizer;
 
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\spin;

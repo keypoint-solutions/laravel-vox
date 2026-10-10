@@ -3,8 +3,9 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
+use KeypointSolutions\LaravelVox\Commands\Concerns\RecordsTranslationCheckpoint;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
+use KeypointSolutions\LaravelVox\Translation\Publishing\TranslationPublisher;
 use Throwable;
 
 class PublishCommand extends Command

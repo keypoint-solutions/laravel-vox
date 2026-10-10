@@ -6,7 +6,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Translation\TranslationDatabaseSynchronizer;
+use KeypointSolutions\LaravelVox\Translation\Sync\TranslationDatabaseSynchronizer;
 
 class SyncLocalTranslationsController
 {

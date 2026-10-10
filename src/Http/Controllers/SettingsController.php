@@ -7,9 +7,9 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use KeypointSolutions\LaravelVox\Support\AiModelDiscovery;
-use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
+use KeypointSolutions\LaravelVox\Ai\AiModelDiscovery;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
+use KeypointSolutions\LaravelVox\Translation\Scanning\VoxDynamicKeyRegistry;
 
 class SettingsController
 {

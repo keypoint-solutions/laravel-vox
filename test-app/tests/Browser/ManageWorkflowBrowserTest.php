@@ -99,7 +99,7 @@ it('bulk approves selected translations and can edit a translated value', functi
 
     $second = VoxTranslationFactory::new()
         ->pending()
-        ->withValues(['en' => 'Second browser value', 'fr' => ''])
+        ->withValues(['en' => 'Second browser value'])
         ->create(['group' => 'browser', 'key' => 'bulk-second']);
 
     $page = visit('/vox/manage?group=browser&scope=group')

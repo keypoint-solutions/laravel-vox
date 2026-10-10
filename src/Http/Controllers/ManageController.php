@@ -4,20 +4,20 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use KeypointSolutions\LaravelVox\Ai\AiAvailability;
+use KeypointSolutions\LaravelVox\Http\Presenters\ManageTranslationPresenter;
+use KeypointSolutions\LaravelVox\Http\Queries\ManageTranslationsQuery;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
-use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
-use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
-use KeypointSolutions\LaravelVox\Translation\TranslationDeletionEligibility;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\Publishing\VoxFrontendManifest;
+use KeypointSolutions\LaravelVox\Translation\Scanning\VoxDynamicKeyRegistry;
 use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
-use KeypointSolutions\LaravelVox\Translation\TranslationKey;
 
 class ManageController
 {
@@ -25,13 +25,15 @@ class ManageController
         private VoxLocaleResolver $localeResolver,
         private VoxFrontendManifest $frontendManifest,
         private VoxDynamicKeyRegistry $dynamicKeys,
-        private TranslationDeletionEligibility $deletionEligibility,
+        private ManageTranslationsQuery $translations,
+        private ManageTranslationPresenter $presenter,
+        private AiAvailability $ai,
     ) {}
 
     public function __invoke(Request $request): Response
     {
         $filters = $this->resolveFilters($request);
-        [$locales, $baseLocale] = $this->resolveLocales();
+        [$locales, $baseLocale] = $this->localeResolver->resolveLocalesWithBase();
 
         $lastSync = VoxAudit::query()
             ->whereIn('action', ['sync', 'sync-remote'])
@@ -47,12 +49,12 @@ class ManageController
             'locales' => $locales,
             'baseLocale' => $baseLocale,
             'fallbackRules' => app(TranslationFallbackRules::class)->all(),
-            'missingTranslationPrefix' => (string) config('vox.parse.missing_translation_prefix', '🚩'),
+            'missingTranslationPrefix' => VoxConfig::missingPrefix(),
             'filters' => $filters,
             'statusOptions' => $this->statusOptions(),
             'sortOptions' => $this->sortOptions(),
             'lastSyncAt' => $lastSync?->created_at?->toIso8601String(),
-            'ai' => $this->aiStatus(),
+            'ai' => ['available' => $this->ai->available()],
             'totalTranslations' => $totalTranslations,
             'dynamicPatterns' => array_values(array_filter(
                 $this->dynamicKeys->entries(),
@@ -106,24 +108,6 @@ class ManageController
     }
 
     /**
-     * @return array{0: array<int, string>, 1: string}
-     */
-    private function resolveLocales(): array
-    {
-        $locales = $this->localeResolver->resolveLocales();
-        $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
-
-        if (! in_array($baseLocale, $locales, true)) {
-            $locales[] = $baseLocale;
-        }
-
-        $locales = array_values(array_unique($locales));
-        $locales = array_values(array_unique(array_merge([$baseLocale], $locales)));
-
-        return [$locales, $baseLocale];
-    }
-
-    /**
      * @param  array<int, string>  $locales
      * @return array<int, array{name: string, total: int, is_frontend_exported: bool, frontend_export_source: string|null, is_json: bool}>
      */
@@ -132,7 +116,7 @@ class ManageController
         $frontendGroups = $this->frontendManifest->groups();
         $frontendSource = $this->frontendManifest->usesConfiguredGroups() ? 'configured' : 'detected';
         $countQuery = VoxTranslation::query();
-        $this->applyStatusFilter($countQuery, $status, $lastSyncAt, $locales);
+        $this->translations->applyStatusFilter($countQuery, $status, $lastSyncAt, $locales);
         $counts = $countQuery
             ->select('group')
             ->selectRaw('count(*) as total')
@@ -178,332 +162,11 @@ class ManageController
         $perPage = $request->integer('per_page', 25);
         $perPage = in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
 
-        $query = VoxTranslation::query()
-            ->with([
-                'values' => fn ($builder) => $builder->orderBy('locale'),
-                'occurrences' => fn ($builder) => $builder->orderBy('id'),
-            ]);
-
-        $applyGroup = $filters['scope'] === 'group' && $filters['group'] !== null;
-
-        if ($applyGroup) {
-            if ($filters['group'] === 'default') {
-                $query->whereNull('group');
-            } else {
-                $query->where('group', $filters['group']);
-            }
-        }
-
-        if ($filters['search'] !== '') {
-            $like = '%'.$filters['search'].'%';
-            $query->where(function (Builder $builder) use ($like): void {
-                $builder
-                    ->where('key', 'like', $like)
-                    ->orWhere('group', 'like', $like)
-                    ->orWhereHas('values', function (Builder $valueQuery) use ($like): void {
-                        $valueQuery->where('value', 'like', $like);
-                    });
-
-                if (Str::contains($like, '.')) {
-                    [$groupPart, $keyPart] = explode('.', trim($like, '%'), 2);
-
-                    if ($groupPart !== '' && $keyPart !== '') {
-                        $builder->orWhere(function (Builder $subQuery) use ($groupPart, $keyPart): void {
-                            $subQuery
-                                ->where('group', 'like', '%'.$groupPart.'%')
-                                ->where('key', 'like', '%'.$keyPart.'%');
-                        });
-                    }
-                }
-            });
-        }
-
-        $this->applyStatusFilter($query, $filters['status'], $lastSyncAt, $locales);
-        $this->applySort($query, $filters['sort'], $lastSyncAt);
-
-        return $query
+        return $this->translations
+            ->build($filters, $locales, $lastSyncAt)
             ->paginate($perPage)
             ->withQueryString()
-            ->through(function (VoxTranslation $translation) use ($locales, $lastSyncAt): array {
-                $values = array_fill_keys($locales, '');
-                $dynamicMatch = $this->dynamicKeys->match(
-                    $translation->key,
-                    $translation->group === 'json' ? null : $translation->group
-                );
-
-                foreach ($translation->values as $value) {
-                    $values[$value->locale] = $value->value;
-                }
-
-                return [
-                    'id' => $translation->id,
-                    'group' => $translation->group,
-                    'key' => $translation->key,
-                    'display_key' => $this->displayKey($translation),
-                    'status' => $translation->status,
-                    'freshness_status' => $this->freshnessStatus($translation, $lastSyncAt),
-                    'has_missing_values' => $this->hasMissingValues($translation, $locales),
-                    'is_frontend' => $translation->is_frontend,
-                    'is_orphan' => $translation->is_orphan,
-                    'is_dynamic' => in_array('detected', $dynamicMatch['sources'] ?? [], true) || in_array('binding', $dynamicMatch['sources'] ?? [], true),
-                    'is_retained' => array_intersect(['settings', 'retained-config'], $dynamicMatch['sources'] ?? []) !== [],
-                    'is_pending_delete' => $translation->is_pending_delete,
-                    'deletion_unavailable_reason' => $this->deletionEligibility->reason($translation),
-                    'retention_sources' => $dynamicMatch['sources'] ?? [],
-                    'matching_patterns' => $dynamicMatch['patterns'] ?? [],
-                    'dynamic_occurrences' => $dynamicMatch['occurrences'] ?? [],
-                    'dynamic_pattern' => $dynamicMatch['pattern'] ?? null,
-                    'source' => $translation->source,
-                    'updated_at' => $translation->updated_at?->toIso8601String(),
-                    'values' => $values,
-                    'fallback' => collect($locales)->mapWithKeys(fn (string $locale): array => [$locale => [
-                        'mode' => app(TranslationFallbackRules::class)->mode($locale, $translation->group ?? 'json', $translation->key),
-                        'published_mode' => app(TranslationFallbackRules::class)->mode($locale, $translation->group ?? 'json', $translation->key, true),
-                        'selection' => app(TranslationFallbackRules::class)->selection($locale, 'key', $translation->group, $translation->key),
-                    ]])->all(),
-                    'file_values' => $translation->values->pluck('file_value', 'locale')->all(),
-                    'published_overrides' => $translation->values->pluck('published_override', 'locale')->all(),
-                    'draft_locales' => $translation->values->where('is_pending_publish', true)->where('is_approved', false)->pluck('locale')->all(),
-                    'pending_publish_locales' => $translation->values->filter(fn ($value): bool => $value->hasApprovedChange())->pluck('locale')->all(),
-                    'approved_locales' => $translation->values->where('is_approved', true)->pluck('locale')->all(),
-                    'values_count' => $translation->values->count(),
-                    'occurrences' => $translation->occurrences->reject(fn ($occurrence): bool => collect($dynamicMatch['occurrences'] ?? [])->contains(fn (array $possible): bool => $possible['file'] === $occurrence->file_path && ($possible['line'] ?? null) === $occurrence->line_number))->values()->map(function ($occurrence): array {
-                        return [
-                            'id' => $occurrence->id,
-                            'file_path' => $occurrence->file_path,
-                            'line_number' => $occurrence->line_number,
-                            'context_before' => $occurrence->context_before,
-                            'context_after' => $occurrence->context_after,
-                        ];
-                    })->all(),
-                ];
-            });
-    }
-
-    /**
-     * @param  array<int, string>  $locales
-     */
-    private function applyStatusFilter(Builder $query, ?string $status, ?CarbonInterface $lastSyncAt, array $locales): void
-    {
-        $query->where('is_pending_delete', $status === 'pending-deletion');
-        if ($status === 'pending-deletion') {
-            return;
-        }
-        if ($status === null) {
-            return;
-        }
-
-        if ($status === 'published-overrides') {
-            $query->whereHas('values', fn (Builder $values) => $values->whereNotNull('published_override'));
-
-            return;
-        }
-
-        if ($status === 'drafts') {
-            $query->whereHas('values', fn (Builder $values) => $values->where('is_pending_publish', true)->where('is_approved', false));
-
-            return;
-        }
-
-        if ($status === 'orphan') {
-            $query->where('is_orphan', true);
-
-            return;
-        }
-
-        if (in_array($status, ['dynamic', 'retained'], true)) {
-            $this->applyDynamicFilter($query, $status);
-
-            return;
-        }
-
-        $query->where('is_orphan', false);
-
-        if (in_array($status, ['missing', 'empty'], true)) {
-            $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
-            $method = $status === 'empty' ? 'whereDoesntHave' : 'whereHas';
-            $query->{$method}('values', function (Builder $valueQuery) use ($baseLocale): void {
-                $valueQuery->where('locale', $baseLocale)->whereNotNull('value')->where('value', '!=', '');
-            });
-            if ($status === 'empty') {
-                return;
-            }
-        }
-
-        if ($status === 'missing') {
-            $this->applyMissingFilter($query, $locales);
-
-            return;
-        }
-
-        if ($lastSyncAt === null) {
-            if (in_array($status, ['new', 'updated'], true)) {
-                $query->whereRaw('1 = 0');
-
-                return;
-            }
-
-            $query->where('status', $status);
-
-            return;
-        }
-
-        if ($status === 'new') {
-            $query->where('created_at', '>=', $lastSyncAt);
-
-            return;
-        }
-
-        if ($status === 'updated') {
-            $query
-                ->where('created_at', '<', $lastSyncAt)
-                ->where('updated_at', '>=', $lastSyncAt);
-
-            return;
-        }
-
-        $query->where('status', $status);
-    }
-
-    private function applyDynamicFilter(Builder $query, string $status): void
-    {
-        $patterns = array_column(array_filter($this->dynamicKeys->entries(), fn (array $entry): bool => $status === 'dynamic'
-            ? array_intersect(['detected', 'binding'], $entry['sources']) !== []
-            : array_intersect(['settings', 'retained-config'], $entry['sources']) !== []), 'pattern');
-
-        if ($patterns === []) {
-            $query->whereRaw('1 = 0');
-
-            return;
-        }
-
-        $query->where(function (Builder $dynamicQuery) use ($patterns): void {
-            foreach ($patterns as $pattern) {
-                $translationKey = TranslationKey::fromRaw($pattern);
-                $fullKeyPattern = str_replace('*', '%', $pattern);
-                $keyPattern = str_replace('*', '%', $translationKey->key);
-                $groupPattern = $translationKey->group !== null
-                    ? str_replace('*', '%', $translationKey->group)
-                    : null;
-
-                $dynamicQuery->orWhere(function (Builder $patternQuery) use (
-                    $fullKeyPattern,
-                    $groupPattern,
-                    $keyPattern
-                ): void {
-                    if ($groupPattern !== null) {
-                        $patternQuery
-                            ->where(function (Builder $groupedTranslation) use ($groupPattern, $keyPattern): void {
-                                $groupedTranslation
-                                    ->where('group', 'like', $groupPattern)
-                                    ->where('key', 'like', $keyPattern);
-                            })
-                            ->orWhere(function (Builder $jsonTranslation) use ($fullKeyPattern): void {
-                                $jsonTranslation
-                                    ->where(function (Builder $group): void {
-                                        $group->whereNull('group')
-                                            ->orWhere('group', 'json');
-                                    })
-                                    ->where('key', 'like', $fullKeyPattern);
-                            });
-
-                        return;
-                    }
-
-                    $patternQuery
-                        ->where(function (Builder $group): void {
-                            $group->whereNull('group')
-                                ->orWhere('group', 'json');
-                        })
-                        ->where('key', 'like', $fullKeyPattern);
-                });
-            }
-        });
-    }
-
-    /**
-     * @param  array<int, string>  $locales
-     */
-    private function applyMissingFilter(Builder $query, array $locales): void
-    {
-        $flagPrefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
-
-        $query->where(function (Builder $builder) use ($locales, $flagPrefix): void {
-            foreach ($locales as $locale) {
-                $builder->orWhere(function (Builder $missing) use ($locale, $flagPrefix): void {
-                    app(TranslationFallbackRules::class)->whereTranslated($missing, $locale);
-                    $missing->where(function (Builder $builder) use ($locale, $flagPrefix): void {
-                        $builder->whereDoesntHave('values', function (Builder $valueQuery) use ($locale): void {
-                            $valueQuery->where('locale', $locale);
-                        });
-
-                        $builder->orWhereHas('values', function (Builder $valueQuery) use ($locale, $flagPrefix): void {
-                            $valueQuery
-                                ->where('locale', $locale)
-                                ->where(function (Builder $q) use ($flagPrefix): void {
-                                    $q->where('value', '')
-                                        ->orWhereNull('value')
-                                        ->orWhere('value', 'like', $flagPrefix.'%');
-                                });
-                        });
-                    });
-                });
-            }
-        });
-    }
-
-    private function applySort(Builder $query, string $sort, ?CarbonInterface $lastSyncAt): void
-    {
-        if ($sort === 'status') {
-            if ($lastSyncAt === null) {
-                $query->orderByRaw("case when status = 'pending' then 0 when status = 'approved' then 1 else 2 end");
-                $query->orderByDesc('updated_at');
-
-                return;
-            }
-
-            $query->orderByRaw(
-                "case
-                    when created_at >= ? then 0
-                    when updated_at >= ? and created_at < ? then 1
-                    when status = 'pending' then 2
-                    when status = 'approved' then 3
-                    else 4
-                end",
-                [$lastSyncAt, $lastSyncAt, $lastSyncAt]
-            );
-            $query->orderByDesc('updated_at');
-
-            return;
-        }
-
-        $query->orderByDesc('updated_at');
-    }
-
-    private function displayKey(VoxTranslation $translation): string
-    {
-        if ($translation->group === null || Str::startsWith($translation->group, 'json')) {
-            return $translation->key;
-        }
-
-        return $translation->group.'.'.$translation->key;
-    }
-
-    private function freshnessStatus(VoxTranslation $translation, ?CarbonInterface $lastSyncAt): ?string
-    {
-        if ($lastSyncAt === null || $translation->is_orphan) {
-            return null;
-        }
-
-        if ($translation->created_at?->greaterThanOrEqualTo($lastSyncAt)) {
-            return 'new';
-        }
-
-        if ($translation->updated_at?->greaterThanOrEqualTo($lastSyncAt)) {
-            return 'updated';
-        }
-
-        return null;
+            ->through(fn (VoxTranslation $translation): array => $this->presenter->present($translation, $locales, $lastSyncAt));
     }
 
     private function syncBoundary(?VoxAudit $audit): ?CarbonInterface
@@ -515,33 +178,6 @@ class ManageController
         }
 
         return $audit?->created_at;
-    }
-
-    /**
-     * @param  array<int, string>  $locales
-     */
-    private function hasMissingValues(VoxTranslation $translation, array $locales): bool
-    {
-        $flagPrefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
-        $values = $translation->values->keyBy('locale');
-
-        $baseValue = $values->get($this->localeResolver->resolveBaseLocale($locales))?->value;
-        if ($baseValue === null || $baseValue === '') {
-            return false;
-        }
-
-        foreach ($locales as $locale) {
-            if (app(TranslationFallbackRules::class)->usesDefault($locale, $translation->group, $translation->key)) {
-                continue;
-            }
-            $value = $values->get($locale)?->value;
-
-            if (! is_string($value) || $value === '' || Str::startsWith($value, $flagPrefix)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
@@ -573,27 +209,6 @@ class ManageController
         return [
             ['value' => 'updated_desc', 'label' => 'Updated (newest)'],
             ['value' => 'status', 'label' => 'Status'],
-        ];
-    }
-
-    /**
-     * @return array{available: bool, configured: bool, driver: string}
-     */
-    private function aiStatus(): array
-    {
-        $driver = (string) config('vox.translate.driver', 'openai');
-        $available = $driver !== 'null';
-        $configured = true;
-
-        if ($driver === 'openai') {
-            $apiKey = config('vox.translate.providers.openai.api_key');
-            $configured = is_string($apiKey) && $apiKey !== '';
-        }
-
-        return [
-            'available' => $available && $configured,
-            'configured' => $configured,
-            'driver' => $driver,
         ];
     }
 }

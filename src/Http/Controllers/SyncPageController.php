@@ -5,22 +5,18 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use KeypointSolutions\LaravelVox\Ai\AiAvailability;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleCatalog;
-use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationChoiceDriver;
-use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
-use KeypointSolutions\LaravelVox\Translation\LocaleRemover;
-use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
+use KeypointSolutions\LaravelVox\Translation\Locales\LocaleRemover;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleCatalog;
+use KeypointSolutions\LaravelVox\Translation\Remote\RemoteReconciliation;
 
 class SyncPageController
 {
-    public function __invoke(Request $request, VoxLocaleCatalog $localeCatalog, RemoteReconciliation $reconciliation, LocaleRemover $localeRemover): Response
+    public function __invoke(Request $request, VoxLocaleCatalog $localeCatalog, RemoteReconciliation $reconciliation, LocaleRemover $localeRemover, AiAvailability $ai): Response
     {
         $catalog = $localeCatalog->all();
-        $driver = (string) config('vox.translate.driver', 'openai');
-        $aiAvailable = $driver !== 'null'
-            && ($driver !== 'openai' || filled(config('vox.translate.providers.openai.api_key')));
 
         return Inertia::render('Sync', [
             'reconciliation' => fn (): array => $reconciliation->page([
@@ -51,9 +47,8 @@ class SyncPageController
             'localeRemovalReasons' => collect($catalog['locales'])->mapWithKeys(fn (array $locale): array => [$locale['code'] => $localeRemover->unavailableReason($locale['code'])])->all(),
             'baseLocale' => $catalog['default_locale'],
             'ai' => [
-                'available' => $aiAvailable,
-                'can_choose' => $aiAvailable && app(TranslationDriverFactory::class)->make() instanceof TranslationChoiceDriver,
-                'driver' => $driver,
+                'available' => $ai->available(),
+                'can_choose' => $ai->canChoose(),
             ],
         ]);
     }

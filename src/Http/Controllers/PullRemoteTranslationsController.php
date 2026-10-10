@@ -6,7 +6,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
-use KeypointSolutions\LaravelVox\Translation\RemoteTranslationSyncer;
+use KeypointSolutions\LaravelVox\Translation\Remote\RemoteTranslationSyncer;
 use Throwable;
 
 class PullRemoteTranslationsController

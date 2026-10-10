@@ -90,8 +90,9 @@ return [
         'missing_translation_prefix' => env('VOX_MISSING_TRANSLATION_PREFIX', '🚩'),
     ],
     'translate' => [
+        // "openai", "claude", "null" for no AI, or a class implementing TranslationDriver.
         'driver' => env('VOX_TRANSLATE_DRIVER', 'openai'),
-        'model' => env('VOX_TRANSLATE_MODEL', env('VOX_OPENAI_MODEL', 'gpt-5.6-luna')),
+        'model' => env('VOX_TRANSLATE_MODEL', env('VOX_OPENAI_MODEL', 'gpt-6-luna')),
         'prompt' => env('VOX_TRANSLATE_PROMPT',
             'Translate the user message from :source to :target. Return only the translation. Preserve Laravel placeholders, tokens, whitespace, line breaks, and all HTML or Markdown markup exactly.'),
         'guidance' => env('VOX_TRANSLATE_GUIDANCE', ''),
@@ -109,6 +110,9 @@ return [
         'providers' => [
             'openai' => [
                 'api_key' => env('OPENAI_API_KEY'),
+            ],
+            'anthropic' => [
+                'api_key' => env('ANTHROPIC_API_KEY'),
             ],
         ],
     ],

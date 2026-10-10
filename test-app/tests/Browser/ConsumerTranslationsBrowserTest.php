@@ -1,6 +1,6 @@
 <?php
 
-use KeypointSolutions\LaravelVox\Translation\FrontendTranslationArtifacts;
+use KeypointSolutions\LaravelVox\Translation\Publishing\FrontendTranslationArtifacts;
 
 beforeEach(function (): void {
     config()->set('vox.translate.base_locale', 'en');

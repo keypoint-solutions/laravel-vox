@@ -1,10 +1,13 @@
 <script setup lang="ts">
     import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-    import { computed, ref } from 'vue';
+    import { ref } from 'vue';
 
     import { Badge, Button, Input } from '@/components/ui';
+    import PaginationNav from '@/components/ui/PaginationNav.vue';
     import { useDateTime } from '@/composables/useDateTime';
+    import { useVoxRoutes } from '@/composables/useVoxRoutes';
     import Layout from '@/layouts/Layout.vue';
+    import { firstError, routeUrl } from '@/lib/inertia';
 
     defineOptions({ layout: Layout });
 
@@ -21,7 +24,7 @@
         available: boolean;
         checkpoints: { data: Checkpoint[]; current_page: number; last_page: number } | null;
     }>();
-    const routes = computed(() => page.props.vox?.routes);
+    const routes = useVoxRoutes();
     const form = useForm({ label: '' });
     const selected = ref<Checkpoint | null>(null);
     const restoring = ref(false);
@@ -39,12 +42,12 @@
         restoring.value = true;
         error.value = '';
         router.post(
-            (routes.value?.checkpoints_restore ?? '').replace('__checkpoint__', String(selected.value.id)),
+            routeUrl(routes.value?.checkpoints_restore, 'checkpoint', selected.value.id),
             { confirm: true },
             {
                 preserveScroll: true,
                 onError: (errors) => {
-                    error.value = Object.values(errors)[0] ?? 'Unable to restore checkpoint.';
+                    error.value = firstError(errors, 'Unable to restore checkpoint.');
                 },
                 onSuccess: () => {
                     selected.value = null;
@@ -192,21 +195,16 @@
                 v-if="page.props.checkpoints"
                 class="flex items-center justify-between"
             >
-                <Button
-                    variant="outline"
-                    :disabled="page.props.checkpoints.current_page <= 1"
-                    @click="goToPage(page.props.checkpoints.current_page - 1)"
-                    >Previous</Button
+                <PaginationNav
+                    variant="text"
+                    :current-page="page.props.checkpoints.current_page"
+                    :last-page="page.props.checkpoints.last_page"
+                    @change="goToPage"
                 >
-                <span class="text-muted-foreground text-sm"
-                    >Page {{ page.props.checkpoints.current_page }} of {{ page.props.checkpoints.last_page }}</span
-                >
-                <Button
-                    variant="outline"
-                    :disabled="page.props.checkpoints.current_page >= page.props.checkpoints.last_page"
-                    @click="goToPage(page.props.checkpoints.current_page + 1)"
-                    >Next</Button
-                >
+                    <span class="text-muted-foreground text-sm"
+                        >Page {{ page.props.checkpoints.current_page }} of {{ page.props.checkpoints.last_page }}</span
+                    >
+                </PaginationNav>
             </div>
         </template>
     </div>

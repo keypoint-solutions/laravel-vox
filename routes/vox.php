@@ -8,6 +8,7 @@ use KeypointSolutions\LaravelVox\Http\Controllers\DashboardController;
 use KeypointSolutions\LaravelVox\Http\Controllers\DownloadTranslationArchiveController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ImportTranslationArchiveController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ManageController;
+use KeypointSolutions\LaravelVox\Http\Controllers\ManageTranslationAiController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ManageTranslationController;
 use KeypointSolutions\LaravelVox\Http\Controllers\ProvisionLocaleController;
 use KeypointSolutions\LaravelVox\Http\Controllers\PublishController;
@@ -62,7 +63,7 @@ Route::middleware([...$configMiddleware, SerializeVoxWrites::class])
 
         Route::post('/manage/translations', [ManageTranslationController::class, 'store'])
             ->name('manage.translations.store');
-        Route::post('/manage/translations/translate-draft', [ManageTranslationController::class, 'translateDraft'])
+        Route::post('/manage/translations/translate-draft', [ManageTranslationAiController::class, 'translateDraft'])
             ->name('manage.translations.translate-draft');
         Route::patch('/manage/translations/{translation}', [ManageTranslationController::class, 'update'])
             ->name('manage.translations.update');
@@ -73,9 +74,9 @@ Route::middleware([...$configMiddleware, SerializeVoxWrites::class])
             ->name('manage.translations.toggle-approval');
         Route::post('/manage/translations/bulk-approval', [ManageTranslationController::class, 'bulkApproval'])
             ->name('manage.translations.bulk-approval');
-        Route::post('/manage/translations/bulk-translate', [ManageTranslationController::class, 'bulkTranslate'])
+        Route::post('/manage/translations/bulk-translate', [ManageTranslationAiController::class, 'bulkTranslate'])
             ->name('manage.translations.bulk-translate');
-        Route::post('/manage/translations/{translation}/translate', [ManageTranslationController::class, 'translate'])
+        Route::post('/manage/translations/{translation}/translate', [ManageTranslationAiController::class, 'translate'])
             ->name('manage.translations.translate');
 
         Route::get('/publish', [PublishController::class, 'index'])->name('publish');

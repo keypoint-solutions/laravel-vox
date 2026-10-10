@@ -6,7 +6,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationRule;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileTransaction;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
 use RuntimeException;
 
 class TranslationFallbackRules
@@ -26,7 +28,7 @@ class TranslationFallbackRules
     /** @return array<int, array<string, mixed>> */
     public function all(): array
     {
-        return $this->rules ??= Schema::connection(config('vox.database.connection', 'vox'))->hasTable('vox_translation_rules')
+        return $this->rules ??= Schema::connection(VoxConfig::connectionName())->hasTable('vox_translation_rules')
             ? VoxTranslationRule::query()->orderBy('id')->get()->toArray() : [];
     }
 

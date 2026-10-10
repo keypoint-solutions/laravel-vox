@@ -55,6 +55,16 @@ class TestCase extends Orchestra
         ])->run();
     }
 
+    /**
+     * Open the dashboard as a local developer: no Vite manifest needed and the Vox gates bypassed.
+     */
+    protected function useVoxDashboard(): void
+    {
+        $this->withoutVite();
+        app()->detectEnvironment(fn () => 'local');
+        config()->set('vox.system.bypass_auth_in_local', true);
+    }
+
     protected function withoutVoxCsrfMiddleware(): void
     {
         $this->withoutMiddleware([

@@ -1,17 +1,20 @@
 <script setup lang="ts">
     import { Head, router, usePage } from '@inertiajs/vue3';
-    import { Check, CircleAlert, FileCheck2, Sparkles, UploadCloud } from '@lucide/vue';
+    import { CircleAlert, FileCheck2, Sparkles, UploadCloud } from '@lucide/vue';
     import { computed, ref } from 'vue';
 
     import { Button } from '@/components/ui';
+    import Alert from '@/components/ui/Alert.vue';
     import { useDateTime } from '@/composables/useDateTime';
+    import { useVoxRoutes } from '@/composables/useVoxRoutes';
     import Layout from '@/layouts/Layout.vue';
+    import { firstError, flashSuccess } from '@/lib/inertia';
 
     defineOptions({
         layout: Layout,
     });
 
-    interface PublishPageProps {
+    type PublishPageProps = {
         pendingRules: { locale: string; scope: string; group: string | null; key: string | null; mode: string }[];
         stats: {
             approved: number;
@@ -24,7 +27,7 @@
             orphan: number;
         };
         lastPublishAt: string | null;
-    }
+    };
 
     const page = usePage<PublishPageProps>();
     const { formatDateTime } = useDateTime();
@@ -41,7 +44,7 @@
                 orphan: 0,
             }
     );
-    const routes = computed(() => page.props.vox?.routes);
+    const routes = useVoxRoutes();
     const isPublishing = ref(false);
     const success = ref<string | null>(null);
     const error = ref<string | null>(null);
@@ -57,11 +60,10 @@
             {
                 preserveScroll: true,
                 onError: (errors) => {
-                    error.value = Object.values(errors)[0] ?? 'Publishing failed.';
+                    error.value = firstError(errors, 'Publishing failed.');
                 },
                 onSuccess: (responsePage) => {
-                    success.value =
-                        (responsePage.flash?.success as string | undefined) ?? 'Approved translations published.';
+                    success.value = flashSuccess(responsePage, 'Approved translations published.');
                 },
                 onFinish: () => {
                     isPublishing.value = false;
@@ -103,23 +105,19 @@
             </Button>
         </header>
 
-        <div
+        <Alert
             v-if="success"
-            role="status"
-            aria-live="polite"
-            class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-600"
+            tone="success"
         >
-            <Check class="size-4 shrink-0" />
             {{ success }}
-        </div>
+        </Alert>
 
-        <div
+        <Alert
             v-if="error"
-            role="alert"
-            class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border p-3 text-sm"
+            tone="error"
         >
             {{ error }}
-        </div>
+        </Alert>
 
         <section
             v-if="page.props.pendingRules?.length"
@@ -159,7 +157,7 @@
                 <div class="p-5">
                     <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Incomplete approved</p>
                     <p class="mt-2 text-2xl font-semibold tabular-nums">{{ stats.incomplete }}</p>
-                    <p class="text-muted-foreground mt-1 text-xs">Keys with empty or flagged approved values</p>
+                    <p class="text-muted-foreground mt-1 text-xs">Keys with flagged approved values</p>
                 </div>
                 <div class="p-5">
                     <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">Dynamic approved</p>
@@ -199,8 +197,8 @@
         >
             <CircleAlert class="mt-0.5 size-5 shrink-0 text-amber-500" />
             <p class="text-sm">
-                {{ stats.incomplete }} {{ stats.incomplete === 1 ? 'key has' : 'keys have' }} empty or flagged approved
-                values. Those values are skipped; other approved locales still publish.
+                {{ stats.incomplete }} {{ stats.incomplete === 1 ? 'key has' : 'keys have' }} flagged approved values.
+                Those values are skipped; other approved locales still publish.
             </p>
         </section>
 
@@ -211,7 +209,7 @@
             <Sparkles class="mt-0.5 size-5 shrink-0 text-emerald-500" />
             <p class="text-sm">
                 {{ stats.dynamic }} dynamic {{ stats.dynamic === 1 ? 'key has' : 'keys have' }} approved wording. Each
-                nonempty, unflagged locale can publish independently.
+                unflagged locale can publish independently.
             </p>
         </section>
 

@@ -4,6 +4,17 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+## 1.0.18 — 2026-10-10
+
+- Treat an empty string as deliberate wording instead of a missing translation. Only absent and marker-prefixed values are missing: blank values leave the Missing filter, are published once approved, and are no longer filled by `vox:translate` or by AI translation of selected rows. In the key editor, AI translation still fills fields that are empty.
+- Stop creating empty values for locales left unfilled when saving a key or creating a dynamic translation, so they stay missing.
+- Use one availability check for every AI feature. With the `null` driver or an OpenAI driver without a key, the dashboard, its endpoints and `vox:translate` all report that AI translation is not configured; `vox:translate` no longer copies the base wording into other locales.
+- Disable the key editor's AI actions when the base wording is flagged or only repeats a placeholder-style key.
+- List GPT-6 and later OpenAI text models in Settings instead of only the GPT-5 family, recommend `gpt-6-luna` and make it the default model, and request the lowest reasoning effort each model accepts so translations do not pay for reasoning tokens.
+- Add a Claude translation driver (`VOX_TRANSLATE_DRIVER=claude` with `ANTHROPIC_API_KEY`), including model discovery in Settings and AI wording choice in Sync. It defaults to `claude-haiku-5-5`.
+- Keep completed work when an AI provider fails part-way through a job, such as when credits run out: `vox:translate` saves progress and exits with the provider's message, AI translation of selected rows saves the finished drafts, and adding a language with AI flags the values it could not translate. Provider errors now show the provider's own message instead of a truncated HTTP response.
+- Reorganise internal classes into `Ai`, `Translation\Files`, `Translation\Locales`, `Translation\Publishing`, `Translation\Remote`, `Translation\Scanning` and `Translation\Sync` namespaces. `Http\Middleware` classes, the consumer JavaScript path, commands, routes and configuration keys are unchanged.
+
 ## 1.0.17 — 2026-10-10
 
 - Offer to install the `laravel-vue-i18n` npm package during interactive `vox:setup` for Vue applications that lack it, choosing npm, pnpm, Yarn, or Bun from the lockfile. Unattended runs (`--force` or `--no-interaction`) only print the command.

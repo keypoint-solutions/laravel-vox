@@ -3,7 +3,7 @@
 namespace KeypointSolutions\LaravelVox;
 
 use Illuminate\Support\Facades\Route;
-use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
+use KeypointSolutions\LaravelVox\Translation\Scanning\VoxDynamicKeyRegistry;
 
 class LaravelVox
 {

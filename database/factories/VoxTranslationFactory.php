@@ -19,7 +19,7 @@ class VoxTranslationFactory extends Factory
     {
         return [
             'group' => $this->faker->word(),
-            'key' => $this->faker->words(2, true),
+            'key' => $this->faker->unique()->words(2, true),
             'is_frontend' => false,
             'is_orphan' => false,
             'source' => '__',

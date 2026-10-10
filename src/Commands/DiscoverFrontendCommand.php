@@ -3,8 +3,9 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
-use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
-use KeypointSolutions\LaravelVox\Translation\TranslationScanner;
+use KeypointSolutions\LaravelVox\Commands\Concerns\RecordsTranslationCheckpoint;
+use KeypointSolutions\LaravelVox\Translation\Publishing\VoxFrontendManifest;
+use KeypointSolutions\LaravelVox\Translation\Scanning\TranslationScanner;
 
 class DiscoverFrontendCommand extends Command
 {

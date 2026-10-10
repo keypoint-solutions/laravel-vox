@@ -2,12 +2,12 @@
 
 namespace KeypointSolutions\LaravelVox\Translation;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use InvalidArgumentException;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
-use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
+use KeypointSolutions\LaravelVox\Translation\Publishing\VoxFrontendManifest;
+use KeypointSolutions\LaravelVox\Translation\Scanning\VoxDynamicKeyRegistry;
 use RuntimeException;
 
 class TranslationResetter
@@ -35,7 +35,7 @@ class TranslationResetter
     public function reset(string $scope): array
     {
         self::confirmation($scope);
-        $connection = DB::connection(config('vox.database.connection', 'vox'));
+        $connection = VoxConfig::connection();
 
         $deleted = $connection->transaction(function () use ($connection, $scope): array {
             $connection->table('vox_environments')->orderBy('id')->lockForUpdate()->get();

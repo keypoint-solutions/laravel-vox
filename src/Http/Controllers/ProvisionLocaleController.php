@@ -6,9 +6,10 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleCatalog;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
-use KeypointSolutions\LaravelVox\Translation\LocaleProvisioner;
+use KeypointSolutions\LaravelVox\Ai\AiAvailability;
+use KeypointSolutions\LaravelVox\Translation\Locales\LocaleProvisioner;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleCatalog;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
 use Throwable;
 
 class ProvisionLocaleController
@@ -18,6 +19,7 @@ class ProvisionLocaleController
         VoxLocaleResolver $localeResolver,
         VoxLocaleCatalog $localeCatalog,
         LocaleProvisioner $provisioner,
+        AiAvailability $ai,
     ): RedirectResponse {
         $validated = $request->validate([
             'locale' => ['required', 'string', 'max:35', 'regex:/^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$/D'],
@@ -37,7 +39,7 @@ class ProvisionLocaleController
         $useDefault = (bool) ($validated['use_default'] ?? false);
         $autoTranslate = ! $useDefault && (bool) ($validated['auto_translate'] ?? false);
 
-        if ($autoTranslate && config('vox.translate.driver', 'openai') === 'null') {
+        if ($autoTranslate && ! $ai->available()) {
             throw ValidationException::withMessages([
                 'auto_translate' => 'Configure an AI translation driver before using automatic translation.',
             ]);
@@ -55,6 +57,14 @@ class ProvisionLocaleController
 
         if ($useDefault) {
             return Inertia::flash('success', "Added {$name} ({$result->locale}) using default language wording. Publish to create its language files.")->back();
+        }
+
+        if ($autoTranslate && $result->translationFailure !== null) {
+            return Inertia::flash(
+                'success',
+                "Added {$name} ({$result->locale}) and AI translated {$result->translatedValues} of {$result->values} values, "
+                    ."then stopped: {$result->translationFailure} The remaining values are marked for translation."
+            )->back();
         }
 
         if ($autoTranslate) {

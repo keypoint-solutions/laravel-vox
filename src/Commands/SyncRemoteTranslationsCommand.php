@@ -3,9 +3,10 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
+use KeypointSolutions\LaravelVox\Commands\Concerns\RecordsTranslationCheckpoint;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
-use KeypointSolutions\LaravelVox\Translation\RemoteReconciliation;
-use KeypointSolutions\LaravelVox\Translation\RemoteTranslationSyncer;
+use KeypointSolutions\LaravelVox\Translation\Remote\RemoteReconciliation;
+use KeypointSolutions\LaravelVox\Translation\Remote\RemoteTranslationSyncer;
 use Throwable;
 
 use function Laravel\Prompts\info;

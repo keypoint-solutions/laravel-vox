@@ -4,8 +4,8 @@ namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
-use KeypointSolutions\LaravelVox\Translation\FrontendTranslationArtifacts;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileTransaction;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileTransaction;
+use KeypointSolutions\LaravelVox\Translation\Publishing\FrontendTranslationArtifacts;
 use Throwable;
 
 class CompileCommand extends Command

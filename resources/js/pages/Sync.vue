@@ -1,7 +1,6 @@
 <script setup lang="ts">
     import { Head, router, useForm, usePage } from '@inertiajs/vue3';
     import {
-        Check,
         Download,
         FileArchive,
         KeyRound,
@@ -17,8 +16,11 @@
 
     import RemoteReconciliationPanel, { type ReconciliationPage } from '@/components/RemoteReconciliationPanel.vue';
     import { Badge, Button, Input, Label, SlidePanel, Tooltip } from '@/components/ui';
+    import Alert from '@/components/ui/Alert.vue';
     import { useDateTime } from '@/composables/useDateTime';
+    import { useVoxRoutes } from '@/composables/useVoxRoutes';
     import Layout from '@/layouts/Layout.vue';
+    import { firstError, flashSuccess, routeUrl } from '@/lib/inertia';
 
     defineOptions({
         layout: Layout,
@@ -33,7 +35,7 @@
         updated_at: string | null;
     }
 
-    interface SyncPageProps {
+    type SyncPageProps = {
         reconciliation: ReconciliationPage;
         environments: EnvironmentItem[];
         lastSyncAt: string | null;
@@ -48,14 +50,13 @@
         ai: {
             available: boolean;
             can_choose: boolean;
-            driver: string;
         };
-    }
+    };
 
     const page = usePage<SyncPageProps>();
     const { formatDateTime } = useDateTime();
     const environments = computed(() => page.props.environments ?? []);
-    const routes = computed(() => page.props.vox?.routes);
+    const routes = useVoxRoutes();
     const editingId = ref<number | null>(null);
     const isSyncingLocal = ref(false);
     const pullingId = ref<number | null>(null);
@@ -94,7 +95,7 @@
         removalForm.delete(routes.value?.sync_locale_destroy ?? '', {
             preserveScroll: true,
             onSuccess: (responsePage) => {
-                success.value = (responsePage.flash?.success as string | undefined) ?? 'Language removed.';
+                success.value = flashSuccess(responsePage, 'Language removed.');
                 removingLocale.value = null;
                 removalForm.reset();
             },
@@ -102,7 +103,7 @@
     }
 
     function environmentRoute(template: string | undefined, id: number): string {
-        return template?.replace('__environment__', String(id)) ?? '';
+        return routeUrl(template, 'environment', id);
     }
 
     function resetForm(): void {
@@ -129,8 +130,8 @@
 
         const options = {
             preserveScroll: true,
-            onSuccess: (responsePage: typeof page) => {
-                success.value = (responsePage.flash?.success as string | undefined) ?? 'Environment saved.';
+            onSuccess: (responsePage: { flash?: Record<string, unknown> }) => {
+                success.value = flashSuccess(responsePage, 'Environment saved.');
                 resetForm();
             },
         };
@@ -170,11 +171,10 @@
             {
                 preserveScroll: true,
                 onError: (errors) => {
-                    actionError.value = Object.values(errors)[0] ?? 'Remote sync failed.';
+                    actionError.value = firstError(errors, 'Remote sync failed.');
                 },
                 onSuccess: (responsePage) => {
-                    success.value =
-                        (responsePage.flash?.success as string | undefined) ?? 'Remote translations synchronized.';
+                    success.value = flashSuccess(responsePage, 'Remote translations synchronized.');
                     showIncoming(environment.id);
                 },
                 onFinish: () => {
@@ -195,11 +195,10 @@
             {
                 preserveScroll: true,
                 onError: (errors) => {
-                    actionError.value = Object.values(errors)[0] ?? 'Local sync failed.';
+                    actionError.value = firstError(errors, 'Local sync failed.');
                 },
                 onSuccess: (responsePage) => {
-                    success.value =
-                        (responsePage.flash?.success as string | undefined) ?? 'Local translations synchronized.';
+                    success.value = flashSuccess(responsePage, 'Local translations synchronized.');
                     showIncoming(-1);
                 },
                 onFinish: () => {
@@ -216,10 +215,10 @@
         localeForm.post(routes.value?.sync_locale_store ?? '', {
             preserveScroll: true,
             onError: (errors) => {
-                actionError.value = Object.values(errors)[0] ?? 'Language provisioning failed.';
+                actionError.value = firstError(errors, 'Language provisioning failed.');
             },
             onSuccess: (responsePage) => {
-                success.value = (responsePage.flash?.success as string | undefined) ?? 'Language added.';
+                success.value = flashSuccess(responsePage, 'Language added.');
                 localeForm.reset();
             },
         });
@@ -262,7 +261,7 @@
                 actionError.value = message;
             },
             onSuccess: (responsePage) => {
-                success.value = (responsePage.flash?.success as string | undefined) ?? 'Translation archive imported.';
+                success.value = flashSuccess(responsePage, 'Translation archive imported.');
                 archiveForm.reset();
 
                 if (archiveInput.value) {
@@ -283,7 +282,7 @@
         router.delete(environmentRoute(routes.value?.sync_environment_destroy, environment.id), {
             preserveScroll: true,
             onSuccess: (responsePage) => {
-                success.value = (responsePage.flash?.success as string | undefined) ?? 'Environment removed.';
+                success.value = flashSuccess(responsePage, 'Environment removed.');
 
                 if (editingId.value === environment.id) {
                     resetForm();
@@ -306,23 +305,19 @@
             </p>
         </header>
 
-        <div
+        <Alert
             v-if="success"
-            role="status"
-            aria-live="polite"
-            class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-600"
+            tone="success"
         >
-            <Check class="size-4 shrink-0" />
             {{ success }}
-        </div>
+        </Alert>
 
-        <div
+        <Alert
             v-if="actionError"
-            role="alert"
-            class="text-destructive border-destructive/40 bg-destructive/10 rounded-lg border p-3 text-sm"
+            tone="error"
         >
             {{ actionError }}
-        </div>
+        </Alert>
 
         <section class="bg-card flex flex-col gap-4 rounded-xl border p-5 sm:flex-row sm:items-center">
             <div class="flex min-w-0 flex-1 items-start gap-3">

@@ -1,155 +1,37 @@
 <script lang="ts" setup>
     import { Head, router, usePage } from '@inertiajs/vue3';
-    import {
-        Braces,
-        Check,
-        ChevronDown,
-        ChevronLeft,
-        ChevronRight,
-        CircleAlert,
-        Code,
-        FileText,
-        Laptop,
-        Plus,
-        RotateCcw,
-        Server,
-        Sparkles,
-        Trash2,
-        X,
-    } from '@lucide/vue';
-    import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+    import { Check, FileText, Plus, RotateCcw, Sparkles } from '@lucide/vue';
+    import { computed, ref, watch } from 'vue';
 
-    import FallbackChoice from '@/components/FallbackChoice.vue';
+    import CleanupPanel from '@/components/manage/CleanupPanel.vue';
+    import CompactFilterBar from '@/components/manage/CompactFilterBar.vue';
+    import DynamicTranslationPanel from '@/components/manage/DynamicTranslationPanel.vue';
+    import FallbackSettings from '@/components/manage/FallbackSettings.vue';
+    import GroupFilter from '@/components/manage/GroupFilter.vue';
+    import ToastNotification from '@/components/manage/ToastNotification.vue';
+    import TranslationEditPanel from '@/components/manage/TranslationEditPanel.vue';
+    import TranslationRow from '@/components/manage/TranslationRow.vue';
     import type { SelectOption, ToggleOption } from '@/components/ui';
-    import {
-        Badge,
-        Button,
-        Checkbox,
-        FormField,
-        Input,
-        SearchInput,
-        Select,
-        SlidePanel,
-        Textarea,
-        ToggleGroup,
-        Tooltip,
-    } from '@/components/ui';
+    import { Button, Checkbox, SearchInput, Select, ToggleGroup, Tooltip } from '@/components/ui';
     import PageSizeSelect from '@/components/ui/PageSizeSelect.vue';
+    import PaginationNav from '@/components/ui/PaginationNav.vue';
+    import { useCompactHeader } from '@/composables/useCompactHeader';
     import { useDateTime } from '@/composables/useDateTime';
+    import { useManageFilters } from '@/composables/useManageFilters';
+    import { useToast } from '@/composables/useToast';
+    import { useVoxRoutes } from '@/composables/useVoxRoutes';
     import Layout from '@/layouts/Layout.vue';
-    import { cn } from '@/lib/utils';
+    import { firstError, flashSuccess } from '@/lib/inertia';
+    import { translationActionUrl } from '@/lib/manage';
+    import type { CleanupAction, ManagePageProps, TranslationItem } from '@/types/manage';
 
     defineOptions({
         layout: Layout,
     });
 
-    interface GroupItem {
-        name: string;
-        total: number;
-        is_frontend_exported: boolean;
-        frontend_export_source: 'configured' | 'detected' | 'json' | null;
-        is_json: boolean;
-    }
-
-    interface OccurrenceItem {
-        id: number;
-        file_path: string;
-        line_number: number | null;
-        context_before: string | null;
-        context_after: string | null;
-    }
-
-    interface TranslationItem {
-        fallback: Record<string, { mode: string; published_mode: string; selection: string }>;
-        id: number;
-        group: string | null;
-        key: string;
-        display_key: string;
-        status: string;
-        freshness_status: string | null;
-        has_missing_values: boolean;
-        is_frontend: boolean;
-        is_orphan: boolean;
-        is_dynamic: boolean;
-        is_retained: boolean;
-        is_pending_delete: boolean;
-        deletion_unavailable_reason: string | null;
-        matching_patterns: string[];
-        retention_sources: string[];
-        dynamic_occurrences: { file: string; line: number | null; context: string | null }[];
-        dynamic_pattern: string | null;
-        source: string | null;
-        updated_at: string | null;
-        values_count: number;
-        values: Record<string, string>;
-        draft_locales: string[];
-        pending_publish_locales: string[];
-        published_overrides: Record<string, string | null>;
-        file_values: Record<string, string | null>;
-        occurrences: OccurrenceItem[];
-    }
-
-    interface TranslationsPayload {
-        data: TranslationItem[];
-        current_page: number;
-        last_page: number;
-        per_page: number;
-        total: number;
-    }
-
-    interface ManageFilters {
-        group: string | null;
-        search: string;
-        status: string | null;
-        sort: string;
-        scope: string;
-    }
-
-    interface ManagePageProps {
-        fallbackRules: {
-            locale: string;
-            scope: string;
-            group: string | null;
-            key: string | null;
-            mode: string;
-            published_mode: string;
-        }[];
-        groups: GroupItem[];
-        translations: TranslationsPayload;
-        locales: string[];
-        missingTranslationPrefix: string;
-        baseLocale: string;
-        filters: ManageFilters;
-        statusOptions: SelectOption[];
-        sortOptions: SelectOption[];
-        lastSyncAt: string | null;
-        totalTranslations: number;
-        dynamicPatterns: {
-            pattern: string;
-            is_frontend: boolean;
-            sources: string[];
-        }[];
-        ai: {
-            available: boolean;
-            configured: boolean;
-            driver: string;
-        };
-    }
-
     const page = usePage<ManagePageProps>();
     const { formatDateTime } = useDateTime();
-
-    const fallbackLocale = ref('');
-    function scopeRule(scope: string, published = false): string {
-        const rule = page.props.fallbackRules?.find(
-            (rule) =>
-                rule.locale === fallbackLocale.value &&
-                rule.scope === scope &&
-                (scope === 'locale' ||
-                    rule.group === (selectedGroup.value === 'default' ? 'json' : selectedGroup.value))
-        );
-        return rule?.[published ? 'published_mode' : 'mode'] ?? 'inherit';
-    }
+    const { toast, showToast, dismissToast } = useToast();
 
     const groups = computed(() => page.props.groups ?? []);
     const filteredGroupsTotal = computed(() => groups.value.reduce((total, group) => total + group.total, 0));
@@ -161,15 +43,12 @@
     const sortOptions = computed<SelectOption[]>(() => page.props.sortOptions ?? []);
     const lastSyncAt = computed(() => page.props.lastSyncAt ?? null);
     const totalTranslations = computed(() => page.props.totalTranslations ?? 0);
-    const aiStatus = computed(() => page.props.ai ?? { available: false, configured: false, driver: 'null' });
+    const aiStatus = computed(() => page.props.ai ?? { available: false });
     const dynamicPatterns = computed(() => page.props.dynamicPatterns ?? []);
-    const dynamicPatternOptions = computed<SelectOption[]>(() =>
-        dynamicPatterns.value.map((entry) => ({
-            value: entry.pattern,
-            label: `${entry.pattern}${entry.is_frontend ? ' · Frontend' : ''}`,
-        }))
-    );
-    const voxRoutes = computed(() => page.props.vox?.routes);
+    const fallbackRules = computed(() => page.props.fallbackRules ?? []);
+    const voxRoutes = useVoxRoutes();
+    const targetLocales = computed(() => locales.value.filter((locale) => locale !== baseLocale.value));
+    const orderedLocales = computed(() => [baseLocale.value, ...[...targetLocales.value].sort()]);
 
     const statusToggleOptions = computed<ToggleOption[]>(() => [
         { value: '', label: 'All' },
@@ -187,88 +66,22 @@
         { value: 'approved', label: 'Approved' },
     ]);
 
-    const perPage = ref(translations.value.per_page ?? 25);
-    const groupSearch = ref('');
-    const selectedGroup = ref<string | null>(page.props.filters?.group ?? null);
-    const search = ref(page.props.filters?.search ?? '');
-    const status = ref(page.props.filters?.status ?? '');
-    const sort = ref(page.props.filters?.sort ?? 'updated_desc');
-    const scope = ref(page.props.filters?.scope ?? (selectedGroup.value ? 'group' : 'all'));
+    const selectedIds = ref<number[]>([]);
+    const { perPage, selectedGroup, search, status, sort, applyFilters, selectGroup, clearSearch, clearFilters } =
+        useManageFilters(translations.value.per_page ?? 25, () => {
+            selectedIds.value = [];
+        });
+
+    const filtersElement = ref<HTMLElement | null>(null);
+    const { isCompactMode } = useCompactHeader(filtersElement);
 
     const editTranslation = ref<TranslationItem | null>(null);
-    const editValues = ref<Record<string, string>>({});
-    const isSaving = ref(false);
-    const usingApplicationLocale = ref<string | null>(null);
-    const isTranslating = ref(false);
-    const actionError = ref<string | null>(null);
-    const toast = ref<{ message: string; tone: 'success' | 'error' } | null>(null);
-    const selectedIds = ref<number[]>([]);
+    const isCreatingDynamic = ref(false);
     const isBulkUpdating = ref(false);
     const isBulkTranslating = ref(false);
-    const showOccurrences = ref(false);
-    const searchDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null);
-    const toastTimer = ref<ReturnType<typeof setTimeout> | null>(null);
-    const isCreatingDynamic = ref(false);
-    const isStoringDynamic = ref(false);
-    const isTranslatingDynamic = ref(false);
-    const newDynamicPattern = ref('');
-    const newDynamicKey = ref('');
-    const newDynamicValues = ref<Record<string, string>>({});
-    const newDynamicError = ref<string | null>(null);
-    const dynamicPatternPrefix = computed(() => newDynamicPattern.value.split('*', 1)[0] ?? '');
-    const newDynamicFullKey = computed(() => dynamicPatternPrefix.value + newDynamicKey.value.trim());
-
-    const isCompactMode = ref(false);
-    const showGroupsDropdown = ref(false);
-    const filtersElement = ref<HTMLElement | null>(null);
-    let filtersObserver: ResizeObserver | null = null;
-
-    function updateCompactHeader(): void {
-        isCompactMode.value = (filtersElement.value?.getBoundingClientRect().bottom ?? 1) <= 0;
-
-        if (!isCompactMode.value) {
-            showGroupsDropdown.value = false;
-        }
-    }
-
-    const orderedLocales = computed(() => [
-        baseLocale.value,
-        ...locales.value.filter((locale) => locale !== baseLocale.value).sort(),
-    ]);
-
-    onMounted(() => {
-        window.addEventListener('scroll', updateCompactHeader, { passive: true });
-        window.addEventListener('resize', updateCompactHeader);
-        filtersObserver = new ResizeObserver(updateCompactHeader);
-        updateCompactHeader();
-
-        if (filtersElement.value) {
-            filtersObserver.observe(filtersElement.value);
-        }
-    });
-
-    onUnmounted(() => {
-        window.removeEventListener('scroll', updateCompactHeader);
-        window.removeEventListener('resize', updateCompactHeader);
-        filtersObserver?.disconnect();
-
-        if (searchDebounceTimer.value) {
-            clearTimeout(searchDebounceTimer.value);
-        }
-
-        if (toastTimer.value) {
-            clearTimeout(toastTimer.value);
-        }
-    });
-
-    const filteredGroups = computed(() => {
-        const term = groupSearch.value.trim().toLowerCase();
-        if (term === '') {
-            return groups.value;
-        }
-
-        return groups.value.filter((group) => group.name.toLowerCase().includes(term));
-    });
+    const cleanupRows = ref<TranslationItem[]>([]);
+    const cleanupAction = ref<CleanupAction>('delete');
+    const isCleaning = ref(false);
 
     const pagination = computed(() => ({
         current_page: translations.value.current_page ?? 1,
@@ -276,338 +89,26 @@
         per_page: translations.value.per_page ?? 25,
         total: translations.value.total ?? 0,
     }));
-    const hasPrev = computed(() => pagination.value.current_page > 1);
-    const hasNext = computed(() => pagination.value.current_page < pagination.value.last_page);
     const allVisibleSelected = computed(
         () =>
             translations.value.data.length > 0 &&
             translations.value.data.every((translation) => selectedIds.value.includes(translation.id))
     );
 
-    const baseLocaleValue = computed(() => {
-        if (!editTranslation.value) {
-            return '';
-        }
-
-        return editValues.value[baseLocale.value] ?? '';
-    });
-
-    const targetLocales = computed(() => locales.value.filter((locale) => locale !== baseLocale.value));
-    const missingTargetLocales = computed(() =>
-        targetLocales.value.filter((locale) => {
-            if (editTranslation.value?.fallback?.[locale]?.mode === 'default') return false;
-            const value = editValues.value[locale] ?? '';
-            const prefix = page.props.missingTranslationPrefix ?? '🚩';
-
-            return value === '' || (prefix !== '' && value.startsWith(prefix));
-        })
-    );
-    const newDynamicBaseValue = computed(() => newDynamicValues.value[baseLocale.value] ?? '');
-    const missingDynamicTargetLocales = computed(() =>
-        targetLocales.value.filter((locale) => (newDynamicValues.value[locale] ?? '').trim() === '')
-    );
-    const canTranslateDynamic = computed(
-        () =>
-            aiStatus.value.available &&
-            newDynamicBaseValue.value.trim() !== '' &&
-            missingDynamicTargetLocales.value.length > 0
-    );
-    const canTranslate = computed(
-        () => aiStatus.value.available && baseLocaleValue.value.trim() !== '' && targetLocales.value.length > 0
-    );
-
-    const isSyncingFilters = ref(false);
-    const isTranslatingValues = ref(false);
-
-    watch(
-        () => page.props.filters,
-        (filters) => {
-            if (!filters) {
-                return;
-            }
-
-            isSyncingFilters.value = true;
-            selectedGroup.value = filters.group ?? null;
-            search.value = filters.search ?? '';
-            status.value = filters.status ?? '';
-            sort.value = filters.sort ?? 'updated_desc';
-            scope.value = filters.scope ?? (selectedGroup.value ? 'group' : 'all');
-            // Use nextTick to reset the flag after Vue has processed the changes
-            setTimeout(() => {
-                isSyncingFilters.value = false;
-            }, 0);
-        },
-        { deep: true }
-    );
-
+    // Keep the open edit panel pointed at the refreshed row after the listing reloads.
     watch(
         () => translations.value.data,
         (items) => {
-            // Don't overwrite values during AI translation
-            if (!editTranslation.value || isTranslatingValues.value) {
-                return;
-            }
-
             const updated = items.find((item) => item.id === editTranslation.value?.id);
-            if (!updated) {
-                return;
-            }
 
-            editTranslation.value = updated;
-            if (usingApplicationLocale.value === null) {
-                editValues.value = buildEditValues(updated);
+            if (updated) {
+                editTranslation.value = updated;
             }
         }
     );
 
-    // Debounced search watcher - only trigger when user types, not during filter sync
-    watch(search, () => {
-        if (isSyncingFilters.value) {
-            return;
-        }
-        applyFiltersDebounced(1);
-    });
-
-    function buildEditValues(translation: TranslationItem): Record<string, string> {
-        const values: Record<string, string> = {};
-        locales.value.forEach((locale) => {
-            values[locale] = translation.values?.[locale] ?? '';
-        });
-
-        return values;
-    }
-
-    function buildQuery(pageOverride?: number): Record<string, string | number> {
-        const query: Record<string, string | number> = { per_page: perPage.value };
-
-        if (scope.value === 'group' && selectedGroup.value !== null) {
-            query.group = selectedGroup.value;
-        }
-
-        if (search.value.trim() !== '') {
-            query.search = search.value.trim();
-        }
-
-        if (status.value !== '') {
-            query.status = status.value;
-        }
-
-        if (sort.value !== '') {
-            query.sort = sort.value;
-        }
-
-        if (scope.value !== '') {
-            query.scope = scope.value;
-        }
-
-        if (pageOverride && pageOverride > 1) {
-            query.page = pageOverride;
-        }
-
-        return query;
-    }
-
-    function applyFilters(pageOverride = 1): void {
-        selectedIds.value = [];
-        router.get(voxRoutes.value?.manage ?? page.url.split('?')[0], buildQuery(pageOverride), {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-            only: ['translations', 'filters', 'groups'],
-        });
-    }
-
-    function applyFiltersDebounced(pageOverride = 1): void {
-        if (searchDebounceTimer.value) {
-            clearTimeout(searchDebounceTimer.value);
-        }
-        searchDebounceTimer.value = setTimeout(() => {
-            applyFilters(pageOverride);
-        }, 300);
-    }
-
-    function selectGroup(group: string | null): void {
-        selectedGroup.value = group;
-
-        if (group === null) {
-            scope.value = 'all';
-        } else {
-            scope.value = 'group';
-        }
-
-        applyFilters(1);
-    }
-
-    function clearFilters(): void {
-        search.value = '';
-        status.value = '';
-        sort.value = 'updated_desc';
-        scope.value = selectedGroup.value ? 'group' : 'all';
-        applyFilters(1);
-    }
-
-    function goToPage(pageNumber: number): void {
-        applyFilters(pageNumber);
-    }
-
-    function openEdit(translation: TranslationItem): void {
-        showOccurrences.value = false;
-        editTranslation.value = translation;
-        editValues.value = buildEditValues(translation);
-        actionError.value = null;
-    }
-
-    function openDynamicCreate(): void {
-        newDynamicPattern.value = dynamicPatterns.value[0]?.pattern ?? '';
-        newDynamicKey.value = '';
-        newDynamicValues.value = Object.fromEntries(locales.value.map((locale) => [locale, '']));
-        newDynamicError.value = null;
-        isCreatingDynamic.value = true;
-    }
-
-    function closeDynamicCreate(): void {
-        if (isStoringDynamic.value || isTranslatingDynamic.value) {
-            return;
-        }
-
-        isCreatingDynamic.value = false;
-        newDynamicPattern.value = '';
-        newDynamicKey.value = '';
-        newDynamicValues.value = {};
-        newDynamicError.value = null;
-    }
-
-    function translateMissingDynamicValues(): void {
-        if (!canTranslateDynamic.value) {
-            return;
-        }
-
-        isTranslatingDynamic.value = true;
-        newDynamicError.value = null;
-
-        router.post(
-            voxRoutes.value?.manage_translation_translate_draft ?? '',
-            {
-                locales: missingDynamicTargetLocales.value,
-                base_value: newDynamicBaseValue.value,
-                key: newDynamicFullKey.value,
-            },
-            {
-                preserveScroll: true,
-                preserveState: true,
-                onError: (errors) => {
-                    newDynamicError.value = Object.values(errors)[0] ?? 'Unable to translate the target values.';
-                },
-                onSuccess: (successPage) => {
-                    const translatedValues = successPage.flash?.translated_values as Record<string, string> | undefined;
-
-                    if (translatedValues) {
-                        Object.entries(translatedValues).forEach(([locale, value]) => {
-                            newDynamicValues.value[locale] = value;
-                        });
-                    }
-                },
-                onFinish: () => {
-                    isTranslatingDynamic.value = false;
-                },
-            }
-        );
-    }
-
-    function storeDynamicTranslation(): void {
-        if (newDynamicPattern.value === '' || newDynamicKey.value.trim() === '') {
-            return;
-        }
-
-        isStoringDynamic.value = true;
-        newDynamicError.value = null;
-
-        router.post(
-            voxRoutes.value?.manage_translation_store ?? '',
-            {
-                pattern: newDynamicPattern.value,
-                key: newDynamicFullKey.value,
-                values: newDynamicValues.value,
-            },
-            {
-                preserveScroll: true,
-                onError: (errors) => {
-                    newDynamicError.value = Object.values(errors)[0] ?? 'Unable to create the dynamic translation.';
-                },
-                onSuccess: (successPage) => {
-                    const message =
-                        (successPage.flash?.success as string | undefined) ?? 'Dynamic translation created.';
-                    isStoringDynamic.value = false;
-                    closeDynamicCreate();
-                    showToast(message);
-                },
-                onFinish: () => {
-                    isStoringDynamic.value = false;
-                },
-            }
-        );
-    }
-
-    function closeEdit(): void {
-        editTranslation.value = null;
-        editValues.value = {};
-        actionError.value = null;
-    }
-
-    function handleError(errors: Record<string, string>): void {
-        actionError.value = Object.values(errors)[0] ?? 'Request failed.';
-    }
-
-    function dismissToast(): void {
-        if (toastTimer.value) {
-            clearTimeout(toastTimer.value);
-            toastTimer.value = null;
-        }
-
-        toast.value = null;
-    }
-
-    function showToast(message: string, tone: 'success' | 'error' = 'success'): void {
-        dismissToast();
-        toast.value = { message, tone };
-        toastTimer.value = setTimeout(() => {
-            toast.value = null;
-            toastTimer.value = null;
-        }, 5000);
-    }
-
     function handleBulkError(errors: Record<string, string>): void {
-        showToast(Object.values(errors)[0] ?? 'Request failed.', 'error');
-    }
-
-    function overrideLocales(translation: TranslationItem): string[] {
-        return Object.keys(translation.published_overrides ?? {}).filter(
-            (locale) => translation.published_overrides[locale] != null
-        );
-    }
-
-    function workflowStatusLabel(translation: TranslationItem): string {
-        return translation.status === 'approved' ? 'Approved' : 'Pending review';
-    }
-
-    function frontendGroupTooltip(group: GroupItem): string {
-        if (group.frontend_export_source === 'json') {
-            return 'JSON translations are included in the frontend bundle';
-        }
-
-        if (group.frontend_export_source === 'configured') {
-            return 'Included in the frontend bundle by configuration';
-        }
-
-        return 'Automatically included from frontend source usage';
-    }
-
-    function canDelete(translation: TranslationItem): boolean {
-        return translation.deletion_unavailable_reason === null;
-    }
-
-    function approvalActionLabel(translation: TranslationItem): string {
-        return translation.status === 'approved' ? 'Return to review' : 'Approve translation';
+        showToast(firstError(errors), 'error');
     }
 
     function setSelected(translationId: number, selected: boolean): void {
@@ -628,43 +129,21 @@
         selectedIds.value = selectedIds.value.filter((id) => !visibleIds.includes(id));
     }
 
-    const cleanupRows = ref<TranslationItem[]>([]);
-    const cleanupAction = ref<'delete' | 'restore'>('delete');
-    const cleanupConfirmation = ref('');
-    const cleanupError = ref('');
-    const isCleaning = ref(false);
-    const cleanupTitle = computed(() => ({ delete: 'Delete keys', restore: 'Cancel deletion' })[cleanupAction.value]);
-    function reviewCleanup(action: 'delete' | 'restore', rows?: TranslationItem[]): void {
+    function reviewCleanup(action: CleanupAction, rows?: TranslationItem[]): void {
         cleanupAction.value = action;
         cleanupRows.value = rows ?? translations.value.data.filter((row) => selectedIds.value.includes(row.id));
-        cleanupConfirmation.value = '';
-        cleanupError.value = '';
     }
-    function submitCleanup(): void {
-        isCleaning.value = true;
-        router.post(
-            voxRoutes.value?.manage_translation_cleanup ?? '',
-            {
-                ids: cleanupRows.value.map((row) => row.id),
-                action: cleanupAction.value,
-                confirmation: cleanupAction.value === 'restore' ? cleanupConfirmation.value : 'CONFIRM',
-            },
-            {
-                preserveScroll: true,
-                onSuccess: () => {
-                    cleanupRows.value = [];
-                    selectedIds.value = [];
-                    closeEdit();
-                    showToast('Translation selection updated.');
-                },
-                onError: (errors) => {
-                    cleanupError.value = Object.values(errors)[0] ?? 'Unable to update the selection.';
-                },
-                onFinish: () => {
-                    isCleaning.value = false;
-                },
-            }
-        );
+
+    function finishCleanup(): void {
+        cleanupRows.value = [];
+        selectedIds.value = [];
+        editTranslation.value = null;
+        showToast('Translation selection updated.');
+    }
+
+    function finishEdit(message: string): void {
+        editTranslation.value = null;
+        showToast(message);
     }
 
     function bulkApproval(targetStatus: 'pending' | 'approved'): void {
@@ -673,7 +152,6 @@
         }
 
         isBulkUpdating.value = true;
-        actionError.value = null;
 
         router.post(
             voxRoutes.value?.manage_translation_bulk_approval ?? '',
@@ -686,7 +164,7 @@
                 preserveState: true,
                 onError: handleBulkError,
                 onSuccess: (successPage) => {
-                    showToast((successPage.flash?.success as string | undefined) ?? 'Translation statuses updated.');
+                    showToast(flashSuccess(successPage, 'Translation statuses updated.'));
                     selectedIds.value = [];
                 },
                 onFinish: () => {
@@ -711,9 +189,7 @@
                 preserveState: true,
                 onError: handleBulkError,
                 onSuccess: (successPage) => {
-                    showToast(
-                        (successPage.flash?.success as string | undefined) ?? 'Missing translations were translated.'
-                    );
+                    showToast(flashSuccess(successPage, 'Missing translations were translated.'));
                 },
                 onFinish: () => {
                     isBulkTranslating.value = false;
@@ -722,13 +198,7 @@
         );
     }
 
-    function translationActionUrl(route: string | undefined, translationId: number): string {
-        return route?.replace('__translation__', String(translationId)) ?? '';
-    }
-
     function toggleApproval(translation: TranslationItem): void {
-        actionError.value = null;
-
         router.post(
             translationActionUrl(voxRoutes.value?.manage_translation_toggle_approval, translation.id),
             {},
@@ -737,116 +207,10 @@
                 preserveState: true,
                 onError: handleBulkError,
                 onSuccess: (successPage) => {
-                    showToast((successPage.flash?.success as string | undefined) ?? 'Translation status updated.');
+                    showToast(flashSuccess(successPage, 'Translation status updated.'));
                 },
             }
         );
-    }
-
-    function useApplicationWording(locale: string): void {
-        if (!editTranslation.value || usingApplicationLocale.value !== null) {
-            return;
-        }
-
-        actionError.value = null;
-        usingApplicationLocale.value = locale;
-
-        router.post(
-            translationActionUrl(voxRoutes.value?.manage_translation_use_application, editTranslation.value.id),
-            { locale },
-            {
-                preserveScroll: true,
-                preserveState: true,
-                onError: handleError,
-                onSuccess: (successPage) => {
-                    showToast((successPage.flash?.success as string | undefined) ?? 'Application wording restored.');
-                },
-                onFinish: async () => {
-                    await nextTick();
-                    usingApplicationLocale.value = null;
-                },
-            }
-        );
-    }
-
-    function saveEdit(): void {
-        if (!editTranslation.value) {
-            return;
-        }
-
-        actionError.value = null;
-        isSaving.value = true;
-
-        router.patch(
-            translationActionUrl(voxRoutes.value?.manage_translation_update, editTranslation.value.id),
-            { values: editValues.value },
-            {
-                preserveScroll: true,
-                onFinish: () => {
-                    isSaving.value = false;
-                },
-                onError: handleError,
-                onSuccess: (successPage) => {
-                    const message = (successPage.flash?.success as string | undefined) ?? 'Translations saved.';
-                    closeEdit();
-                    showToast(message);
-                },
-            }
-        );
-    }
-
-    function translateLocales(locales: string[]): void {
-        if (!editTranslation.value) {
-            return;
-        }
-
-        actionError.value = null;
-        isTranslating.value = true;
-        isTranslatingValues.value = true;
-
-        router.post(
-            translationActionUrl(voxRoutes.value?.manage_translation_translate, editTranslation.value.id),
-            {
-                locales,
-                base_value: editValues.value[baseLocale.value] ?? '',
-            },
-            {
-                preserveScroll: true,
-                preserveState: true,
-                onFinish: () => {
-                    isTranslating.value = false;
-                    // Reset the flag after a short delay to allow the watcher to skip
-                    setTimeout(() => {
-                        isTranslatingValues.value = false;
-                    }, 100);
-                },
-                onError: handleError,
-                onSuccess: (successPage) => {
-                    const translatedValues = successPage.flash?.translated_values as Record<string, string> | undefined;
-                    if (translatedValues) {
-                        Object.entries(translatedValues).forEach(([locale, value]) => {
-                            editValues.value[locale] = value;
-                        });
-                    }
-                },
-            }
-        );
-    }
-
-    function translateLocale(locale: string): void {
-        translateLocales([locale]);
-    }
-
-    function translateAll(): void {
-        translateLocales(targetLocales.value);
-    }
-
-    function translateMissing(): void {
-        if (missingTargetLocales.value.length === 0) {
-            return;
-        }
-
-        translateLocales(missingTargetLocales.value);
     }
 </script>
 
@@ -867,7 +231,7 @@
                 :disabled="dynamicPatterns.length === 0"
                 class="shrink-0"
                 variant="outline"
-                @click="openDynamicCreate"
+                @click="isCreatingDynamic = true"
             >
                 <Plus class="size-4" />
                 Add dynamic translation
@@ -892,297 +256,39 @@
             </div>
         </div>
 
-        <!-- Compact Sticky Header (appears on scroll) -->
-        <div
+        <CompactFilterBar
             v-if="isCompactMode"
-            class="bg-background/95 supports-backdrop-filter:bg-background/60 fixed inset-x-0 top-0 z-50 border-b backdrop-blur"
-        >
-            <div class="mx-auto max-w-7xl space-y-3 px-4 py-3 lg:px-8">
-                <!-- Row 1: Groups + Search + Reset -->
-                <div class="flex items-center gap-2 sm:gap-3">
-                    <!-- Groups Dropdown -->
-                    <div class="relative shrink-0">
-                        <button
-                            class="bg-card hover:bg-muted flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors"
-                            type="button"
-                            @click="showGroupsDropdown = !showGroupsDropdown"
-                        >
-                            <span class="max-w-25 truncate sm:max-w-30">{{ selectedGroup ?? 'All groups' }}</span>
-                            <ChevronDown class="size-4 shrink-0 opacity-50" />
-                        </button>
-                        <div
-                            v-if="showGroupsDropdown"
-                            class="bg-card absolute top-full left-0 z-50 mt-1 max-h-64 w-56 overflow-y-auto rounded-lg border shadow-lg"
-                        >
-                            <button
-                                :class="
-                                    cn(
-                                        'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors',
-                                        selectedGroup === null
-                                            ? 'bg-primary/10 text-primary font-medium'
-                                            : 'hover:bg-muted'
-                                    )
-                                "
-                                type="button"
-                                @click="
-                                    selectGroup(null);
-                                    showGroupsDropdown = false;
-                                "
-                            >
-                                <span>All groups</span>
-                                <span class="text-muted-foreground text-xs tabular-nums">{{
-                                    filteredGroupsTotal
-                                }}</span>
-                            </button>
-                            <button
-                                v-for="group in groups"
-                                :key="group.name"
-                                :class="
-                                    cn(
-                                        'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors',
-                                        selectedGroup === group.name
-                                            ? 'bg-primary/10 text-primary font-medium'
-                                            : 'hover:bg-muted'
-                                    )
-                                "
-                                type="button"
-                                @click="
-                                    selectGroup(group.name);
-                                    showGroupsDropdown = false;
-                                "
-                            >
-                                <span class="flex min-w-0 items-center gap-1.5">
-                                    <Tooltip
-                                        v-if="group.is_frontend_exported"
-                                        :text="frontendGroupTooltip(group)"
-                                    >
-                                        <Laptop class="size-3 shrink-0 text-emerald-500" />
-                                    </Tooltip>
-                                    <span class="truncate">{{ group.name }}</span>
-                                </span>
-                                <span class="text-muted-foreground text-xs tabular-nums">{{ group.total }}</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Search -->
-                    <SearchInput
-                        v-model="search"
-                        class="min-w-0 flex-1"
-                        placeholder="Search..."
-                        @clear="
-                            () => {
-                                search = '';
-                                applyFilters(1);
-                            }
-                        "
-                    />
-
-                    <div class="hidden shrink-0 items-center gap-2 sm:flex">
-                        <label
-                            class="sr-only"
-                            for="sticky-sort-desktop"
-                            >Sort translations</label
-                        >
-                        <Select
-                            id="sticky-sort-desktop"
-                            v-model="sort"
-                            :options="sortOptions"
-                            class="w-44 lg:w-56"
-                            @update:model-value="applyFilters(1)"
-                        />
-                        <Tooltip text="Reset all filters">
-                            <Button
-                                aria-label="Reset all filters"
-                                size="icon"
-                                variant="ghost"
-                                @click="clearFilters"
-                            >
-                                <RotateCcw class="size-4" />
-                            </Button>
-                        </Tooltip>
-                    </div>
-                </div>
-
-                <div class="hidden overflow-x-auto pb-1 sm:block">
-                    <ToggleGroup
-                        v-model="status"
-                        :options="statusToggleOptions"
-                        class="whitespace-nowrap"
-                        size="sm"
-                        aria-label="Filter translations by status"
-                        @update:model-value="applyFilters(1)"
-                    />
-                </div>
-
-                <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 sm:hidden">
-                    <label
-                        class="sr-only"
-                        for="sticky-status"
-                        >Filter translations by status</label
-                    >
-                    <Select
-                        id="sticky-status"
-                        v-model="status"
-                        :options="statusToggleOptions"
-                        @update:model-value="applyFilters(1)"
-                    />
-                    <label
-                        class="sr-only"
-                        for="sticky-sort-mobile"
-                        >Sort translations</label
-                    >
-                    <Select
-                        id="sticky-sort-mobile"
-                        v-model="sort"
-                        :options="
-                            sortOptions.map((option) => ({
-                                ...option,
-                                label: option.value === 'updated_desc' ? 'Newest' : option.label,
-                            }))
-                        "
-                        @update:model-value="applyFilters(1)"
-                    />
-                    <Tooltip text="Reset all filters">
-                        <Button
-                            aria-label="Reset all filters"
-                            size="icon"
-                            variant="ghost"
-                            @click="clearFilters"
-                        >
-                            <RotateCcw class="size-4" />
-                        </Button>
-                    </Tooltip>
-                </div>
-            </div>
-        </div>
-
-        <!-- Click outside to close groups dropdown -->
-        <div
-            v-if="showGroupsDropdown"
-            class="fixed inset-0 z-40"
-            @click="showGroupsDropdown = false"
+            v-model:search="search"
+            v-model:sort="sort"
+            v-model:status="status"
+            :groups="groups"
+            :selected-group="selectedGroup"
+            :total="filteredGroupsTotal"
+            :sort-options="sortOptions"
+            :status-options="statusToggleOptions"
+            @apply="applyFilters(1)"
+            @clear="clearFilters"
+            @clear-search="clearSearch"
+            @select-group="selectGroup"
         />
 
         <!-- Main Content -->
         <div class="grid gap-4">
             <!-- Group filters -->
             <aside class="space-y-4">
-                <section class="bg-card rounded-xl border p-4">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-sm font-semibold">Groups</h2>
-                        <span class="text-muted-foreground text-xs">{{ groups.length }}</span>
-                    </div>
-                    <SearchInput
-                        v-model="groupSearch"
-                        class="mt-3"
-                        placeholder="Filter groups..."
-                        @clear="groupSearch = ''"
-                    />
-                    <div class="mt-3 flex max-h-64 flex-wrap gap-2 overflow-y-auto">
-                        <button
-                            :class="
-                                cn(
-                                    'inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors',
-                                    selectedGroup === null
-                                        ? 'border-primary/30 bg-primary/10 text-primary font-medium'
-                                        : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-                                )
-                            "
-                            type="button"
-                            :aria-pressed="selectedGroup === null"
-                            @click="selectGroup(null)"
-                        >
-                            <span>All groups</span>
-                            <span class="shrink-0 text-xs tabular-nums opacity-70">{{ filteredGroupsTotal }}</span>
-                        </button>
-                        <button
-                            v-for="group in filteredGroups"
-                            :key="group.name"
-                            :class="
-                                cn(
-                                    'inline-flex min-h-9 max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors',
-                                    selectedGroup === group.name
-                                        ? 'border-primary/30 bg-primary/10 text-primary font-medium'
-                                        : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-                                )
-                            "
-                            type="button"
-                            :aria-pressed="selectedGroup === group.name"
-                            :title="group.name"
-                            @click="selectGroup(group.name)"
-                        >
-                            <span class="flex min-w-0 items-center gap-1.5">
-                                <Tooltip
-                                    v-if="group.is_frontend_exported"
-                                    data-test="group-frontend-tooltip"
-                                    :text="frontendGroupTooltip(group)"
-                                >
-                                    <Laptop class="size-3.5 shrink-0 text-emerald-500" />
-                                </Tooltip>
-                                <span class="truncate">{{ group.name }}</span>
-                                <Badge
-                                    v-if="group.is_json"
-                                    class="shrink-0"
-                                    variant="secondary"
-                                >
-                                    JSON
-                                </Badge>
-                            </span>
-                            <span class="shrink-0 text-xs tabular-nums opacity-70">{{ group.total }}</span>
-                        </button>
-                    </div>
-                </section>
+                <GroupFilter
+                    :groups="groups"
+                    :selected-group="selectedGroup"
+                    :total="filteredGroupsTotal"
+                    @select="selectGroup"
+                />
 
-                <details class="bg-card rounded-xl border p-4">
-                    <summary class="cursor-pointer text-sm font-semibold">Language and group fallback</summary>
-                    <div class="mt-4 max-w-xl space-y-4">
-                        <p class="text-muted-foreground text-sm">
-                            Use {{ baseLocale }} wording for a language or group. Individual keys can override these
-                            choices. Publish to apply changes.
-                        </p>
-                        <Select
-                            v-model="fallbackLocale"
-                            :options="targetLocales.map((locale) => ({ value: locale, label: locale }))"
-                            placeholder="Choose language"
-                            aria-label="Fallback language"
-                        />
-                        <template v-if="fallbackLocale">
-                            <div class="space-y-2">
-                                <p class="text-sm font-medium">Entire language · {{ fallbackLocale }}</p>
-                                <FallbackChoice
-                                    :key="fallbackLocale + '-locale'"
-                                    :locale="fallbackLocale"
-                                    scope="locale"
-                                    :selection="scopeRule('locale')"
-                                    :published="scopeRule('locale', true)"
-                                    :base-locale="baseLocale"
-                                />
-                            </div>
-                            <div
-                                v-if="selectedGroup"
-                                class="space-y-2 border-t pt-4"
-                            >
-                                <p class="text-sm font-medium">Group · {{ selectedGroup }}</p>
-                                <FallbackChoice
-                                    :key="fallbackLocale + selectedGroup"
-                                    :locale="fallbackLocale"
-                                    scope="group"
-                                    :group="selectedGroup === 'default' ? 'json' : selectedGroup"
-                                    :selection="scopeRule('group')"
-                                    :published="scopeRule('group', true)"
-                                    :base-locale="baseLocale"
-                                />
-                            </div>
-                            <p
-                                v-else
-                                class="text-muted-foreground text-xs"
-                            >
-                                Select a group above to configure a group override.
-                            </p>
-                        </template>
-                    </div>
-                </details>
+                <FallbackSettings
+                    :base-locale="baseLocale"
+                    :target-locales="targetLocales"
+                    :selected-group="selectedGroup"
+                    :fallback-rules="fallbackRules"
+                />
             </aside>
 
             <!-- Main: Translations List -->
@@ -1199,12 +305,7 @@
                                 v-model="search"
                                 class="flex-1"
                                 placeholder="Search by key, group, or value..."
-                                @clear="
-                                    () => {
-                                        search = '';
-                                        applyFilters(1);
-                                    }
-                                "
+                                @clear="clearSearch"
                             />
                             <div class="flex items-center gap-2">
                                 <Select
@@ -1329,184 +430,16 @@
                             :key="translation.id"
                             class="border-b last:border-b-0"
                         >
-                            <!-- Row Header -->
-                            <div
-                                class="hover:bg-muted/30 flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors"
-                                :data-test="`translation-row-${translation.id}`"
-                                @click="openEdit(translation)"
-                            >
-                                <span @click.stop>
-                                    <Checkbox
-                                        :aria-label="`Select ${translation.display_key}`"
-                                        :model-value="selectedIds.includes(translation.id)"
-                                        @update:model-value="setSelected(translation.id, $event)"
-                                    />
-                                </span>
-
-                                <!-- Status Indicator -->
-                                <Tooltip :text="workflowStatusLabel(translation)">
-                                    <span
-                                        :aria-label="workflowStatusLabel(translation)"
-                                        data-test="workflow-status"
-                                        :class="[
-                                            'size-2 shrink-0 rounded-full',
-                                            translation.status === 'approved' ? 'bg-emerald-500' : 'bg-amber-500',
-                                        ]"
-                                    />
-                                </Tooltip>
-
-                                <!-- Key & Group -->
-                                <div class="min-w-0 flex-1 overflow-hidden">
-                                    <div class="flex min-w-0 items-center gap-2">
-                                        <span class="min-w-0 truncate text-sm font-medium">{{
-                                            translation.display_key
-                                        }}</span>
-                                        <Badge
-                                            class="shrink-0"
-                                            variant="secondary"
-                                        >
-                                            {{ translation.group ?? 'default' }}
-                                        </Badge>
-                                        <Badge
-                                            v-if="translation.freshness_status"
-                                            class="shrink-0 capitalize"
-                                            variant="outline"
-                                        >
-                                            {{ translation.freshness_status }}
-                                        </Badge>
-                                        <Badge
-                                            v-if="translation.is_orphan"
-                                            class="shrink-0"
-                                            variant="warning"
-                                        >
-                                            Orphan
-                                        </Badge>
-                                    </div>
-                                    <div class="mt-1 flex flex-wrap gap-1.5">
-                                        <Badge
-                                            v-if="overrideLocales(translation).length"
-                                            variant="secondary"
-                                            :title="`Published overrides: ${overrideLocales(translation).join(', ').toUpperCase()}`"
-                                        >
-                                            Published override ·
-                                            {{ overrideLocales(translation).join(', ').toUpperCase() }}
-                                        </Badge>
-                                        <Badge
-                                            v-if="translation.draft_locales?.length"
-                                            variant="warning"
-                                        >
-                                            Draft · {{ translation.draft_locales.join(', ').toUpperCase() }}
-                                        </Badge>
-                                        <Badge
-                                            v-if="translation.pending_publish_locales?.length"
-                                            variant="outline"
-                                        >
-                                            Unpublished ·
-                                            {{ translation.pending_publish_locales.join(', ').toUpperCase() }}
-                                        </Badge>
-                                    </div>
-                                    <p class="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
-                                        {{ translation.values?.[baseLocale] || '—' }}
-                                    </p>
-                                </div>
-
-                                <!-- Meta -->
-                                <div class="text-muted-foreground hidden shrink-0 items-center gap-3 text-xs sm:flex">
-                                    <Tooltip
-                                        :text="
-                                            translation.is_frontend ? 'Used in frontend code' : 'Used in backend code'
-                                        "
-                                    >
-                                        <span
-                                            :aria-label="
-                                                translation.is_frontend
-                                                    ? 'Used in frontend code'
-                                                    : 'Used in backend code'
-                                            "
-                                            class="flex items-center"
-                                        >
-                                            <Laptop
-                                                v-if="translation.is_frontend"
-                                                class="size-3"
-                                            />
-                                            <Server
-                                                v-else
-                                                class="size-3"
-                                            />
-                                        </span>
-                                    </Tooltip>
-                                    <Badge
-                                        v-if="translation.is_retained"
-                                        variant="secondary"
-                                        >Retained</Badge
-                                    >
-                                    <Badge
-                                        v-if="translation.is_pending_delete"
-                                        variant="warning"
-                                        >Pending deletion</Badge
-                                    >
-                                    <Tooltip
-                                        v-if="translation.is_dynamic"
-                                        :text="`Possible dynamic usage: ${translation.dynamic_pattern}`"
-                                    >
-                                        <Braces
-                                            aria-label="Dynamic translation key"
-                                            class="size-3 text-violet-500"
-                                        />
-                                    </Tooltip>
-                                    <Tooltip
-                                        v-if="translation.occurrences.length"
-                                        :text="`${translation.occurrences.length} code occurrence${translation.occurrences.length === 1 ? '' : 's'}`"
-                                    >
-                                        <span class="flex items-center gap-1">
-                                            <Code class="size-3" />
-                                            {{ translation.occurrences.length }}
-                                        </span>
-                                    </Tooltip>
-                                    <Tooltip
-                                        v-if="translation.has_missing_values"
-                                        text="One or more locale values are missing"
-                                    >
-                                        <CircleAlert
-                                            aria-label="One or more locale values are missing"
-                                            class="size-3 text-red-500"
-                                        />
-                                    </Tooltip>
-                                </div>
-
-                                <!-- Actions -->
-                                <div class="flex shrink-0 items-center gap-1">
-                                    <Tooltip
-                                        v-if="canDelete(translation)"
-                                        text="Delete key"
-                                    >
-                                        <Button
-                                            aria-label="Delete key"
-                                            data-test="delete-translation"
-                                            class="text-destructive size-8"
-                                            size="icon"
-                                            variant="ghost"
-                                            :disabled="isCleaning || !canDelete(translation)"
-                                            @click.stop="reviewCleanup('delete', [translation])"
-                                        >
-                                            <Trash2 class="size-4" />
-                                        </Button>
-                                    </Tooltip>
-                                    <Tooltip :text="approvalActionLabel(translation)">
-                                        <Button
-                                            :aria-label="approvalActionLabel(translation)"
-                                            data-test="approval-action"
-                                            :class="translation.status === 'approved' ? 'text-emerald-500' : ''"
-                                            class="size-8"
-                                            size="icon"
-                                            variant="ghost"
-                                            @click.stop="toggleApproval(translation)"
-                                        >
-                                            <Check class="size-4" />
-                                        </Button>
-                                    </Tooltip>
-                                </div>
-                            </div>
+                            <TranslationRow
+                                :translation="translation"
+                                :base-locale="baseLocale"
+                                :selected="selectedIds.includes(translation.id)"
+                                :delete-disabled="isCleaning"
+                                @open="editTranslation = translation"
+                                @update:selected="setSelected(translation.id, $event)"
+                                @delete="reviewCleanup('delete', [translation])"
+                                @toggle-approval="toggleApproval(translation)"
+                            />
                         </div>
                     </div>
 
@@ -1524,30 +457,12 @@
                             @update:model-value="applyFilters(1)"
                         />
                         <div class="flex items-center gap-1">
-                            <Tooltip text="Previous page">
-                                <Button
-                                    aria-label="Previous page"
-                                    :disabled="!hasPrev"
-                                    class="size-8"
-                                    size="icon"
-                                    variant="ghost"
-                                    @click="goToPage(pagination.current_page - 1)"
-                                >
-                                    <ChevronLeft class="size-4" />
-                                </Button>
-                            </Tooltip>
-                            <Tooltip text="Next page">
-                                <Button
-                                    aria-label="Next page"
-                                    :disabled="!hasNext"
-                                    class="size-8"
-                                    size="icon"
-                                    variant="ghost"
-                                    @click="goToPage(pagination.current_page + 1)"
-                                >
-                                    <ChevronRight class="size-4" />
-                                </Button>
-                            </Tooltip>
+                            <PaginationNav
+                                :current-page="pagination.current_page"
+                                :last-page="pagination.last_page"
+                                button-class="size-8"
+                                @change="applyFilters"
+                            />
                         </div>
                     </div>
                 </section>
@@ -1555,579 +470,45 @@
         </div>
     </div>
 
-    <!-- Create Dynamic Translation Panel -->
-    <SlidePanel
+    <DynamicTranslationPanel
         :open="isCreatingDynamic"
-        subtitle="Runtime-resolved key"
-        title="Add dynamic translation"
-        @close="closeDynamicCreate"
-    >
-        <div
-            data-test="dynamic-create-panel"
-            class="sr-only"
-        >
-            Dynamic translation editor
-        </div>
-        <div
-            v-if="newDynamicError"
-            role="alert"
-            class="text-destructive border-destructive/40 bg-destructive/10 mb-5 rounded-lg border p-3 text-sm"
-        >
-            {{ newDynamicError }}
-        </div>
+        :patterns="dynamicPatterns"
+        :locales="orderedLocales"
+        :base-locale="baseLocale"
+        :ai-available="aiStatus.available"
+        :store-route="voxRoutes?.manage_translation_store"
+        :translate-draft-route="voxRoutes?.manage_translation_translate_draft"
+        @close="isCreatingDynamic = false"
+        @created="showToast"
+    />
 
-        <div class="space-y-5">
-            <FormField
-                id="new_dynamic_pattern"
-                description="Choose the pattern for the new translation. Its fixed prefix is added automatically."
-                label="Dynamic pattern"
-            >
-                <Select
-                    id="new_dynamic_pattern"
-                    v-model="newDynamicPattern"
-                    :options="dynamicPatternOptions"
-                    placeholder="Choose a pattern"
-                />
-            </FormField>
+    <TranslationEditPanel
+        :translation="editTranslation"
+        :locales="orderedLocales"
+        :base-locale="baseLocale"
+        :ai-available="aiStatus.available"
+        :fallback-rules="fallbackRules"
+        :missing-translation-prefix="page.props.missingTranslationPrefix ?? '🚩'"
+        :update-route="voxRoutes?.manage_translation_update"
+        :translate-route="voxRoutes?.manage_translation_translate"
+        :use-application-route="voxRoutes?.manage_translation_use_application"
+        @close="editTranslation = null"
+        @saved="finishEdit"
+        @notify="showToast"
+        @cleanup="(action, translation) => reviewCleanup(action, [translation])"
+    />
 
-            <FormField
-                id="new_dynamic_key"
-                :description="
-                    dynamicPatternPrefix
-                        ? 'Enter only the part after the fixed prefix.'
-                        : 'Enter a concrete key matching the selected pattern.'
-                "
-                label="New key"
-            >
-                <p
-                    v-if="dynamicPatternPrefix"
-                    class="text-muted-foreground font-mono text-xs break-all"
-                >
-                    Prefix: {{ dynamicPatternPrefix }}
-                </p>
-                <Input
-                    id="new_dynamic_key"
-                    v-model="newDynamicKey"
-                    data-test="new-dynamic-key"
-                    :disabled="!newDynamicPattern"
-                    :placeholder="
-                        newDynamicPattern.slice(dynamicPatternPrefix.length).replaceAll('*', 'name') || 'name'
-                    "
-                />
-                <p
-                    v-if="newDynamicKey.trim()"
-                    data-test="new-dynamic-full-key"
-                    class="text-muted-foreground text-xs break-all"
-                >
-                    Full key: <span class="font-mono">{{ newDynamicFullKey }}</span>
-                </p>
-            </FormField>
+    <CleanupPanel
+        v-model:busy="isCleaning"
+        :rows="cleanupRows"
+        :action="cleanupAction"
+        :route="voxRoutes?.manage_translation_cleanup"
+        @close="cleanupRows = []"
+        @done="finishCleanup"
+    />
 
-            <div class="border-t pt-5">
-                <div class="flex items-start justify-between gap-4">
-                    <div>
-                        <p class="text-sm font-semibold">Translation values</p>
-                        <p class="text-muted-foreground mt-1 text-xs">
-                            Enter the required base value, then fill target locales manually or with AI before creating
-                            the translation.
-                        </p>
-                    </div>
-                    <Button
-                        v-if="aiStatus.available"
-                        data-test="translate-dynamic-missing"
-                        :disabled="!canTranslateDynamic || isTranslatingDynamic || isStoringDynamic"
-                        class="shrink-0"
-                        size="sm"
-                        variant="outline"
-                        @click="translateMissingDynamicValues"
-                    >
-                        <Sparkles class="size-4" />
-                        {{ isTranslatingDynamic ? 'Translating…' : 'AI fill missing' }}
-                    </Button>
-                </div>
-
-                <div class="mt-4 space-y-4">
-                    <FormField
-                        v-for="locale in orderedLocales"
-                        :id="`new_dynamic_value_${locale}`"
-                        :key="locale"
-                        :description="locale === baseLocale ? 'Required source value' : undefined"
-                        :label="locale.toUpperCase()"
-                    >
-                        <Textarea
-                            :id="`new_dynamic_value_${locale}`"
-                            v-model="newDynamicValues[locale]"
-                            :data-test="`new-dynamic-value-${locale}`"
-                            :rows="2"
-                        />
-                    </FormField>
-                </div>
-            </div>
-        </div>
-
-        <template #footer>
-            <div class="flex items-center justify-end gap-2">
-                <Button
-                    :disabled="isStoringDynamic || isTranslatingDynamic"
-                    variant="outline"
-                    @click="closeDynamicCreate"
-                >
-                    Cancel
-                </Button>
-                <Button
-                    data-test="store-dynamic-translation"
-                    :disabled="
-                        isStoringDynamic ||
-                        isTranslatingDynamic ||
-                        newDynamicPattern === '' ||
-                        newDynamicKey.trim() === '' ||
-                        !(newDynamicValues[baseLocale] ?? '').trim()
-                    "
-                    @click="storeDynamicTranslation"
-                >
-                    {{ isStoringDynamic ? 'Creating…' : 'Create translation' }}
-                </Button>
-            </div>
-        </template>
-    </SlidePanel>
-
-    <!-- Edit Panel -->
-    <SlidePanel
-        :open="!!editTranslation"
-        :subtitle="editTranslation?.group ?? 'default'"
-        :title="editTranslation?.display_key"
-        @close="closeEdit"
-    >
-        <template #header>
-            <div
-                data-test="translation-edit-panel"
-                class="min-w-0 flex-1"
-            >
-                <p class="text-muted-foreground text-xs tracking-[0.2em] uppercase">Editing</p>
-                <h2 class="mt-1 truncate text-lg font-semibold">{{ editTranslation?.display_key }}</h2>
-                <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                    <Badge variant="secondary">{{ editTranslation?.group ?? 'default' }}</Badge>
-                    <Badge
-                        v-if="editTranslation?.is_orphan"
-                        variant="warning"
-                    >
-                        Orphan
-                    </Badge>
-                    <Badge
-                        v-if="editTranslation?.is_dynamic"
-                        variant="secondary"
-                    >
-                        Dynamic usage · {{ editTranslation.dynamic_pattern }}
-                    </Badge>
-                    <Badge
-                        v-if="editTranslation?.is_retained"
-                        variant="secondary"
-                        >Retained by rule</Badge
-                    >
-                    <Badge
-                        v-if="editTranslation?.is_pending_delete"
-                        variant="warning"
-                        >Pending deletion</Badge
-                    >
-                    <Badge
-                        v-if="editTranslation?.occurrences.length"
-                        variant="secondary"
-                        >Static usage</Badge
-                    >
-                    <span class="text-muted-foreground">Updated {{ formatDateTime(editTranslation?.updated_at) }}</span>
-                </div>
-            </div>
-        </template>
-
-        <!-- Error Alert -->
-        <div
-            v-if="actionError"
-            role="alert"
-            class="text-destructive border-destructive/40 bg-destructive/10 mb-4 rounded-lg border p-3 text-sm"
-        >
-            {{ actionError }}
-        </div>
-
-        <!-- Locale Values -->
-        <div class="space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <p class="text-sm font-semibold">Translations</p>
-                    <p class="text-muted-foreground text-xs">
-                        Changes are saved as drafts. Approve and publish them to update the application.
-                    </p>
-                </div>
-                <div
-                    v-if="aiStatus.available"
-                    class="flex w-full flex-wrap gap-2 sm:w-auto"
-                >
-                    <Button
-                        :disabled="!canTranslate || isTranslating || missingTargetLocales.length === 0"
-                        class="flex-auto sm:flex-none"
-                        size="sm"
-                        variant="outline"
-                        title="Fill empty or flagged locale values using the base locale."
-                        @click="translateMissing"
-                    >
-                        <Sparkles class="size-4" />
-                        AI translate missing
-                    </Button>
-                    <Button
-                        :disabled="!canTranslate || isTranslating"
-                        class="flex-auto sm:flex-none"
-                        size="sm"
-                        variant="outline"
-                        title="Replace all target locale values using the base locale."
-                        @click="translateAll"
-                    >
-                        <Sparkles class="size-4" />
-                        AI retranslate
-                    </Button>
-                </div>
-            </div>
-
-            <div
-                v-for="locale in orderedLocales"
-                :key="locale"
-                class="space-y-1.5"
-            >
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="text-muted-foreground text-xs font-medium uppercase">{{ locale }}</span>
-                        <Badge
-                            v-if="locale === baseLocale"
-                            variant="outline"
-                        >
-                            Base
-                        </Badge>
-                    </div>
-                    <Button
-                        v-if="aiStatus.available && locale !== baseLocale"
-                        :disabled="
-                            !canTranslate || isTranslating || editTranslation?.fallback?.[locale]?.mode === 'default'
-                        "
-                        class="h-7 px-2"
-                        size="sm"
-                        variant="ghost"
-                        @click="translateLocale(locale)"
-                    >
-                        <Sparkles class="size-3" />
-                        AI
-                    </Button>
-                </div>
-                <FallbackChoice
-                    v-if="locale !== baseLocale && editTranslation"
-                    :key="editTranslation.id + locale"
-                    :locale="locale"
-                    scope="key"
-                    :translation-id="editTranslation.id"
-                    :selection="editTranslation.fallback?.[locale]?.selection ?? 'inherit'"
-                    :published="
-                        page.props.fallbackRules?.find(
-                            (rule) =>
-                                rule.scope === 'key' &&
-                                rule.locale === locale &&
-                                rule.group === (editTranslation?.group ?? 'json') &&
-                                rule.key === editTranslation?.key
-                        )?.published_mode ?? 'inherit'
-                    "
-                    :base-locale="baseLocale"
-                />
-                <div
-                    v-if="editTranslation?.fallback?.[locale]?.mode === 'default'"
-                    class="bg-muted rounded-lg p-3 text-sm"
-                >
-                    <p class="font-medium">Using default · {{ baseLocale }}</p>
-                    <p class="mt-1 whitespace-pre-wrap">
-                        {{ editValues[baseLocale] || 'Default translation missing' }}
-                    </p>
-                    <p class="text-muted-foreground mt-1 text-xs">
-                        {{
-                            editTranslation.fallback[locale].published_mode === 'default'
-                                ? 'Default wording is published. Changes refresh on publish.'
-                                : 'Pending publication. Current application wording is unchanged.'
-                        }}
-                    </p>
-                </div>
-                <div
-                    v-if="
-                        editTranslation?.published_overrides?.[locale] != null &&
-                        editTranslation?.fallback?.[locale]?.published_mode !== 'default'
-                    "
-                    class="bg-muted/40 space-y-3 rounded-lg border p-3 text-sm"
-                >
-                    <div>
-                        <p class="text-muted-foreground text-xs font-medium">Published override · currently live</p>
-                        <p class="mt-1 [overflow-wrap:anywhere] whitespace-pre-wrap">
-                            {{ editTranslation.published_overrides[locale] }}
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-muted-foreground text-xs font-medium">
-                            Application default · without the override
-                        </p>
-                        <p class="mt-1 [overflow-wrap:anywhere] whitespace-pre-wrap">
-                            {{ editTranslation.file_values?.[locale] ?? 'No application value' }}
-                        </p>
-                    </div>
-                    <Button
-                        :data-test="`use-application-wording-${locale}`"
-                        :disabled="usingApplicationLocale !== null || isSaving || isTranslating"
-                        size="sm"
-                        variant="outline"
-                        @click="useApplicationWording(locale)"
-                    >
-                        {{ usingApplicationLocale === locale ? 'Removing…' : 'Remove published override' }}
-                    </Button>
-                    <p class="text-muted-foreground text-xs">
-                        {{
-                            editTranslation.published_overrides[locale] === editTranslation.file_values?.[locale]
-                                ? 'The override matches the application default. Removing it will not change the live wording.'
-                                : 'Immediately restores the application default in the live translation files.'
-                        }}
-                        Any unpublished edits are preserved.
-                    </p>
-                </div>
-                <p class="text-muted-foreground text-xs">
-                    {{
-                        editTranslation?.fallback?.[locale]?.mode === 'default'
-                            ? 'Preserved local wording'
-                            : editTranslation?.draft_locales?.includes(locale)
-                              ? 'Draft · awaiting approval'
-                              : editTranslation?.pending_publish_locales?.includes(locale)
-                                ? 'Approved · not yet published'
-                                : 'Current wording'
-                    }}
-                </p>
-                <Textarea
-                    v-model="editValues[locale]"
-                    :data-test="`translation-value-${locale}`"
-                    :disabled="editTranslation?.fallback?.[locale]?.mode === 'default'"
-                    :rows="2"
-                    class="resize-none"
-                />
-            </div>
-        </div>
-
-        <div
-            v-if="editTranslation?.matching_patterns.length"
-            class="mt-4 space-y-2 border-t pt-4 text-sm"
-        >
-            <p class="font-semibold">Matching rules</p>
-            <p
-                v-for="pattern in editTranslation.matching_patterns"
-                :key="pattern"
-                class="font-mono"
-            >
-                {{ pattern }}
-            </p>
-            <p class="text-muted-foreground">Sources: {{ editTranslation.retention_sources.join(', ') }}</p>
-        </div>
-        <div
-            v-if="editTranslation?.dynamic_occurrences.length"
-            class="mt-4 space-y-2 border-t pt-4 text-sm"
-        >
-            <p class="font-semibold">Possible dynamic matches ({{ editTranslation.dynamic_occurrences.length }})</p>
-            <p class="text-muted-foreground">
-                These expressions match a pattern; they do not prove this exact key is used.
-            </p>
-            <div
-                v-for="(occurrence, index) in editTranslation.dynamic_occurrences"
-                :key="index"
-                class="bg-muted/40 rounded-lg border p-3"
-            >
-                <p>{{ occurrence.file }}:{{ occurrence.line }}</p>
-                <code>{{ occurrence.context }}</code>
-            </div>
-        </div>
-        <div
-            v-if="editTranslation"
-            class="mt-4 flex flex-wrap gap-2 border-t pt-4"
-        >
-            <p
-                v-if="editTranslation.deletion_unavailable_reason"
-                class="text-muted-foreground w-full text-sm"
-            >
-                {{ editTranslation.deletion_unavailable_reason }}
-            </p>
-            <Button
-                v-if="canDelete(editTranslation)"
-                variant="outline"
-                @click="reviewCleanup('delete', [editTranslation])"
-                >Delete key</Button
-            >
-            <Button
-                v-if="editTranslation.is_pending_delete"
-                variant="outline"
-                @click="reviewCleanup('restore', [editTranslation])"
-                >Cancel deletion</Button
-            >
-        </div>
-
-        <!-- Occurrences Section -->
-        <div
-            v-if="editTranslation?.occurrences?.length"
-            class="mt-4 border-t pt-4"
-        >
-            <button
-                class="flex w-full cursor-pointer items-center justify-between text-sm font-semibold"
-                type="button"
-                @click="showOccurrences = !showOccurrences"
-            >
-                <span class="flex items-center gap-2">
-                    <FileText class="size-4" />
-                    Exact occurrences ({{ editTranslation.occurrences.length }})
-                </span>
-                <ChevronRight :class="['size-4 transition-transform', showOccurrences && 'rotate-90']" />
-            </button>
-            <div
-                v-if="showOccurrences"
-                class="mt-3 space-y-2"
-            >
-                <div
-                    v-for="occurrence in editTranslation.occurrences"
-                    :key="occurrence.id"
-                    class="bg-muted/40 rounded-lg border p-3"
-                >
-                    <div class="text-muted-foreground flex items-center gap-1 text-xs">
-                        <Code class="size-3" />
-                        <span class="truncate">{{ occurrence.file_path }}</span>
-                        <span v-if="occurrence.line_number">:{{ occurrence.line_number }}</span>
-                    </div>
-                    <div
-                        v-if="occurrence.context_before || occurrence.context_after"
-                        class="mt-2 space-y-1 font-mono text-xs"
-                    >
-                        <p class="text-muted-foreground">
-                            <template v-if="occurrence.context_before">{{ occurrence.context_before }}</template
-                            >KEY<template v-if="occurrence.context_after">{{ occurrence.context_after }}</template>
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <template #footer>
-            <div class="flex items-center justify-end gap-2">
-                <Button
-                    :disabled="isSaving"
-                    variant="outline"
-                    @click="closeEdit"
-                >
-                    Cancel
-                </Button>
-                <Button
-                    :disabled="isSaving || usingApplicationLocale !== null || editTranslation?.is_pending_delete"
-                    @click="saveEdit"
-                >
-                    {{ isSaving ? 'Saving…' : 'Save changes' }}
-                </Button>
-            </div>
-        </template>
-    </SlidePanel>
-
-    <SlidePanel
-        :open="cleanupRows.length > 0"
-        :title="cleanupTitle"
-        @close="!isCleaning && (cleanupRows = [])"
-    >
-        <p>
-            {{ cleanupRows.length }} keys and
-            {{ cleanupRows.reduce((count, row) => count + row.values_count, 0) }} locale values selected.
-        </p>
-        <p class="mt-3 font-semibold">
-            {{
-                cleanupAction === 'delete'
-                    ? 'Keys will be marked for deletion in Vox. Language files remain unchanged until Publish.'
-                    : 'Published language files will not be changed.'
-            }}
-        </p>
-        <p
-            v-if="cleanupAction === 'delete'"
-            class="mt-3"
-        >
-            Publish will permanently remove the selected keys, their values, and related reconciliation records. All
-            locale wording will be lost. Parse may rediscover used keys, but cannot recover their previous translations.
-            Dynamically constructed keys may not reappear.
-        </p>
-        <p
-            v-else
-            class="mt-3"
-        >
-            These keys will return to normal management.
-        </p>
-        <ul class="my-4 space-y-1">
-            <li
-                v-for="row in cleanupRows"
-                :key="row.id"
-                class="font-mono text-xs break-all"
-            >
-                {{ row.display_key }}
-            </li>
-        </ul>
-        <FormField
-            v-if="cleanupAction === 'restore'"
-            label="Type CONFIRM to continue"
-            ><Input
-                id="cleanup-confirmation"
-                v-model="cleanupConfirmation"
-        /></FormField>
-        <p
-            v-if="cleanupError"
-            role="alert"
-            class="text-destructive mt-3"
-        >
-            {{ cleanupError }}
-        </p>
-        <template #footer
-            ><Button
-                :disabled="isCleaning || (cleanupAction === 'restore' && cleanupConfirmation !== 'CONFIRM')"
-                data-test="confirm-cleanup"
-                @click="submitCleanup"
-                >{{ isCleaning ? 'Working…' : cleanupTitle }}</Button
-            ></template
-        >
-    </SlidePanel>
-
-    <Transition
-        enter-active-class="transition duration-200 ease-out"
-        enter-from-class="translate-y-2 opacity-0"
-        enter-to-class="translate-y-0 opacity-100"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="translate-y-0 opacity-100"
-        leave-to-class="translate-y-2 opacity-0"
-    >
-        <div
-            v-if="toast"
-            data-test="success-toast"
-            :role="toast.tone === 'error' ? 'alert' : 'status'"
-            :aria-live="toast.tone === 'error' ? 'assertive' : 'polite'"
-            :class="
-                cn(
-                    'bg-card fixed top-4 right-4 z-[70] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg sm:max-w-md',
-                    toast.tone === 'error'
-                        ? 'border-destructive/40 text-destructive'
-                        : 'border-emerald-500/40 text-emerald-600'
-                )
-            "
-        >
-            <CircleAlert
-                v-if="toast.tone === 'error'"
-                class="size-4 shrink-0"
-            />
-            <Check
-                v-else
-                class="size-4 shrink-0"
-            />
-            <span class="min-w-0 flex-1">{{ toast.message }}</span>
-            <button
-                aria-label="Dismiss notification"
-                class="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2"
-                type="button"
-                @click="dismissToast"
-            >
-                <X class="size-4" />
-            </button>
-        </div>
-    </Transition>
+    <ToastNotification
+        :toast="toast"
+        @dismiss="dismissToast"
+    />
 </template>

@@ -5,14 +5,16 @@ namespace KeypointSolutions\LaravelVox\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
-use KeypointSolutions\LaravelVox\Support\TranslationFileChangeReporter;
+use KeypointSolutions\LaravelVox\Commands\Concerns\RecordsTranslationCheckpoint;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
-use KeypointSolutions\LaravelVox\Support\VoxFrontendManifest;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileRepository;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileUpdater;
-use KeypointSolutions\LaravelVox\Translation\TranslationFileWriter;
-use KeypointSolutions\LaravelVox\Translation\TranslationScanPreparation;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileChangeReporter;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileRepository;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileUpdater;
+use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileWriter;
+use KeypointSolutions\LaravelVox\Translation\Publishing\VoxFrontendManifest;
+use KeypointSolutions\LaravelVox\Translation\Scanning\TranslationScanPreparation;
+use KeypointSolutions\LaravelVox\Translation\Scanning\VoxDynamicKeyRegistry;
 
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\select;
@@ -30,7 +32,7 @@ class ParseTranslationsCommand extends Command
 
     public function handle(TranslationScanPreparation $preparation): int
     {
-        $langPath = rtrim(config('vox.paths.lang', lang_path()), DIRECTORY_SEPARATOR);
+        $langPath = VoxConfig::langPath();
 
         if (! File::isDirectory($langPath)) {
             warning("Vox lang path not found: {$langPath}");

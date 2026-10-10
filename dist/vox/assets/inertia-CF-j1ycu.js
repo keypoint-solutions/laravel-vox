@@ -1,0 +1,1 @@
+function e(e,t=`Request failed.`){return Object.values(e)[0]??t}function t(e,t){return e.flash?.success??t}function n(e,t,n){return e?.replace(`__${t}__`,String(n))??``}export{t as n,n as r,e as t};

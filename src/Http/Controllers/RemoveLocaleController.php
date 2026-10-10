@@ -5,8 +5,8 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleCatalog;
-use KeypointSolutions\LaravelVox\Translation\LocaleRemover;
+use KeypointSolutions\LaravelVox\Translation\Locales\LocaleRemover;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleCatalog;
 use Throwable;
 
 class RemoveLocaleController

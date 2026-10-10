@@ -1,8 +1,10 @@
 <script setup lang="ts">
-    import { router, usePage } from '@inertiajs/vue3';
+    import { router } from '@inertiajs/vue3';
     import { ref, watch } from 'vue';
 
     import { Button, Select } from '@/components/ui';
+    import { useVoxRoutes } from '@/composables/useVoxRoutes';
+    import { firstError } from '@/lib/inertia';
 
     const props = defineProps<{
         locale: string;
@@ -13,7 +15,7 @@
         published: string;
         baseLocale: string;
     }>();
-    const page = usePage();
+    const routes = useVoxRoutes();
     const mode = ref(props.selection);
     const saving = ref(false);
     const error = ref('');
@@ -34,7 +36,7 @@
         error.value = '';
         message.value = '';
         router.post(
-            page.props.vox?.routes?.manage_fallback ?? '',
+            routes.value?.manage_fallback ?? '',
             {
                 locale: props.locale,
                 scope: props.scope,
@@ -45,7 +47,7 @@
             {
                 preserveScroll: true,
                 onError: (errors) => {
-                    error.value = Object.values(errors)[0] ?? 'Unable to save fallback choice.';
+                    error.value = firstError(errors, 'Unable to save fallback choice.');
                 },
                 onSuccess: () => {
                     message.value = 'Saved. Publish to apply.';

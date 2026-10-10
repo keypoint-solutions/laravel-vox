@@ -3,7 +3,7 @@
 namespace KeypointSolutions\LaravelVox\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
+use KeypointSolutions\LaravelVox\Support\VoxConfig;
 use KeypointSolutions\LaravelVox\Translation\TranslationCheckpoints;
 use RuntimeException;
 
@@ -42,7 +42,7 @@ class CheckpointCommand extends Command
             $id = $checkpoints->create(mb_substr((string) $this->argument('label'), 0, 200));
             $this->info('Created checkpoint #'.$id.'.');
         } else {
-            $this->table(['ID', 'Checkpoint', 'Created'], DB::connection(config('vox.database.connection', 'vox'))
+            $this->table(['ID', 'Checkpoint', 'Created'], VoxConfig::connection()
                 ->table('vox_checkpoints')->latest('id')->limit(25)->get(['id', 'label', 'created_at'])->map(fn ($row): array => (array) $row)->all());
         }
 

@@ -21,11 +21,12 @@
 
     import { Tooltip } from '@/components/ui';
     import { useAppearance } from '@/composables/useAppearance';
+    import { useVoxRoutes } from '@/composables/useVoxRoutes';
     import { cn, urlIsActive } from '@/lib/utils';
 
     const page = usePage();
     const features = computed(() => page.props.vox?.features ?? {});
-    const routes = computed(() => page.props.vox?.routes);
+    const routes = useVoxRoutes();
     const { appearance, updateAppearance } = useAppearance();
     const mobileMenuOpen = ref(false);
 

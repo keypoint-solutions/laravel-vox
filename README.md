@@ -129,6 +129,17 @@ VOX_TRANSLATE_DRIVER=openai
 OPENAI_API_KEY=your-api-key
 ```
 
+AI translation is optional. To use Claude instead of OpenAI, set the driver and Anthropic's key; the model is then chosen in Settings and defaults to `claude-haiku-5-5`:
+
+```dotenv
+VOX_TRANSLATE_DRIVER=claude
+ANTHROPIC_API_KEY=your-api-key
+```
+
+If your `config/vox.php` was published before Claude support, add `'anthropic' => ['api_key' => env('ANTHROPIC_API_KEY')]` under `translate.providers`. Set `VOX_TRANSLATE_DRIVER=null` to run without AI.
+
+When a provider fails during a multi-string job, for example because the account runs out of credits, Vox keeps the translations already completed, stops, and reports the provider's message.
+
 To use another database, define a connection in `config/database.php` and set `VOX_DB_CONNECTION` to its name. To relocate the default SQLite file, set `VOX_DB_PATH`. Changing connections does not transfer existing Vox data.
 
 ### Memory limit
@@ -323,7 +334,7 @@ Then use `/vox/manage` and `/vox/sync` to review, and `/vox/publish` to publish 
 
 - **First import:** existing file values become approved application defaults.
 - **Manual/AI edits:** saved as drafts until approved. Approval is per locale.
-- **AI translate missing:** targets absent, empty, or marker-prefixed values; skips unusable base wording. **AI retranslate** replaces selected target wording.
+- **AI translate missing:** in the key editor it fills fields that are empty or marker-prefixed; for selected rows it fills absent or marker-prefixed saved values and leaves deliberately blank ones alone. Both skip unusable base wording. **AI retranslate** replaces selected target wording.
 - **Empty filter:** separates keys with empty/missing default wording from actionable missing translations.
 - **Publish:** writes approved usable changes, refreshes previously published wording, and applies pending deletions. Other locales and unapproved drafts do not block publication.
 - **Use application wording:** removes one locale's published override while preserving its draft.
@@ -407,11 +418,11 @@ Vox migrations are managed by `vox:setup` (also called by `vox:deploy`), separat
 
 ### Discover, sync, and translate
 
-| Command                     | Description and usage                                                                                                                                                                                                           |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `php artisan vox:parse`     | Scan source usage and update language files according to the configured format, retention, and obsolete-key rules. Does not import translations into the database. Add `-v` for detailed occurrences.                           |
-| `php artisan vox:sync`      | Compare current language files with Vox's database and refresh usage metadata. Existing edits go through reconciliation. Add `--parse` to update language files first.                                                          |
-| `php artisan vox:translate` | Translate missing values using the configured AI driver, writing **directly to language files**. Restrict work with `--path` or `--key`; use `--force` to retranslate existing wording. Unusable base wording is still skipped. |
+| Command                     | Description and usage                                                                                                                                                                                                                                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `php artisan vox:parse`     | Scan source usage and update language files according to the configured format, retention, and obsolete-key rules. Does not import translations into the database. Add `-v` for detailed occurrences.                                                                                                                                                  |
+| `php artisan vox:sync`      | Compare current language files with Vox's database and refresh usage metadata. Existing edits go through reconciliation. Add `--parse` to update language files first.                                                                                                                                                                                 |
+| `php artisan vox:translate` | Translate absent or marker-prefixed values using the configured AI driver, writing **directly to language files**. Empty values are kept as deliberate blanks, and the command stops when no AI provider is configured. Restrict work with `--path` or `--key`; use `--force` to retranslate existing wording. Unusable base wording is still skipped. |
 
 ```bash
 # Discover keys, update files, and bring the results into the manager.

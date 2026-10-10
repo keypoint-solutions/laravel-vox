@@ -5,8 +5,8 @@ namespace KeypointSolutions\LaravelVox\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\File;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
-use KeypointSolutions\LaravelVox\Translation\FrontendTranslationArtifacts;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\Publishing\FrontendTranslationArtifacts;
 
 class FrontendTranslationsController
 {

@@ -10,16 +10,18 @@ use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationRule;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
-use KeypointSolutions\LaravelVox\Support\VoxDynamicKeyRegistry;
-use KeypointSolutions\LaravelVox\Support\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
+use KeypointSolutions\LaravelVox\Translation\Publishing\TranslationPublisher;
+use KeypointSolutions\LaravelVox\Translation\Scanning\VoxDynamicKeyRegistry;
+use KeypointSolutions\LaravelVox\Translation\TranslationEligibility;
 use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
-use KeypointSolutions\LaravelVox\Translation\TranslationPublisher;
 
 class PublishController
 {
     public function __construct(
         private VoxLocaleResolver $localeResolver,
         private VoxDynamicKeyRegistry $dynamicKeys,
+        private TranslationEligibility $eligibility,
     ) {}
 
     public function index(): Response
@@ -80,14 +82,7 @@ class PublishController
      */
     private function stats(): array
     {
-        $locales = $this->localeResolver->resolveLocales();
-        $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
-
-        if (! in_array($baseLocale, $locales, true)) {
-            $locales[] = $baseLocale;
-        }
-
-        $prefix = (string) config('vox.parse.missing_translation_prefix', '🚩');
+        [$locales] = $this->localeResolver->resolveLocalesWithBase();
         $approved = VoxTranslation::query()
             ->where('is_pending_delete', false)
             ->whereHas('values', fn (Builder $query): Builder => $query->where('is_approved', true)->whereIn('locale', $locales))
@@ -121,9 +116,7 @@ class PublishController
                     continue;
                 }
 
-                $value = $translationValue->value;
-
-                if (! is_string($value) || $value === '' || str_starts_with($value, $prefix)) {
+                if ($this->eligibility->isMissing($translationValue->value)) {
                     $hasIncompleteValue = true;
 
                     continue;
