@@ -4,6 +4,8 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 
 ## Unreleased
 
+- Fixed vendor translations parsing
+
 ## 1.0.18 — 2026-10-10
 
 - Treat an empty string as deliberate wording instead of a missing translation. Only absent and marker-prefixed values are missing: blank values leave the Missing filter, are published once approved, and are no longer filled by `vox:translate` or by AI translation of selected rows. In the key editor, AI translation still fills fields that are empty.

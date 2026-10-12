@@ -100,12 +100,14 @@ class TranslationFileUpdater
             $baseFlat = Arr::dot($baseExisting);
             $keys = array_values(array_unique(array_merge($keys, $this->dynamicKeysFromBase($baseFlat, $group))));
             $lineComments = $this->buildLineComments($scanResults, $group);
+            $fallbackExisting = $this->files->loadNamespacedGroup(app('translator')->getFallback(), $group);
 
             foreach ($locales as $locale) {
                 $existing = $this->files->loadGroup($locale, $group);
                 $existing = app(TranslationGroupFormat::class)->normalize($existing);
                 $flatExisting = Arr::dot($existing);
                 $updated = $existing;
+                $namespacedExisting = $this->files->loadNamespacedGroup($locale, $group);
                 $commented = [];
                 $rawCommented = $this->obsoleteAction() === 'comment'
                     ? $this->files->loadObsoleteComments($locale, $group)
@@ -117,7 +119,10 @@ class TranslationFileUpdater
                     }
 
                     $baseValue = $baseFlat[$key] ?? Arr::get($baseExisting, $key);
-                    $value = $this->buildNewValue($key, $locale, $baseLocale, $group, $baseValue);
+                    $packageValue = Arr::get($namespacedExisting, $key) ?? Arr::get($fallbackExisting, $key);
+                    $value = is_string($packageValue)
+                        ? $packageValue
+                        : $this->buildNewValue($key, $locale, $baseLocale, $group, $baseValue);
                     $this->setValue($updated, $key, $value, $existing);
                     $result->incrementAdded();
                 }

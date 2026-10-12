@@ -3,6 +3,7 @@
 namespace KeypointSolutions\LaravelVox\Translation\Files;
 
 use Illuminate\Support\Facades\File;
+use Illuminate\Translation\FileLoader;
 use KeypointSolutions\LaravelVox\Support\VoxConfig;
 
 class TranslationFileRepository
@@ -28,6 +29,31 @@ class TranslationFileRepository
         $translations = require $path;
 
         return is_array($translations) ? $translations : [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function loadNamespacedGroup(string $locale, string $group): array
+    {
+        $parts = $this->splitNamespacedGroup($group);
+        $namespace = $parts['namespace'];
+        $hints = app('translation.loader')->namespaces();
+
+        if ($namespace === null || ! isset($hints[$namespace])) {
+            return [];
+        }
+
+        $path = $this->groupPath($locale, $group);
+
+        if (File::exists($path)) {
+            $this->validator()->validateFile($path);
+        }
+
+        $loader = new FileLoader(app('files'), $this->langPath());
+        $loader->addNamespace($namespace, $hints[$namespace]);
+
+        return $loader->load($locale, $parts['group'], $namespace);
     }
 
     /**
