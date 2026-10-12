@@ -37,7 +37,7 @@
         }
     </style>
 
-    <title inertia>Laravel Vox</title>
+    <title data-inertia>Laravel Vox</title>
 
     <link
         rel="icon"

@@ -51,7 +51,14 @@ return [
     'paths' => [
         'lang' => lang_path(),
     ],
-    'retained_keys' => ['auth.*', 'pagination.*', 'passwords.*', 'validation.*'],
+    'retained_keys' => [
+        'auth.*',
+        'pagination.*',
+        'passwords.*',
+        'validation.*',
+        // Laravel uses $validator->getTranslator()->get(), which static translation discovery misses.
+        'The given data was invalid.',
+    ],
     'dynamic_keys' => [
         'manifest' => storage_path('vox/dynamic.json'),
         'bindings' => [

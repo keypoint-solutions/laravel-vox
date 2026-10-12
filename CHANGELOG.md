@@ -2,9 +2,11 @@
 
 Notable changes to Laravel Vox are documented here. See the [README](README.md) for installation, configuration, and command examples.
 
-## Unreleased
+## 1.0.19 — 2026-10-12
 
+- Ensured compatibility with Inertia v2 consumers
 - Fixed vendor translations parsing
+- Retain "The given data was invalid." by default because Laravel and Laravel MCP request it through translator objects that static discovery does not detect.
 
 ## 1.0.18 — 2026-10-10
 

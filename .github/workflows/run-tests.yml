@@ -61,8 +61,59 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:consumer
+      - run: npm run test:inertia
       - run: npx eslint resources/js/consumer
       - run: npx tsc --ignoreConfig --noEmit --skipLibCheck --moduleResolution bundler --module esnext --target es2022 resources/js/consumer/vue.d.ts resources/js/consumer/runtime.d.ts resources/js/consumer/vite.d.ts
       - run: npm run type-check
       - run: npm run build
       - run: npm pack --dry-run
+
+  inertia-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { laravel: '12.*', testbench: '10.*', inertia: '2.0.20' }
+          - { laravel: '12.*', testbench: '10.*', inertia: '^2.0' }
+          - { laravel: '13.*', testbench: '11.*', inertia: '^3.0' }
+    name: Vox browser / Inertia ${{ matrix.inertia }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, zip, pdo_sqlite
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install package dependencies
+        env:
+          LARAVEL_VERSION: ${{ matrix.laravel }}
+          TESTBENCH_VERSION: ${{ matrix.testbench }}
+          INERTIA_VERSION: ${{ matrix.inertia }}
+        run: |
+          composer require --dev "laravel/framework:$LARAVEL_VERSION" "orchestra/testbench:$TESTBENCH_VERSION" --no-interaction --no-update
+          composer require "inertiajs/inertia-laravel:$INERTIA_VERSION" --no-interaction --no-update
+          composer update --prefer-dist --no-interaction
+      - run: npm ci
+      - run: npm run build
+      - name: Install browser host dependencies
+        working-directory: test-app
+        env:
+          LARAVEL_VERSION: ${{ matrix.laravel }}
+          INERTIA_VERSION: ${{ matrix.inertia }}
+        run: |
+          cp .env.example .env
+          composer require "laravel/framework:$LARAVEL_VERSION" "inertiajs/inertia-laravel:$INERTIA_VERSION" --no-interaction --no-update
+          composer update --prefer-dist --no-interaction
+          php artisan key:generate --ansi
+          php artisan vendor:publish --tag=vox-assets --force
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Test initial pages and management workflows
+        working-directory: test-app
+        run: php vendor/bin/pest tests/Browser/InertiaCompatibilityBrowserTest.php tests/Browser/ManageWorkflowBrowserTest.php --ci

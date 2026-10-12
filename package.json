@@ -1,7 +1,7 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
     "name": "@keypoint-solutions/laravel-vox",
-    "version": "1.0.18",
+    "version": "1.0.19",
     "private": false,
     "description": "A Laravel translation manager with AI backing and a friendly management GUI.",
     "author": {
@@ -40,6 +40,7 @@
     "scripts": {
         "test:hooks": "node --test tests/js/private-docs-hooks.test.mjs",
         "test:consumer": "node --test tests/js/consumer.test.mjs tests/js/vite.test.mjs",
+        "test:inertia": "node --test tests/js/inertia.test.mjs",
         "build": "vite build",
         "dev": "vite",
         "type-check": "vue-tsc --noEmit",

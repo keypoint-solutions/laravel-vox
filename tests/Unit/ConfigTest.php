@@ -18,6 +18,7 @@ it('retains Laravel runtime-generated translation families by default', function
         'pagination.*',
         'passwords.*',
         'validation.*',
+        'The given data was invalid.',
     ])->and($defaultConfig['dynamic_keys']['bindings'])->toBe([])
         ->and($defaultConfig['parse'])->not->toHaveKey('protected_keys');
 });
