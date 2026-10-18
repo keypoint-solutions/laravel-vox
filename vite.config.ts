@@ -22,6 +22,11 @@ export default defineConfig({
             },
         }),
     ],
+    // Consumers serve the build from public/vendor/vox, not the /vox/ base the Laravel plugin derives from
+    // buildDirectory, so resolve chunk preloads relative to the importing module instead.
+    experimental: {
+        renderBuiltUrl: () => ({ relative: true }),
+    },
     server: {
         watch: {
             ignored: ['**/test-app/**', '**/node_modules/**', '**/vendor/**', '**/.git/**'],

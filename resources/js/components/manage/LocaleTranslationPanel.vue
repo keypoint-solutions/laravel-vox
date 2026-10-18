@@ -109,7 +109,7 @@
 <template>
     <SlidePanel
         :open="open"
-        title="AI translate missing values"
+        title="AI translate a locale"
         @close="!running && emit('close')"
     >
         <FormField

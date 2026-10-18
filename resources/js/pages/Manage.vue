@@ -249,7 +249,7 @@
                         @click="isTranslatingLocale = true"
                     >
                         <Sparkles class="size-4" />
-                        AI translate missing
+                        AI translate a locale
                     </Button>
                 </Tooltip>
                 <Button

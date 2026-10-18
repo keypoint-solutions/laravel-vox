@@ -346,7 +346,7 @@ Then use `/vox/manage` and `/vox/sync` to review, and `/vox/publish` to publish 
 
 - **First import:** existing file values become approved application defaults.
 - **Manual/AI edits:** saved as drafts until approved. Approval is per locale.
-- **AI translate missing:** in the key editor it fills fields that are empty or marker-prefixed; for selected rows it fills absent or marker-prefixed saved values and leaves deliberately blank ones alone. The **AI translate missing** button in the page header does the same for every key in one locale, in batches with progress and **Stop**, skipping keys that follow the default language. All of these skip unusable base wording and save drafts for review. **AI retranslate** replaces selected target wording.
+- **AI translate missing:** in the key editor it fills fields that are empty or marker-prefixed; for selected rows it fills absent or marker-prefixed saved values and leaves deliberately blank ones alone. The **AI translate a locale** button in the page header does the same for every key in one locale, in batches with progress and **Stop**, skipping keys that follow the default language. All of these skip unusable base wording and save drafts for review. **AI retranslate** replaces selected target wording.
 - **Empty filter:** separates keys with empty/missing default wording from actionable missing translations.
 - **Publish:** writes approved usable changes, refreshes previously published wording, and applies pending deletions. Other locales and unapproved drafts do not block publication.
 - **Use application wording:** removes one locale's published override while preserving its draft.
