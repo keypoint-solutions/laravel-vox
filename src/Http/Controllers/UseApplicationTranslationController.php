@@ -21,7 +21,7 @@ class UseApplicationTranslationController
     public function __invoke(Request $request, VoxTranslation $translation, TranslationFileRepository $files, VoxLocaleResolver $locales): RedirectResponse
     {
         abort_if($translation->is_pending_delete, 422, 'Restore this translation before changing its published wording.');
-        $data = $request->validate(['locale' => ['required', Rule::in($locales->resolveLocales())]]);
+        $data = $request->validate(['locale' => ['required', Rule::in($locales->managedLocales())]]);
 
         app(TranslationFileTransaction::class)->run(fn () => VoxConfig::connection()->transaction(function () use ($translation, $files, $data): void {
             $value = $translation->values()->where('locale', $data['locale'])->lockForUpdate()->firstOrFail();

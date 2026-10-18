@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static void routes(?string $prefix = null)
  * @method static void translationRoutes(?string $prefix = null)
  * @method static void dynamicKeys(string $pattern, iterable|callable|string $source)
+ * @method static void resolveLocalesUsing(callable $callback)
  *
  * @see \KeypointSolutions\LaravelVox\LaravelVox
  */

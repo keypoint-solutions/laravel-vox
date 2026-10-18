@@ -27,7 +27,7 @@ class FrontendTranslationArtifacts
         $outputPath = $this->outputPath();
         File::ensureDirectoryExists($outputPath);
         $publishedFiles = [];
-        $locales = $this->localeResolver->resolveFileLocales();
+        $locales = $this->localeResolver->sourceLocales();
 
         foreach ($locales as $locale) {
             $translations = $this->translationsForLocale($files, $locale);

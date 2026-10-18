@@ -10,11 +10,12 @@ use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Translation\Locales\LocaleRemover;
 use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleCatalog;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
 use KeypointSolutions\LaravelVox\Translation\Remote\RemoteReconciliation;
 
 class SyncPageController
 {
-    public function __invoke(Request $request, VoxLocaleCatalog $localeCatalog, RemoteReconciliation $reconciliation, LocaleRemover $localeRemover, AiAvailability $ai): Response
+    public function __invoke(Request $request, VoxLocaleCatalog $localeCatalog, RemoteReconciliation $reconciliation, LocaleRemover $localeRemover, VoxLocaleResolver $localeResolver, AiAvailability $ai): Response
     {
         $catalog = $localeCatalog->all();
 
@@ -45,6 +46,8 @@ class SyncPageController
                 ->first()?->created_at?->toIso8601String(),
             'locales' => $catalog['locales'],
             'localeRemovalReasons' => collect($catalog['locales'])->mapWithKeys(fn (array $locale): array => [$locale['code'] => $localeRemover->unavailableReason($locale['code'])])->all(),
+            'localeWarnings' => collect($catalog['locales'])->mapWithKeys(fn (array $locale): array => [$locale['code'] => $localeCatalog->warning($locale['code'])])->all(),
+            'unprovisionedLocales' => $localeResolver->unprovisionedLocales(),
             'baseLocale' => $catalog['default_locale'],
             'ai' => [
                 'available' => $ai->available(),

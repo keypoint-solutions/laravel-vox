@@ -13,7 +13,7 @@ class FrontendLocalesController
     {
         abort_unless(config('vox.frontend.runtime.enabled', false), 404);
 
-        $payload = $catalog->all($localeResolver->resolveRuntimeLocales());
+        $payload = $catalog->all($localeResolver->publishedLocales());
         $contents = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         $etag = '"'.sha1($contents).'"';
         $headers = [

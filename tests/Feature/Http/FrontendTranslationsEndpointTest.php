@@ -68,6 +68,7 @@ it('does not expose artifacts while runtime delivery is disabled', function (): 
 });
 
 it('serves catalogues and normalized published locales without a Vox database', function (): void {
+    config()->set('vox.translate.locales.values', ['en', 'fr', 'pt_BR']);
     File::put($this->runtimeTranslationPath.'/pt_BR.json', '{"frontend.greeting":"Olá"}');
     $connection = config('vox.database.connection');
     DB::purge($connection);
@@ -80,4 +81,21 @@ it('serves catalogues and normalized published locales without a Vox database', 
     $this->withHeader('If-None-Match', $response->headers->get('ETag'))
         ->get('/vox/translations/pt-br')->assertStatus(304);
     $this->get('/vox/translations/de')->assertNotFound();
+});
+
+it('discovers published catalogues in auto mode without a Vox database', function (): void {
+    config()->set('vox.translate.locales.mode', 'auto');
+    File::put($this->runtimeTranslationPath.'/pt_BR.json', '{"frontend.greeting":"Olá"}');
+    $connection = config('vox.database.connection');
+    DB::purge($connection);
+    config()->set("database.connections.{$connection}.driver", 'unavailable');
+
+    $this->get('/vox/translations/pt-br')->assertOk()
+        ->assertExactJson(['frontend.greeting' => 'Olá']);
+});
+
+it('does not serve catalogues of undeclared locales in configured mode', function (): void {
+    File::put($this->runtimeTranslationPath.'/pt_BR.json', '{"frontend.greeting":"Olá"}');
+
+    $this->get('/vox/translations/pt-br')->assertNotFound();
 });

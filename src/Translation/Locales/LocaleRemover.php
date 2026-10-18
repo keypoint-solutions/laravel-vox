@@ -9,7 +9,6 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslationRule;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxConfig;
-use KeypointSolutions\LaravelVox\Support\VoxListConfiguration;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileRepository;
@@ -40,12 +39,7 @@ class LocaleRemover
         if ($this->locales->resolveLocale($normalized, $protected) !== null) {
             return 'The default and fallback languages cannot be removed.';
         }
-        $configured = app(VoxListConfiguration::class)->configuredValues('vox.translate.locales') ?? [];
-        $supported = config('laravellocalization.supportedLocales', []);
-        if (is_array($supported)) {
-            $configured = array_merge($configured, array_keys($supported));
-        }
-        if ($this->locales->resolveLocale($normalized, $configured) !== null) {
+        if ($this->locales->resolveLocale($normalized, app(VoxLocaleDeclaration::class)->locales() ?? []) !== null) {
             return 'Remove this language from application configuration first.';
         }
         if (! in_array($normalized, $this->settings->provisionedLocales(), true)) {

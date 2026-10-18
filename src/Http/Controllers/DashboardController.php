@@ -24,7 +24,7 @@ class DashboardController
      */
     private function getStats(): array
     {
-        $locales = $this->localeResolver->resolveLocales();
+        $locales = $this->localeResolver->managedLocales();
 
         $lastSync = VoxAudit::query()
             ->whereIn('action', ['sync', 'sync-remote'])

@@ -27,7 +27,7 @@ class TranslationScanPreparation
         $dynamicKeys = $scanner->dynamicKeys();
         $this->dynamicKeys->writeDetectedPatterns($dynamicKeys);
         $results = $this->dynamicKeys->mergeEnumeratedScanResults($results);
-        [$locales, $baseLocale] = $this->localeResolver->resolveLocalesWithBase();
+        [$locales, $baseLocale] = $this->localeResolver->managedLocalesWithBase();
 
         return [
             'results' => $results,

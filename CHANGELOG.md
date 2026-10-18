@@ -2,6 +2,14 @@
 
 Notable changes to Laravel Vox are documented here. See the [README](README.md) for installation, configuration, and command examples.
 
+## Unreleased
+
+- Separate the locales the dashboard manages from the locales the application serves. `VoxLocaleResolver::managedLocales()` includes languages added through Vox and stored in its database; `publishedLocales()` reads only configuration and files, so runtime endpoints and route registration no longer need the Vox database. This fixes booting a fresh checkout before `vox:setup`, which failed because the SQLite file did not exist yet.
+- Breaking: `resolveLocales()`, `resolveLocalesWithBase()`, `resolveFileLocales()` and `resolveRuntimeLocales()` are renamed to `managedLocales()`, `managedLocalesWithBase()`, `sourceLocales()` and `publishedLocales()`.
+- Discover `auto` locales from both language directories and `lang/{locale}.json` files instead of only the first kind found. Vendor translations do not add locales.
+- Add `callback` locale mode, with locales registered through `LaravelVox::resolveLocalesUsing()`. `laravellocalization.supportedLocales` is no longer read implicitly; register it as a callback instead.
+- In `configured` and `callback` modes, Sync warns about languages added through Vox that the application does not declare, and about declared languages without language files, which can now be added from Sync.
+
 ## 1.0.19 — 2026-10-12
 
 - Ensured compatibility with Inertia v2 consumers

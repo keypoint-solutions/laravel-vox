@@ -160,6 +160,18 @@ The increase remains in effect for the current process and does not modify `php.
 
 The base locale defaults to `app.locale`; it does not have to be English. Locale and frontend-group lists use `mode: auto|configured` and `values`. In PHP config, `values` may be an array; environment values are comma-separated. `configured` replaces automatic discovery.
 
+In `auto` mode, locales are discovered from the application's language directories, its `lang/{locale}.json` files, and published frontend catalogues. Vendor translations never add a locale, because packages often ship more languages than the application uses. Locales can also come from the application itself: set `VOX_TRANSLATE_LOCALES_MODE=callback` and register the list in a service provider, for example from `mcamara/laravel-localization`:
+
+```php
+use KeypointSolutions\LaravelVox\Facades\LaravelVox;
+
+LaravelVox::resolveLocalesUsing(fn (): array => array_keys(config('laravellocalization.supportedLocales', [])));
+```
+
+Without a registered callback, `callback` mode behaves like `auto`; `php artisan vox:settings` shows which applies. The callback must not read the Vox database.
+
+Runtime code, such as the frontend endpoints, serves only these published locales and never reads the Vox database. The dashboard also manages languages added through Vox, which are stored in its database.
+
 | Setting                                      | Purpose                                                    |
 | -------------------------------------------- | ---------------------------------------------------------- |
 | `vox.paths.lang`                             | Language directory; defaults to Laravel's `lang_path()`    |
@@ -364,7 +376,7 @@ Manage can create concrete keys covered by dynamic/retention patterns. The defau
 
 Delete any key from Manage, then Publish to remove all its locale values. Cancel pending deletion before publishing to keep it. Empty files are deleted, and failed file operations roll back. Rediscovery can recreate the key, **but cannot recover its deleted wording**. Deletion does not remove retention rules. The migration from older versions converts ignored keys to pending deletion without publishing them.
 
-In Sync, **Application languages** creates a locale from the configured base locale, including nested PHP groups and vendor JSON. Without AI, nonempty source wording receives the missing marker. Optional AI skips unusable sources. These generated files become live application defaults immediately; this is different from Manage's AI draft workflow.
+In Sync, **Application languages** creates a locale from the configured base locale, including nested PHP groups and vendor JSON. In `configured` or `callback` mode, a language added here that the application does not declare is marked with a warning: it is managed by Vox but not served at runtime until it is declared. A declared language without language files is marked too; click its warning to add it. Without AI, nonempty source wording receives the missing marker. Optional AI skips unusable sources. These generated files become live application defaults immediately; this is different from Manage's AI draft workflow.
 
 To remove a language added through Vox, open **Sync → Application languages**, click its trash icon, then confirm **Remove language**. No typing is required; **Cancel** leaves it unchanged. Removal takes effect immediately without Publish and deletes that language's PHP/JSON files (including vendor translations), runtime catalogue, saved translations and drafts, fallback rules, and sync review data. Other languages and shared translation keys remain intact. Failed removals roll back, and the automatic checkpoint can restore the removed language while that checkpoint is retained.
 

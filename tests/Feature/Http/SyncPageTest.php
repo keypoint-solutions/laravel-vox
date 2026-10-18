@@ -10,6 +10,7 @@ use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Models\VoxRemoteTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxSetting;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Tests\Support\LocaleProvisionTranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileRepository;
 use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileWriter;
@@ -110,7 +111,7 @@ it('provisions a new locale from every source-locale translation family', functi
         ->assertRedirect('/vox/sync')
         ->assertInertiaFlash(
             'success',
-            'Added German (Germany) (de_DE) with 5 values marked for translation.'
+            'Added German (Germany) (de_DE) with 5 values marked for translation. Not listed in vox.translate.locales, so it is not served at runtime. Add it there to publish it.'
         );
 
     expect($files->loadGroup('de_DE', 'messages'))
@@ -149,7 +150,7 @@ it('adds the locale with completed AI translations and flags the rest when the p
         ->assertInertiaFlash(
             'success',
             'Added Romanian (ro) and AI translated 1 of 3 values, then stopped: '
-                .'OpenAI request failed (HTTP 429): You exceeded your current quota. The remaining values are marked for translation.'
+                .'OpenAI request failed (HTTP 429): You exceeded your current quota. The remaining values are marked for translation. Not listed in vox.translate.locales, so it is not served at runtime. Add it there to publish it.'
         );
 
     expect($files->loadGroup('ro', 'messages'))->toBe(['first' => 'Primul', 'second' => '🚩Second', 'third' => '🚩Third']);
@@ -170,7 +171,7 @@ it('can AI translate a newly provisioned locale before synchronizing it', functi
         ->assertRedirect('/vox/sync')
         ->assertInertiaFlash(
             'success',
-            'Added Romanian (ro) and AI translated 2 values. The new file values are live and available in Manage.'
+            'Added Romanian (ro) and AI translated 2 values. The new file values are live and available in Manage. Not listed in vox.translate.locales, so it is not served at runtime. Add it there to publish it.'
         );
 
     expect($files->loadGroup('ro', 'messages'))
@@ -184,9 +185,39 @@ it('can AI translate a newly provisioned locale before synchronizing it', functi
         ->toBe('approved');
 });
 
+it('warns about undeclared and unprovisioned locales and provisions a declared locale', function (): void {
+    $files = new TranslationFileRepository(new TranslationFileWriter);
+    $files->saveGroup('en', 'messages', ['greeting' => 'Hello']);
+    app(VoxSettingsRepository::class)->save(['provisioned_locales' => ['de']]);
+
+    $this->get('/vox/sync')
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('Sync', false)
+            ->where('unprovisionedLocales', ['fr'])
+            ->where('localeWarnings.en', null)
+            ->where('localeWarnings.fr', 'Listed in vox.translate.locales but has no language files yet. Add it below to create them.')
+            ->where('localeWarnings.de', 'Not listed in vox.translate.locales, so it is not served at runtime. Add it there to publish it.')
+        );
+
+    $this->from('/vox/sync')
+        ->post('/vox/sync/locales', ['locale' => 'fr', 'auto_translate' => false])
+        ->assertRedirect('/vox/sync')
+        ->assertInertiaFlash('success', 'Added French (fr) with 1 values marked for translation.');
+
+    expect($files->loadGroup('fr', 'messages'))->toHaveKey('greeting');
+
+    $this->get('/vox/sync')
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('unprovisionedLocales', [])
+            ->where('localeWarnings.fr', null)
+        );
+});
+
 it('rejects unsafe and already defined locale codes without changing files', function (): void {
     $files = new TranslationFileRepository(new TranslationFileWriter);
     $files->saveGroup('en', 'messages', ['greeting' => 'Hello']);
+    $files->saveGroup('fr', 'messages', ['greeting' => 'Bonjour']);
 
     $this->from('/vox/sync')
         ->post('/vox/sync/locales', [

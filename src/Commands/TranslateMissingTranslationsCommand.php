@@ -61,7 +61,7 @@ class TranslateMissingTranslationsCommand extends Command
             return self::FAILURE;
         }
 
-        [$locales, $this->baseLocale] = app(VoxLocaleResolver::class)->resolveLocalesWithBase();
+        [$locales, $this->baseLocale] = app(VoxLocaleResolver::class)->managedLocalesWithBase();
 
         $this->files = new TranslationFileRepository(new TranslationFileWriter);
         $this->driver = app(TranslationDriverFactory::class)->make();

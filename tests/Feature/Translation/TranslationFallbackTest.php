@@ -215,13 +215,24 @@ it('exports effective published wording and ignores metadata in archive snapshot
         ->and($snapshot->fromDirectory($this->root.'/lang'))->toHaveCount(2);
 });
 
-it('discovers published manifest languages after transfer without a configured locale entry', function (): void {
+it('discovers published manifest languages after transfer in auto mode', function (): void {
+    config()->set('vox.translate.locales.mode', 'auto');
     $this->post('/vox/sync/locales', ['locale' => 'fi', 'use_default' => true])->assertSessionHasNoErrors();
     app(TranslationPublisher::class)->publish();
     VoxSetting::query()->where('key', 'provisioned_locales')->delete();
     $resolver = app(VoxLocaleResolver::class);
-    expect($resolver->resolveLocales())->toContain('fi')->and($resolver->resolveFileLocales())->toContain('fi');
+    expect($resolver->managedLocales())->toContain('fi')->and($resolver->sourceLocales())->toContain('fi');
     $this->rules->save('fi', 'locale', 'inherit');
     app(TranslationPublisher::class)->publish();
-    expect($resolver->resolveFileLocales())->toContain('fi');
+    expect($resolver->sourceLocales())->toContain('fi');
+});
+
+it('manages but does not publish undeclared manifest languages in configured mode', function (): void {
+    $this->post('/vox/sync/locales', ['locale' => 'fi', 'use_default' => true])->assertSessionHasNoErrors();
+    app(TranslationPublisher::class)->publish();
+    $resolver = app(VoxLocaleResolver::class);
+
+    expect($resolver->managedLocales())->toContain('fi')
+        ->and($resolver->publishedLocales())->not->toContain('fi')
+        ->and($resolver->sourceLocales())->not->toContain('fi');
 });

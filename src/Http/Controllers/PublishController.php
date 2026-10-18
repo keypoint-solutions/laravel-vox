@@ -82,7 +82,7 @@ class PublishController
      */
     private function stats(): array
     {
-        [$locales] = $this->localeResolver->resolveLocalesWithBase();
+        [$locales] = $this->localeResolver->managedLocalesWithBase();
         $approved = VoxTranslation::query()
             ->where('is_pending_delete', false)
             ->whereHas('values', fn (Builder $query): Builder => $query->where('is_approved', true)->whereIn('locale', $locales))

@@ -180,7 +180,7 @@ class TranslationPublisher
 
     private function publishUsing(TranslationFileRepository $files, ?array $valueIds, bool $overridesOnly, bool $includeDefaults = false): PublishResult
     {
-        [$locales, $baseLocale] = $this->localeResolver->resolveLocalesWithBase();
+        [$locales, $baseLocale] = $this->localeResolver->managedLocalesWithBase();
         $prefix = VoxConfig::missingPrefix();
         $eligibility = app(TranslationEligibility::class);
         $groupUpdates = [];

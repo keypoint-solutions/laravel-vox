@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Inertia\Testing\AssertableInertia;
+use KeypointSolutions\LaravelVox\Facades\LaravelVox;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxEnvironment;
 use KeypointSolutions\LaravelVox\Models\VoxRemoteTranslation;
@@ -63,8 +64,8 @@ it('removes a provisioned language and all its file and database surfaces while 
         ->and(VoxRemoteTranslation::query()->where('locale', 'de')->count())->toBe(0)
         ->and(VoxTranslationRule::query()->where('locale', 'de')->count())->toBe(0)
         ->and(app(VoxSettingsRepository::class)->provisionedLocales())->toBe([])
-        ->and(app(VoxLocaleResolver::class)->resolveLocales())->not->toContain('de')
-        ->and(app(VoxLocaleResolver::class)->resolveRuntimeLocales())->not->toContain('de')
+        ->and(app(VoxLocaleResolver::class)->managedLocales())->not->toContain('de')
+        ->and(app(VoxLocaleResolver::class)->publishedLocales())->not->toContain('de')
         ->and(VoxTranslation::query()->count())->toBe($keys)
         ->and(VoxTranslationValue::query()->where('locale', 'fr')->count())->toBe($frenchValues)
         ->and(VoxRemoteTranslation::query()->where('locale', 'fr')->count())->toBe(1)
@@ -76,20 +77,28 @@ it('removes a provisioned language and all its file and database surfaces while 
 it('removes an unpublished default-wording language and allows adding it again', function (): void {
     app(LocaleProvisioner::class)->provision('de', useDefault: true);
     $this->delete('/vox/sync/locales', ['locale' => 'de'])->assertSessionHasNoErrors();
-    expect(app(VoxLocaleResolver::class)->resolveLocales())->not->toContain('de');
+    expect(app(VoxLocaleResolver::class)->managedLocales())->not->toContain('de');
     app(LocaleProvisioner::class)->provision('de', useDefault: true);
-    expect(app(VoxLocaleResolver::class)->resolveLocales())->toContain('de');
+    expect(app(VoxLocaleResolver::class)->managedLocales())->toContain('de');
 });
 
 it('rejects default fallback configured unsupported and unsafe locales', function (string $locale): void {
     app(VoxSettingsRepository::class)->save(['provisioned_locales' => ['en', 'fr', 'ro', 'es']]);
     config()->set('vox.translate.locales.mode', 'configured');
     config()->set('vox.translate.locales.values', ['en', 'fr']);
-    config()->set('laravellocalization.supportedLocales', ['ro' => []]);
     config()->set('app.fallback_locale', 'es');
     $this->delete('/vox/sync/locales', ['locale' => $locale])->assertSessionHasErrors('locale');
     expect(app(VoxSettingsRepository::class)->provisionedLocales())->toBe(['en', 'fr', 'ro', 'es']);
-})->with(['en', 'fr', 'ro', 'es', 'de', '../en']);
+})->with(['en', 'fr', 'es', 'de', '../en']);
+
+it('rejects removing locales declared by the locale callback', function (): void {
+    app(VoxSettingsRepository::class)->save(['provisioned_locales' => ['ro']]);
+    config()->set('vox.translate.locales.mode', 'callback');
+    LaravelVox::resolveLocalesUsing(fn (): array => ['en', 'ro']);
+
+    $this->delete('/vox/sync/locales', ['locale' => 'ro'])->assertSessionHasErrors(['locale' => 'Remove this language from application configuration first.']);
+    expect(app(VoxSettingsRepository::class)->provisionedLocales())->toBe(['ro']);
+});
 
 it('requires dashboard authorization', function (): void {
     app(LocaleProvisioner::class)->provision('de', useDefault: true);

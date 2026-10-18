@@ -1,6 +1,7 @@
 <script setup lang="ts">
     import { Head, router, useForm, usePage } from '@inertiajs/vue3';
     import {
+        CircleAlert,
         Download,
         FileArchive,
         KeyRound,
@@ -46,6 +47,8 @@
             has_runtime_translations: boolean;
         }[];
         localeRemovalReasons: Record<string, string | null>;
+        localeWarnings: Record<string, string | null>;
+        unprovisionedLocales: string[];
         baseLocale: string;
         ai: {
             available: boolean;
@@ -206,6 +209,12 @@
                 },
             }
         );
+    }
+
+    function setUpLocale(code: string): void {
+        localeForm.locale = code;
+        localeForm.clearErrors();
+        void nextTick(() => document.getElementById('new-locale')?.focus());
     }
 
     function provisionLocale(): void {
@@ -372,6 +381,28 @@
                         :variant="locale.is_default ? 'default' : 'secondary'"
                     >
                         {{ locale.name }} · {{ locale.code }}
+                        <Tooltip
+                            v-if="page.props.localeWarnings[locale.code]"
+                            :text="page.props.localeWarnings[locale.code] ?? ''"
+                        >
+                            <button
+                                v-if="page.props.unprovisionedLocales.includes(locale.code)"
+                                type="button"
+                                class="ml-1 rounded-sm p-1 hover:bg-amber-500/10 focus-visible:outline-2"
+                                :aria-label="page.props.localeWarnings[locale.code] ?? ''"
+                                :data-test="`locale-warning-${locale.code}`"
+                                :disabled="localeForm.processing"
+                                @click="setUpLocale(locale.code)"
+                            >
+                                <CircleAlert class="size-3 text-amber-500" />
+                            </button>
+                            <CircleAlert
+                                v-else
+                                class="ml-1 size-3 text-amber-500"
+                                :aria-label="page.props.localeWarnings[locale.code] ?? ''"
+                                :data-test="`locale-warning-${locale.code}`"
+                            />
+                        </Tooltip>
                         <Tooltip
                             v-if="page.props.localeRemovalReasons[locale.code] === null"
                             :text="`Remove ${locale.name}`"

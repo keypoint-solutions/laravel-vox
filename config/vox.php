@@ -108,6 +108,8 @@ return [
             'fixed' => [],
         ],
         'placeholder_prefixes' => [],
+        // Auto discovers locales from the application's lang files (not vendor ones), configured uses values, and
+        // callback uses LaravelVox::resolveLocalesUsing() from a service provider, falling back to auto if unset.
         'locales' => [
             'mode' => env('VOX_TRANSLATE_LOCALES_MODE', 'auto'),
             'values' => env('VOX_TRANSLATE_LOCALES', ''),

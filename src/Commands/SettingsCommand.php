@@ -5,6 +5,7 @@ namespace KeypointSolutions\LaravelVox\Commands;
 use Illuminate\Console\Command;
 use KeypointSolutions\LaravelVox\Support\VoxListConfiguration;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
+use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleDeclaration;
 
 use function Laravel\Prompts\table;
 
@@ -19,7 +20,7 @@ class SettingsCommand extends Command
         $settings = app(VoxSettingsRepository::class);
         $listConfiguration = app(VoxListConfiguration::class);
         $configuredFrontendGroups = $listConfiguration->configuredValues('vox.frontend.groups');
-        $configuredLocales = $listConfiguration->configuredValues('vox.translate.locales');
+        $localeDeclaration = app(VoxLocaleDeclaration::class);
 
         table(['Key', 'Value', 'Description'], [
             ['database.connection', (string) config('vox.database.connection'), 'Database connection for Vox storage.'],
@@ -33,13 +34,28 @@ class SettingsCommand extends Command
             ['frontend.groups.mode', $listConfiguration->mode('vox.frontend.groups'), 'Frontend group discovery mode (auto or configured).'],
             ['frontend.groups.values', implode(', ', $configuredFrontendGroups ?? []), 'Configured frontend groups when group mode is configured.'],
             ['translate.driver', (string) config('vox.translate.driver'), 'Driver used for machine translation.'],
-            ['translate.locales.mode', $listConfiguration->mode('vox.translate.locales'), 'Locale discovery mode (auto or configured).'],
-            ['translate.locales.values', implode(', ', $configuredLocales ?? []), 'Configured locales when locale mode is configured.'],
+            ['translate.locales.mode', $this->localeModeLabel($localeDeclaration), 'Locale discovery mode (auto, configured, or callback).'],
+            ['translate.locales.values', implode(', ', $localeDeclaration->locales() ?? []), 'Declared locales when locale mode is configured or callback.'],
             ['translate.base_locale', (string) config('vox.translate.base_locale'), 'Base locale used for translations.'],
             ['translate.use_context', config('vox.translate.use_context', true) ? 'true' : 'false', 'Include parse context comments in translation prompts.'],
             ['translate.model', (string) $settings->get('translate_model', config('vox.translate.model')), 'Model used for machine translation.'],
         ]);
 
         return self::SUCCESS;
+    }
+
+    private function localeModeLabel(VoxLocaleDeclaration $declaration): string
+    {
+        $configuredMode = $declaration->configuredMode();
+
+        if ($configuredMode === VoxLocaleDeclaration::MODE_CALLBACK && ! $declaration->hasCallback()) {
+            return 'callback (none registered, using auto)';
+        }
+
+        if ($configuredMode !== VoxLocaleDeclaration::MODE_CALLBACK && $declaration->hasCallback()) {
+            return $configuredMode.' (registered callback ignored)';
+        }
+
+        return $configuredMode;
     }
 }

@@ -30,7 +30,7 @@ class ProvisionLocaleController
         ]);
         $locale = $localeResolver->normalizeLocaleCode($validated['locale']);
 
-        if ($localeResolver->resolveLocale($locale) !== null) {
+        if (! $localeResolver->canProvision($locale)) {
             throw ValidationException::withMessages([
                 'locale' => "Locale [{$locale}] is already defined.",
             ]);
@@ -54,16 +54,17 @@ class ProvisionLocaleController
         }
 
         $name = $localeCatalog->displayName($result->locale);
+        $warning = $localeResolver->isDeclared($result->locale) ? '' : ' '.$localeCatalog->warning($result->locale);
 
         if ($useDefault) {
-            return Inertia::flash('success', "Added {$name} ({$result->locale}) using default language wording. Publish to create its language files.")->back();
+            return Inertia::flash('success', "Added {$name} ({$result->locale}) using default language wording. Publish to create its language files.{$warning}")->back();
         }
 
         if ($autoTranslate && $result->translationFailure !== null) {
             return Inertia::flash(
                 'success',
                 "Added {$name} ({$result->locale}) and AI translated {$result->translatedValues} of {$result->values} values, "
-                    ."then stopped: {$result->translationFailure} The remaining values are marked for translation."
+                    ."then stopped: {$result->translationFailure} The remaining values are marked for translation.{$warning}"
             )->back();
         }
 
@@ -71,13 +72,13 @@ class ProvisionLocaleController
             return Inertia::flash(
                 'success',
                 "Added {$name} ({$result->locale}) and AI translated {$result->translatedValues} values. "
-                    .'The new file values are live and available in Manage.'
+                    .'The new file values are live and available in Manage.'.$warning
             )->back();
         }
 
         return Inertia::flash(
             'success',
-            "Added {$name} ({$result->locale}) with {$result->values} values marked for translation."
+            "Added {$name} ({$result->locale}) with {$result->values} values marked for translation.{$warning}"
         )->back();
     }
 }

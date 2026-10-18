@@ -16,7 +16,7 @@ class TranslationRuleController
     public function __invoke(Request $request, TranslationFallbackRules $rules, VoxLocaleResolver $locales, VoxAuditLogger $audit): RedirectResponse
     {
         $data = $request->validate([
-            'locale' => ['required', Rule::in(array_diff($locales->resolveLocales(), [$locales->resolveBaseLocale([])]))],
+            'locale' => ['required', Rule::in(array_diff($locales->managedLocales(), [$locales->resolveBaseLocale([])]))],
             'scope' => ['required', Rule::in(['locale', 'group', 'key'])],
             'mode' => ['required', Rule::in(['inherit', 'translated', 'default'])],
             'group' => ['nullable', 'string', 'max:255', 'required_if:scope,group'],

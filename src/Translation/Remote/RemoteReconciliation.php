@@ -160,7 +160,7 @@ class RemoteReconciliation
     {
         $perPage = in_array($perPage, [25, 50, 100], true) ? $perPage : 25;
         $filters = $this->filters($filters);
-        $availableLocales = $this->locales->resolveLocales();
+        $availableLocales = $this->locales->managedLocales();
         $defaultLocale = $this->locales->resolveBaseLocale($availableLocales);
         $availableLocales[] = $defaultLocale;
         $query = $this->reviewQuery($filters['environment_id']);
@@ -429,7 +429,7 @@ class RemoteReconciliation
             $query->lockForUpdate();
         }
 
-        $locales = $this->locales->resolveLocales();
+        $locales = $this->locales->managedLocales();
         $defaultLocale = $this->locales->resolveBaseLocale($locales);
         $locales[] = $defaultLocale;
 
@@ -493,7 +493,7 @@ class RemoteReconciliation
         $sameRemote = $equal('v.value', 'r.remote_value');
         $sameBase = $equal('r.remote_value', 'r.base_value');
         $sameLocalBase = $equal('v.value', 'r.base_local_value');
-        $defaultLocale = $this->locales->resolveBaseLocale($this->locales->resolveLocales());
+        $defaultLocale = $this->locales->resolveBaseLocale($this->locales->managedLocales());
         $query = $connection->table('vox_remote_translations as r')
             ->leftJoin('vox_translations as t', function (JoinClause $join) use ($equal): void {
                 $join->on('t.key', '=', 'r.key')->whereRaw($equal('t.key', 'r.key'))

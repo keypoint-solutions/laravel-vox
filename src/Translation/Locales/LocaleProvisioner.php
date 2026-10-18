@@ -54,11 +54,11 @@ class LocaleProvisioner
             throw new RuntimeException('Enter a valid locale code such as de, pt_BR, or zh_Hant.');
         }
 
-        if ($this->localeResolver->resolveLocale($locale) !== null) {
+        if (! $this->localeResolver->canProvision($locale)) {
             throw new RuntimeException("Locale [{$locale}] is already defined.");
         }
 
-        $locales = $this->localeResolver->resolveLocales();
+        $locales = $this->localeResolver->managedLocales();
         $baseLocale = $this->localeResolver->resolveBaseLocale($locales);
         $groups = $this->files->groups($baseLocale);
         $jsonNamespaces = $this->files->jsonNamespaces($baseLocale);

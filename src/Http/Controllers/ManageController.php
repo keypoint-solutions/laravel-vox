@@ -33,7 +33,7 @@ class ManageController
     public function __invoke(Request $request): Response
     {
         $filters = $this->resolveFilters($request);
-        [$locales, $baseLocale] = $this->localeResolver->resolveLocalesWithBase();
+        [$locales, $baseLocale] = $this->localeResolver->managedLocalesWithBase();
 
         $lastSync = VoxAudit::query()
             ->whereIn('action', ['sync', 'sync-remote'])

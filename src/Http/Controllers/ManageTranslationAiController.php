@@ -89,7 +89,7 @@ class ManageTranslationAiController
             return $this->failed($reason);
         }
 
-        [$availableLocales, $baseLocale] = $this->localeResolver->resolveLocalesWithBase();
+        [$availableLocales, $baseLocale] = $this->localeResolver->managedLocalesWithBase();
         $targetLocales = $this->resolveTargetLocales([], $availableLocales, $baseLocale);
         $translations = VoxTranslation::query()
             ->with(['values', 'occurrences'])
@@ -218,7 +218,7 @@ class ManageTranslationAiController
             return $this->failed($reason);
         }
 
-        [$availableLocales, $baseLocale] = $this->localeResolver->resolveLocalesWithBase();
+        [$availableLocales, $baseLocale] = $this->localeResolver->managedLocalesWithBase();
         $targetLocales = $this->resolveTargetLocales($requestedLocales, $availableLocales, $baseLocale);
 
         if ($targetLocales === []) {

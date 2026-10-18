@@ -9,7 +9,7 @@ use KeypointSolutions\LaravelVox\Translation\Remote\VoxArchive;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 $localeResolver = app(VoxLocaleResolver::class);
-$availableLocales = $localeResolver->resolveLocales();
+$availableLocales = $localeResolver->publishedLocales();
 $baseLocale = $localeResolver->resolveBaseLocale($availableLocales);
 $fallbackDemoLocale = 'und';
 $demoLocales = array_values(array_unique([...$availableLocales, $fallbackDemoLocale]));

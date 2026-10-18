@@ -49,7 +49,7 @@ class ManageTranslationController
             ]);
         }
 
-        [$locales, $baseLocale] = $this->localeResolver->resolveLocalesWithBase();
+        [$locales, $baseLocale] = $this->localeResolver->managedLocalesWithBase();
         $baseValue = $validated['values'][$baseLocale] ?? null;
 
         if (! is_string($baseValue) || trim($baseValue) === '') {
@@ -140,7 +140,7 @@ class ManageTranslationController
             'values.*' => ['nullable', 'string'],
         ]);
 
-        [$locales] = $this->localeResolver->resolveLocalesWithBase();
+        [$locales] = $this->localeResolver->managedLocalesWithBase();
 
         foreach ($validated['values'] as $locale => $value) {
             if (! is_string($locale) || ! in_array($locale, $locales, true)) {

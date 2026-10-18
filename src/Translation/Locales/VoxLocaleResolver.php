@@ -5,7 +5,6 @@ namespace KeypointSolutions\LaravelVox\Translation\Locales;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Support\VoxConfig;
-use KeypointSolutions\LaravelVox\Support\VoxListConfiguration;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
 use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 
@@ -13,18 +12,19 @@ class VoxLocaleResolver
 {
     public function __construct(
         private VoxSettingsRepository $settings,
-        private VoxListConfiguration $listConfiguration,
+        private VoxLocaleDeclaration $declaration,
     ) {}
 
     /**
+     * Locales the dashboard manages: published locales plus locales added through Vox, which are stored in its database.
+     *
      * @return array<int, string>
      */
-    public function resolveLocales(): array
+    public function managedLocales(): array
     {
-        $locales = $this->normalizeLocales(array_merge($this->applicationLocales(), $this->settings->provisionedLocales(), $this->manifestLocales()));
-        $baseLocale = $this->resolveBaseLocale($locales);
+        $locales = array_merge($this->publishedLocales(), $this->settings->provisionedLocales(), $this->manifestLocales());
 
-        return $this->sortLocales(array_merge([$baseLocale], $locales));
+        return $this->sortLocales(array_merge([$this->resolveBaseLocale($locales)], $locales));
     }
 
     /**
@@ -32,20 +32,85 @@ class VoxLocaleResolver
      *
      * @return array{0: array<int, string>, 1: string}
      */
-    public function resolveLocalesWithBase(): array
+    public function managedLocalesWithBase(): array
     {
-        $locales = $this->resolveLocales();
+        $locales = $this->managedLocales();
         $baseLocale = $this->resolveBaseLocale($locales);
 
         return [array_values(array_unique(array_merge([$baseLocale], $locales))), $baseLocale];
     }
 
-    /** @return array<int, string> */
-    public function resolveFileLocales(): array
+    /**
+     * Locales the application serves at runtime, read from configuration and files only, never from the Vox database.
+     *
+     * @return array<int, string>
+     */
+    public function publishedLocales(): array
     {
-        $locales = array_merge($this->applicationLocales(), $this->manifestLocales());
+        return $this->sortLocales(array_merge($this->sourceLocales(), $this->declaration->isDeclarative() ? [] : $this->frontendArtifactLocales()));
+    }
+
+    /**
+     * Published locales that have language files to build frontend catalogues from, excluding the generated catalogues.
+     *
+     * @return array<int, string>
+     */
+    public function sourceLocales(): array
+    {
+        $locales = $this->declaration->locales() ?? array_merge($this->discoverLocales(), $this->manifestLocales());
+        $locales = $this->normalizeLocales($locales);
 
         return $this->sortLocales(array_merge([$this->resolveBaseLocale($locales)], $locales));
+    }
+
+    /**
+     * Whether the application declares this locale; every locale is declared in auto mode.
+     */
+    public function isDeclared(string $locale): bool
+    {
+        $declared = $this->declaration->locales();
+
+        return $declared === null || $this->resolveLocale($locale, [...$declared, $this->resolveBaseLocale($declared)]) !== null;
+    }
+
+    /**
+     * Declared locales that have no language files or fallback rule yet, so Vox can still provision them.
+     *
+     * @return array<int, string>
+     */
+    public function unprovisionedLocales(): array
+    {
+        $declared = $this->declaration->locales();
+
+        if ($declared === null) {
+            return [];
+        }
+
+        $baseLocale = $this->resolveBaseLocale($declared);
+        $manifestLocales = $this->manifestLocales();
+
+        return array_values(array_filter(
+            $this->normalizeLocales($declared),
+            fn (string $locale): bool => $locale !== $baseLocale
+                && ! in_array($locale, $manifestLocales, true)
+                && ! $this->hasLanguageFiles($locale)
+        ));
+    }
+
+    /**
+     * Whether Vox can add this locale: it is new, or declared by the application but not provisioned yet.
+     */
+    public function canProvision(string $locale): bool
+    {
+        return $this->resolveLocale($locale) === null
+            || $this->resolveLocale($locale, $this->unprovisionedLocales()) !== null;
+    }
+
+    private function hasLanguageFiles(string $locale): bool
+    {
+        $langPath = VoxConfig::langPath();
+
+        return File::isDirectory($langPath.'/'.$locale) || File::isFile($langPath.'/'.$locale.'.json');
     }
 
     /** @return array<int, string> */
@@ -69,10 +134,10 @@ class VoxLocaleResolver
     }
 
     /** @return array<int, string> */
-    public function resolveRuntimeLocales(): array
+    private function frontendArtifactLocales(): array
     {
-        $locales = $this->applicationLocales();
         $path = config('vox.frontend.runtime.path', storage_path('vox/frontend-translations'));
+        $locales = [];
 
         if (File::isDirectory($path)) {
             foreach (File::files($path) as $file) {
@@ -83,15 +148,7 @@ class VoxLocaleResolver
             }
         }
 
-        return $this->sortLocales(array_merge([$this->resolveBaseLocale($locales)], $locales));
-    }
-
-    /** @return array<int, string> */
-    private function applicationLocales(): array
-    {
-        $configured = $this->listConfiguration->configuredValues('vox.translate.locales');
-
-        return $configured === null ? $this->discoverLocales() : $this->normalizeLocales($configured);
+        return $locales;
     }
 
     /**
@@ -112,41 +169,33 @@ class VoxLocaleResolver
     }
 
     /**
+     * Discover locales from the application's own language directories and JSON files. Vendor translations do not
+     * add locales, since packages often ship more languages than the application uses.
+     *
      * @return array<int, string>
      */
     private function discoverLocales(): array
     {
-        $supportedLocales = config('laravellocalization.supportedLocales');
-
-        if (is_array($supportedLocales)) {
-            return $this->normalizeLocales(array_keys($supportedLocales));
-        }
-
         $langPath = VoxConfig::langPath();
 
-        if (File::isDirectory($langPath)) {
-            $directories = collect(File::directories($langPath))
-                ->map(fn (string $path) => basename($path))
-                ->filter(fn (string $locale) => $locale !== 'vendor')
-                ->values()
-                ->all();
-
-            if ($directories !== []) {
-                return $this->normalizeLocales($directories);
-            }
-
-            $jsonLocales = collect(File::files($langPath))
-                ->filter(fn (\SplFileInfo $file) => Str::endsWith($file->getFilename(), '.json') && $file->getFilename() !== TranslationFallbackRules::MANIFEST)
-                ->map(fn (\SplFileInfo $file) => Str::before($file->getFilename(), '.json'))
-                ->values()
-                ->all();
-
-            if ($jsonLocales !== []) {
-                return $this->normalizeLocales($jsonLocales);
-            }
+        if (! File::isDirectory($langPath)) {
+            return [];
         }
 
-        return $this->normalizeLocales([config('app.locale', 'en')]);
+        $directories = collect(File::directories($langPath))
+            ->map(fn (string $path): string => basename($path))
+            ->filter(fn (string $locale): bool => $locale !== 'vendor');
+        $jsonLocales = collect(File::files($langPath))
+            ->filter(fn (\SplFileInfo $file): bool => $file->getExtension() === 'json'
+                && $file->getFilename() !== TranslationFallbackRules::MANIFEST
+                && ! Str::startsWith($file->getFilename(), 'php_'))
+            ->map(fn (\SplFileInfo $file): string => $file->getBasename('.json'));
+
+        return $directories->merge($jsonLocales)
+            ->filter(fn (string $locale): bool => $this->normalizeLocaleCode($locale) !== '')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function normalizeLocaleCode(string $locale): string
@@ -188,7 +237,7 @@ class VoxLocaleResolver
             return null;
         }
 
-        foreach ($locales ?? $this->resolveLocales() as $locale) {
+        foreach ($locales ?? $this->managedLocales() as $locale) {
             if ($this->normalizeLocaleCode($locale) === $normalized) {
                 return $locale;
             }
