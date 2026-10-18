@@ -26,6 +26,7 @@ export interface AppPageProps {
             manage_translation_toggle_approval: string;
             manage_translation_bulk_approval: string;
             manage_translation_bulk_translate: string;
+            manage_translation_translate_locale: string;
             manage_translation_translate: string;
             publish: string;
             publish_store: string;

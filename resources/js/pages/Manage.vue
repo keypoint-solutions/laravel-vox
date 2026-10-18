@@ -8,6 +8,7 @@
     import DynamicTranslationPanel from '@/components/manage/DynamicTranslationPanel.vue';
     import FallbackSettings from '@/components/manage/FallbackSettings.vue';
     import GroupFilter from '@/components/manage/GroupFilter.vue';
+    import LocaleTranslationPanel from '@/components/manage/LocaleTranslationPanel.vue';
     import ToastNotification from '@/components/manage/ToastNotification.vue';
     import TranslationEditPanel from '@/components/manage/TranslationEditPanel.vue';
     import TranslationRow from '@/components/manage/TranslationRow.vue';
@@ -77,6 +78,7 @@
 
     const editTranslation = ref<TranslationItem | null>(null);
     const isCreatingDynamic = ref(false);
+    const isTranslatingLocale = ref(false);
     const isBulkUpdating = ref(false);
     const isBulkTranslating = ref(false);
     const cleanupRows = ref<TranslationItem[]>([]);
@@ -174,6 +176,12 @@
         );
     }
 
+    function finishLocaleTranslation(message: string): void {
+        isTranslatingLocale.value = false;
+        showToast(message);
+        router.reload();
+    }
+
     function bulkTranslateMissing(): void {
         if (selectedIds.value.length === 0 || !aiStatus.value.available) {
             return;
@@ -226,16 +234,35 @@
                     Browse, edit, create dynamic values, and approve translations across all locales.
                 </p>
             </div>
-            <Button
-                data-test="add-dynamic-translation"
-                :disabled="dynamicPatterns.length === 0"
-                class="shrink-0"
-                variant="outline"
-                @click="isCreatingDynamic = true"
-            >
-                <Plus class="size-4" />
-                Add dynamic translation
-            </Button>
+            <div class="flex shrink-0 flex-wrap gap-2">
+                <Tooltip
+                    :text="
+                        aiStatus.available
+                            ? 'Translate missing values in one locale as drafts'
+                            : 'Configure an AI translation driver first'
+                    "
+                >
+                    <Button
+                        data-test="translate-locale"
+                        :disabled="!aiStatus.available || targetLocales.length === 0"
+                        variant="outline"
+                        @click="isTranslatingLocale = true"
+                    >
+                        <Sparkles class="size-4" />
+                        AI translate missing
+                    </Button>
+                </Tooltip>
+                <Button
+                    data-test="add-dynamic-translation"
+                    :disabled="dynamicPatterns.length === 0"
+                    class="shrink-0"
+                    variant="outline"
+                    @click="isCreatingDynamic = true"
+                >
+                    <Plus class="size-4" />
+                    Add dynamic translation
+                </Button>
+            </div>
         </div>
 
         <!-- Stats Cards -->
@@ -496,6 +523,14 @@
         @saved="finishEdit"
         @notify="showToast"
         @cleanup="(action, translation) => reviewCleanup(action, [translation])"
+    />
+
+    <LocaleTranslationPanel
+        :open="isTranslatingLocale"
+        :locales="targetLocales"
+        :route="voxRoutes?.manage_translation_translate_locale"
+        @close="isTranslatingLocale = false"
+        @done="finishLocaleTranslation"
     />
 
     <CleanupPanel

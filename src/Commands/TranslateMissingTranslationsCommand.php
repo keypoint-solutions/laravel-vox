@@ -31,7 +31,7 @@ class TranslateMissingTranslationsCommand extends Command
     use RecordsTranslationCheckpoint;
     use RendersAiTranslationOutput;
 
-    public $signature = 'vox:translate {--path= : Relative path inside the lang directory for a single file to process} {--key= : Translation key to process} {--force : Retranslate existing wording; deliberately blank values are kept}';
+    public $signature = 'vox:translate {--path= : Relative path inside the lang directory for a single file to process} {--key= : Translation key to process} {--locale=* : Target locale to translate; repeat to translate several} {--force : Retranslate existing wording; deliberately blank values are kept}';
 
     public $description = 'Translate missing keys using the configured driver.';
 
@@ -62,6 +62,11 @@ class TranslateMissingTranslationsCommand extends Command
         }
 
         [$locales, $this->baseLocale] = app(VoxLocaleResolver::class)->managedLocalesWithBase();
+        $locales = $this->requestedLocales($locales);
+
+        if ($locales === null) {
+            return self::FAILURE;
+        }
 
         $this->files = new TranslationFileRepository(new TranslationFileWriter);
         $this->driver = app(TranslationDriverFactory::class)->make();
@@ -327,6 +332,44 @@ class TranslateMissingTranslationsCommand extends Command
     private function collectVendorJsonNamespaces(TranslationFileRepository $files, string $locale): array
     {
         return array_values(array_filter($files->jsonNamespaces($locale), fn ($namespace): bool => $namespace !== null));
+    }
+
+    /**
+     * Narrow the target locales to the ones passed with --locale, or report an unknown or base locale.
+     *
+     * @param  array<int, string>  $locales
+     * @return array<int, string>|null
+     */
+    private function requestedLocales(array $locales): ?array
+    {
+        $requested = array_values(array_filter(array_map('trim', (array) $this->option('locale')), fn (string $locale): bool => $locale !== ''));
+
+        if ($requested === []) {
+            return $locales;
+        }
+
+        $resolver = app(VoxLocaleResolver::class);
+        $selected = [];
+
+        foreach ($requested as $locale) {
+            $resolved = $resolver->resolveLocale($locale, $locales);
+
+            if ($resolved === null) {
+                $this->error("Locale [{$locale}] is not managed by Vox.");
+
+                return null;
+            }
+
+            if ($resolved === $this->baseLocale) {
+                $this->error("Locale [{$resolved}] is the base locale and cannot be translated.");
+
+                return null;
+            }
+
+            $selected[] = $resolved;
+        }
+
+        return array_values(array_unique($selected));
     }
 
     private function resolveTargetPath(string $path): ?array

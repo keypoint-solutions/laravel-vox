@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Http;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Tests\Support\LocaleProvisionTranslationDriver;
+use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 
 beforeEach(function (): void {
     $this->useVoxDashboard();
@@ -219,4 +220,86 @@ it('skips unusable sources in bulk AI translation using the shared eligibility r
         ->assertRedirect('/vox/manage')
         ->assertInertiaFlash('success', 'No missing target values were found in the selected translations.');
     Http::assertNothingSent();
+});
+
+it('translates the missing values of one locale as drafts in batches', function (): void {
+    $this->withoutVoxCsrfMiddleware();
+    config()->set('vox.translate.locales.values', ['en', 'fr', 'de']);
+    config()->set('vox.translate.driver', LocaleProvisionTranslationDriver::class);
+
+    $missing = collect(range(1, 27))->map(fn (int $index): VoxTranslation => VoxTranslation::factory()
+        ->approved()
+        ->withValues($index % 2 === 0 ? ['en' => "Value {$index}", 'fr' => "🚩Value {$index}"] : ['en' => "Value {$index}"])
+        ->create(['group' => 'messages', 'key' => "key{$index}"]));
+    $complete = VoxTranslation::factory()->approved()->withValues(['en' => 'Ready', 'fr' => 'Prêt'])->create(['group' => 'messages', 'key' => 'ready']);
+    $blank = VoxTranslation::factory()->approved()->withValues(['en' => 'Note', 'fr' => ''])->create(['group' => 'messages', 'key' => 'note']);
+    $followsDefault = VoxTranslation::factory()->approved()->withValues(['en' => 'Brand'])->create(['group' => 'messages', 'key' => 'brand']);
+    app(TranslationFallbackRules::class)->save('fr', 'key', 'default', 'messages', 'brand');
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/translate-locale', ['locale' => 'fr'])
+        ->assertRedirect('/vox/manage')
+        ->assertInertiaFlash('locale_translation.translated', 25)
+        ->assertInertiaFlash('locale_translation.total', 27)
+        ->assertInertiaFlash('locale_translation.next_after_id', $missing[24]->id);
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/translate-locale', ['locale' => 'fr', 'after_id' => $missing[24]->id])
+        ->assertInertiaFlash('locale_translation.translated', 2)
+        ->assertInertiaFlash('locale_translation.total', null)
+        ->assertInertiaFlash('locale_translation.next_after_id', null);
+
+    expect($missing->every(fn (VoxTranslation $translation): bool => str_starts_with((string) $translation->values()->where('locale', 'fr')->value('value'), 'fr: Value')))->toBeTrue()
+        ->and($missing[0]->fresh()->status)->toBe('pending')
+        ->and($missing[0]->values()->where('locale', 'fr')->value('is_pending_publish'))->toBeTruthy()
+        ->and($missing[0]->values()->where('locale', 'de')->exists())->toBeFalse()
+        ->and($complete->values()->where('locale', 'fr')->value('value'))->toBe('Prêt')
+        ->and($blank->values()->where('locale', 'fr')->value('value'))->toBe('')
+        ->and($followsDefault->values()->where('locale', 'fr')->exists())->toBeFalse()
+        ->and(VoxAudit::query()->where('action', 'locale-translated')->count())->toBe(2);
+});
+
+it('keeps completed locale translations and reports why it stopped when the AI provider fails', function (): void {
+    $this->withoutVoxCsrfMiddleware();
+    config()->set('vox.translate.driver', 'openai');
+    config()->set('vox.translate.providers.openai.api_key', 'test-key');
+    Http::fakeSequence()
+        ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => 'Premier']]]]])
+        ->push(['error' => ['message' => 'You exceeded your current quota.']], 429);
+    $first = VoxTranslation::factory()->approved()->withValues(['en' => 'First'])->create(['group' => 'messages', 'key' => 'a']);
+    $second = VoxTranslation::factory()->approved()->withValues(['en' => 'Second'])->create(['group' => 'messages', 'key' => 'b']);
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/translate-locale', ['locale' => 'fr'])
+        ->assertInertiaFlash('locale_translation.translated', 1)
+        ->assertInertiaFlash('locale_translation.next_after_id', null)
+        ->assertInertiaFlash('locale_translation.failure', 'OpenAI request failed (HTTP 429): You exceeded your current quota.');
+
+    expect($first->values()->where('locale', 'fr')->value('value'))->toBe('Premier')
+        ->and($second->values()->where('locale', 'fr')->exists())->toBeFalse();
+});
+
+it('rejects locale translation for the base locale and unknown locales', function (string $locale, string $driver, string $message): void {
+    $this->withoutVoxCsrfMiddleware();
+    config()->set('vox.translate.driver', $driver);
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/translate-locale', ['locale' => $locale])
+        ->assertRedirect('/vox/manage')
+        ->assertSessionHasErrors(['translate' => $message]);
+})->with([
+    'base locale' => ['en', LocaleProvisionTranslationDriver::class, 'Choose a target locale to translate.'],
+    'unknown locale' => ['xx', LocaleProvisionTranslationDriver::class, 'Choose a target locale to translate.'],
+]);
+
+it('rejects locale translation when AI translation is not configured', function (): void {
+    $this->withoutVoxCsrfMiddleware();
+    config()->set('vox.translate.driver', 'null');
+    $translation = VoxTranslation::factory()->approved()->withValues(['en' => 'First'])->create(['group' => 'messages', 'key' => 'a']);
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/translate-locale', ['locale' => 'fr'])
+        ->assertSessionHasErrors('translate');
+
+    expect($translation->values()->where('locale', 'fr')->exists())->toBeFalse();
 });

@@ -20,6 +20,8 @@ use Throwable;
 
 class ManageTranslationAiController
 {
+    private const LOCALE_BATCH_SIZE = 25;
+
     public function __construct(
         private VoxLocaleResolver $localeResolver,
         private TranslationEligibility $eligibility,
@@ -196,6 +198,131 @@ class ManageTranslationAiController
         }
 
         return Inertia::flash('success', "{$summary}.")->back();
+    }
+
+    /**
+     * Translate the next batch of missing values in one locale and save them as drafts. The page repeats the request
+     * with the returned cursor until it is null, so a locale of any size is translated in short requests.
+     */
+    public function translateLocale(Request $request, VoxAuditLogger $auditLogger): RedirectResponse
+    {
+        $validated = $request->validate([
+            'locale' => ['required', 'string'],
+            'after_id' => ['sometimes', 'integer', 'min:0'],
+        ]);
+
+        if (($reason = $this->ai->reason()) !== null) {
+            return $this->failed($reason);
+        }
+
+        [$availableLocales, $baseLocale] = $this->localeResolver->managedLocalesWithBase();
+        $locale = $this->localeResolver->resolveLocale($validated['locale'], $availableLocales);
+
+        if ($locale === null || $locale === $baseLocale) {
+            return $this->failed('Choose a target locale to translate.');
+        }
+
+        $afterId = (int) ($validated['after_id'] ?? 0);
+        $total = $afterId === 0 ? $this->countLocaleCandidates($locale, $baseLocale) : null;
+        $batch = [];
+        $nextAfterId = null;
+
+        foreach ($this->localeCandidates($locale, $baseLocale, $afterId) as $translation) {
+            $batch[] = $translation;
+
+            if (count($batch) === self::LOCALE_BATCH_SIZE) {
+                $nextAfterId = $translation->id;
+
+                break;
+            }
+        }
+
+        $driver = $this->drivers->make();
+        $translated = [];
+        $failure = null;
+
+        foreach ($batch as $translation) {
+            try {
+                $translated[] = [
+                    'translation' => $translation,
+                    'value' => $driver->translate(
+                        $translation->values->firstWhere('locale', $baseLocale)->value,
+                        $baseLocale,
+                        $locale,
+                        $this->buildTranslationContext($translation),
+                    ),
+                ];
+            } catch (Throwable $exception) {
+                $failure = $exception;
+
+                break;
+            }
+        }
+
+        if ($translated !== []) {
+            VoxConfig::connection()->transaction(function () use ($translated, $locale, $auditLogger): void {
+                foreach ($translated as $result) {
+                    VoxTranslationValue::query()->firstOrNew([
+                        'translation_id' => $result['translation']->id,
+                        'locale' => $locale,
+                    ])->saveDraft($result['value']);
+
+                    $result['translation']->status = 'pending';
+                    $result['translation']->save();
+                }
+
+                $auditLogger->record('locale-translated', [
+                    'locale' => $locale,
+                    'translation_ids' => array_map(fn (array $result): int => $result['translation']->id, $translated),
+                    'values' => count($translated),
+                ]);
+            });
+        }
+
+        return Inertia::flash('locale_translation', [
+            'locale' => $locale,
+            'translated' => count($translated),
+            'total' => $total,
+            'next_after_id' => $failure === null ? $nextAfterId : null,
+            'failure' => $failure?->getMessage(),
+        ])->back();
+    }
+
+    private function countLocaleCandidates(string $locale, string $baseLocale): int
+    {
+        $count = 0;
+
+        foreach ($this->localeCandidates($locale, $baseLocale, 0, withOccurrences: false) as $translation) {
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
+     * Translations after the cursor whose value in the locale is missing and can be translated from the base wording.
+     *
+     * @return \Generator<int, VoxTranslation>
+     */
+    private function localeCandidates(string $locale, string $baseLocale, int $afterId, bool $withOccurrences = true): \Generator
+    {
+        $rules = app(TranslationFallbackRules::class);
+        $translations = VoxTranslation::query()
+            ->with($withOccurrences ? ['values', 'occurrences'] : ['values'])
+            ->where('is_pending_delete', false)
+            ->where('is_orphan', false)
+            ->where('id', '>', $afterId)
+            ->lazyById(200);
+
+        foreach ($translations as $translation) {
+            $values = $translation->values->keyBy('locale');
+
+            if ($this->eligibility->isMissing($values->get($locale)?->value)
+                && $this->eligibility->canTranslateSource($translation->key, $values->get($baseLocale)?->value)
+                && ! $rules->usesDefault($locale, $translation->group, $translation->key)) {
+                yield $translation;
+            }
+        }
     }
 
     /**

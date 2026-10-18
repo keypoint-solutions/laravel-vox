@@ -128,6 +128,10 @@ class HandleInertiaRequests extends Middleware
                 $routeNamePrefix.'manage.translations.bulk-translate',
                 absolute: false
             ),
+            'manage_translation_translate_locale' => route(
+                $routeNamePrefix.'manage.translations.translate-locale',
+                absolute: false
+            ),
             'manage_translation_translate' => route(
                 $routeNamePrefix.'manage.translations.translate',
                 ['translation' => '__translation__'],

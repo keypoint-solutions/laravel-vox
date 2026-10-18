@@ -7,6 +7,7 @@ use KeypointSolutions\LaravelVox\Ai\AiModelDiscovery;
 use KeypointSolutions\LaravelVox\Ai\ClaudeModelDiscovery;
 use KeypointSolutions\LaravelVox\Ai\OpenAiModelDiscovery;
 use KeypointSolutions\LaravelVox\Ai\UnavailableAiModelDiscovery;
+use KeypointSolutions\LaravelVox\Commands\AddLocaleCommand;
 use KeypointSolutions\LaravelVox\Commands\CheckpointCommand;
 use KeypointSolutions\LaravelVox\Commands\CleanupCommand;
 use KeypointSolutions\LaravelVox\Commands\CompileCommand;
@@ -16,6 +17,7 @@ use KeypointSolutions\LaravelVox\Commands\GenerateSyncKeyCommand;
 use KeypointSolutions\LaravelVox\Commands\ParseTranslationsCommand;
 use KeypointSolutions\LaravelVox\Commands\PruneCheckpointsCommand;
 use KeypointSolutions\LaravelVox\Commands\PublishCommand;
+use KeypointSolutions\LaravelVox\Commands\RemoveLocaleCommand;
 use KeypointSolutions\LaravelVox\Commands\ResetCommand;
 use KeypointSolutions\LaravelVox\Commands\ReviewCommand;
 use KeypointSolutions\LaravelVox\Commands\SettingsCommand;
@@ -86,6 +88,7 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
 
         if ($this->app->runningInConsole()) {
             $this->commands([
+                AddLocaleCommand::class,
                 CheckpointCommand::class,
                 PruneCheckpointsCommand::class,
                 CleanupCommand::class,
@@ -95,6 +98,7 @@ class LaravelVoxServiceProvider extends PackageServiceProvider
                 CompileCommand::class,
                 DiscoverFrontendCommand::class,
                 PublishCommand::class,
+                RemoveLocaleCommand::class,
                 ReviewCommand::class,
                 ParseTranslationsCommand::class,
                 TranslateMissingTranslationsCommand::class,

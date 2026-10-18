@@ -76,6 +76,8 @@ Route::middleware([...$configMiddleware, SerializeVoxWrites::class])
             ->name('manage.translations.bulk-approval');
         Route::post('/manage/translations/bulk-translate', [ManageTranslationAiController::class, 'bulkTranslate'])
             ->name('manage.translations.bulk-translate');
+        Route::post('/manage/translations/translate-locale', [ManageTranslationAiController::class, 'translateLocale'])
+            ->name('manage.translations.translate-locale');
         Route::post('/manage/translations/{translation}/translate', [ManageTranslationAiController::class, 'translate'])
             ->name('manage.translations.translate');
 

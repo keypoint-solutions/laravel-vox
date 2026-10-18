@@ -235,3 +235,28 @@ it('saves completed translations and stops cleanly when the provider fails part-
     expect(require $root.'/lang/fr/check.php')->toBe(['first' => 'Premier', 'second' => '🚩Second', 'third' => '🚩Third']);
     Http::assertSentCount(2);
 });
+
+it('translates only the requested locales', function () {
+    $targetRoot = prepareVoxFixtures();
+    config()->set('vox.translate.locales.values', ['en', 'fr', 'de']);
+    config()->set('vox.translate.driver', EchoTranslationDriver::class);
+
+    $this->artisan('vox:translate', ['--locale' => ['fr'], '--no-interaction' => true])->assertExitCode(0);
+
+    $frMessages = require $targetRoot.'/lang/fr/messages.php';
+
+    expect($frMessages['count'])->toBe('Count :count')
+        ->and(File::exists($targetRoot.'/lang/de'))->toBeFalse();
+});
+
+it('rejects unknown and base locales', function (string $locale, string $message) {
+    prepareVoxFixtures();
+    config()->set('vox.translate.driver', EchoTranslationDriver::class);
+
+    $this->artisan('vox:translate', ['--locale' => [$locale], '--no-interaction' => true])
+        ->expectsOutputToContain($message)
+        ->assertExitCode(1);
+})->with([
+    'unknown' => ['xx', 'Locale [xx] is not managed by Vox.'],
+    'base' => ['en', 'Locale [en] is the base locale and cannot be translated.'],
+]);

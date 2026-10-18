@@ -9,6 +9,9 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 - Discover `auto` locales from both language directories and `lang/{locale}.json` files instead of only the first kind found. Vendor translations do not add locales.
 - Add `callback` locale mode, with locales registered through `LaravelVox::resolveLocalesUsing()`. `laravellocalization.supportedLocales` is no longer read implicitly; register it as a callback instead.
 - In `configured` and `callback` modes, Sync warns about languages added through Vox that the application does not declare, and about declared languages without language files, which can now be added from Sync.
+- Add **AI translate missing** in Manage: translate every missing value of one locale as drafts for review, in batches with progress and a Stop button.
+- Add `--locale` to `vox:translate` to translate only the given locales.
+- Add `vox:add-locale {locale} {--translate} {--follow-default}` and `vox:remove-locale {locale} {--force}` commands, matching Sync's Application languages actions.
 
 ## 1.0.19 — 2026-10-12
 
