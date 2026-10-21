@@ -52,3 +52,16 @@ it('parses slash-based references from source code into nested group files', fun
         ->and(File::exists($root.'/lang/vendor/package/en/admin/messages.php'))->toBeTrue()
         ->and(VoxTranslation::query()->where('group', 'admin/messages')->where('key', 'welcome')->exists())->toBeTrue();
 });
+
+it('keeps empty-array placeholders as empty arrays instead of flagging them as missing', function (): void {
+    prepareVoxFixtures();
+    config()->set('vox.retained_keys', ['validation.*']);
+    $files = app(TranslationFileRepository::class);
+    $files->saveGroup('en', 'validation', ['required' => 'Required', 'custom' => [], 'attributes' => []]);
+    $files->saveGroup('fr', 'validation', ['required' => 'Obligatoire', 'custom' => []]);
+
+    app(TranslationFileUpdater::class)->updateFromScan([], ['en', 'fr'], 'en');
+
+    expect($files->loadGroup('fr', 'validation'))->toEqual(['required' => 'Obligatoire', 'custom' => [], 'attributes' => []])
+        ->and($files->loadGroup('en', 'validation'))->toEqual(['required' => 'Required', 'custom' => [], 'attributes' => []]);
+});

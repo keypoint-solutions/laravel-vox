@@ -127,9 +127,19 @@ class TranslationFileUpdater
                     $result->incrementAdded();
                 }
 
+                foreach ($this->emptyArrayKeys($baseFlat) as $key) {
+                    if (! $this->hasKey($updated, $key)) {
+                        app(TranslationGroupFormat::class)->set($updated, $key, []);
+                    }
+                }
+
                 $obsoleteKeys = array_diff(array_keys($flatExisting), $keys);
 
                 foreach ($obsoleteKeys as $obsoleteKey) {
+                    if ($flatExisting[$obsoleteKey] === [] && ($baseFlat[$obsoleteKey] ?? null) === []) {
+                        continue;
+                    }
+
                     $existsInBase = array_key_exists($obsoleteKey, $baseFlat);
                     if ($this->shouldKeepOrphanKey($locale, $baseLocale, $existsInBase)) {
                         continue;
@@ -389,13 +399,24 @@ class TranslationFileUpdater
     {
         $keys = [];
 
-        foreach (array_keys($baseFlat) as $key) {
-            if (! isset($this->pendingDeletionKeys[$this->dynamicKeys->fullKey($key, $group)]) && $this->dynamicKeys->matches($key, $group)) {
+        foreach ($baseFlat as $key => $value) {
+            if ($value !== [] && ! isset($this->pendingDeletionKeys[$this->dynamicKeys->fullKey($key, $group)]) && $this->dynamicKeys->matches($key, $group)) {
                 $keys[] = $key;
             }
         }
 
         return $keys;
+    }
+
+    /**
+     * Keys of empty-array placeholders (such as `validation.attributes => []`), which hold no translatable text.
+     *
+     * @param  array<string, mixed>  $baseFlat
+     * @return array<int, string>
+     */
+    private function emptyArrayKeys(array $baseFlat): array
+    {
+        return array_keys(array_filter($baseFlat, fn (mixed $value): bool => $value === []));
     }
 
     /**

@@ -2,6 +2,10 @@
 
 Notable changes to Laravel Vox are documented here. See the [README](README.md) for installation, configuration, and command examples.
 
+## 1.2.2 — 2026-10-21
+
+- Fix empty-array placeholders in the base locale, such as Laravel's `'attributes' => []` in `validation.php`, being written into other locales as flagged missing translations (`'🚩attributes'`). They are now copied as `[]` and no longer treated as obsolete. Fix existing flagged values by hand.
+
 ## 1.2.1 — 2026-10-21
 
 - Batch AI translation: values are sent to OpenAI or Claude up to 25 at a time instead of one request per value, which makes **AI translate missing**, **AI translate a locale**, per-key translation into several locales, `vox:translate` and `vox:add-locale --translate` much faster. A value whose batched reply is missing or breaks a placeholder is retried on its own. Custom drivers keep working one value at a time; implement `BatchTranslationDriver` to batch them.
