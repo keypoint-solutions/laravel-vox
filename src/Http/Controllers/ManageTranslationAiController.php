@@ -10,6 +10,7 @@ use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Models\VoxTranslationValue;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxConfig;
+use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationBatcher;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
 use KeypointSolutions\LaravelVox\Translation\Locales\VoxLocaleResolver;
@@ -28,16 +29,12 @@ class ManageTranslationAiController
      */
     private const REQUEST_TIME_BUDGET_SECONDS = 20;
 
-    /**
-     * Execution time granted before each AI call: the provider timeout plus room to save the results.
-     */
-    private const AI_CALL_TIME_LIMIT_SECONDS = 90;
-
     public function __construct(
         private VoxLocaleResolver $localeResolver,
         private TranslationEligibility $eligibility,
         private TranslationDriverFactory $drivers,
         private AiAvailability $ai,
+        private TranslationBatcher $batcher,
     ) {}
 
     /**
@@ -113,21 +110,10 @@ class ManageTranslationAiController
             ->orderBy('id')
             ->get()
             ->values();
-        $driver = $this->drivers->make();
-        $deadline = now()->addSeconds(self::REQUEST_TIME_BUDGET_SECONDS);
+        $items = [];
+        $owners = [];
 
-        /** @var array<int, array{translation: VoxTranslation, values: array<string, string>}> $translated */
-        $translated = [];
-        $failure = null;
-        $remainingIds = [];
-
-        foreach ($translations as $index => $translation) {
-            if ($translated !== [] && now()->greaterThanOrEqualTo($deadline)) {
-                $remainingIds = $translations->slice($index)->pluck('id')->values()->all();
-
-                break;
-            }
-
+        foreach ($translations as $translation) {
             if ($translation->is_orphan || $translation->is_pending_delete) {
                 continue;
             }
@@ -139,37 +125,36 @@ class ManageTranslationAiController
                 continue;
             }
 
-            $translatedValues = [];
+            $context = $this->buildTranslationContext($translation);
 
-            try {
-                $this->translateLocales(
-                    $driver,
-                    array_filter(
-                        $targetLocales,
-                        fn (string $locale): bool => $this->eligibility->isMissing($values->get($locale)?->value)
-                    ),
-                    $baseValue,
-                    $baseLocale,
-                    $translation->group,
-                    $translation->key,
-                    $this->buildTranslationContext($translation),
-                    $translatedValues,
-                );
-            } catch (Throwable $exception) {
-                $failure = $exception;
-            }
-
-            if ($translatedValues !== []) {
-                $translated[] = [
-                    'translation' => $translation,
-                    'values' => $translatedValues,
-                ];
-            }
-
-            if ($failure !== null) {
-                break;
+            foreach ($targetLocales as $locale) {
+                if ($this->eligibility->isMissing($values->get($locale)?->value)
+                    && ! app(TranslationFallbackRules::class)->usesDefault($locale, $translation->group, $translation->key)) {
+                    $items[] = ['text' => $baseValue, 'target' => $locale, 'context' => $context];
+                    $owners[] = $translation;
+                }
             }
         }
+
+        [$results, $failure] = $this->translateBatches($this->drivers->make(), $items, $baseLocale);
+
+        /** @var array<int, array{translation: VoxTranslation, values: array<string, string>}> $translated */
+        $translated = [];
+        $remainingIds = [];
+
+        foreach ($items as $index => $item) {
+            $translation = $owners[$index];
+
+            if (array_key_exists($index, $results)) {
+                $translated[$translation->id] ??= ['translation' => $translation, 'values' => []];
+                $translated[$translation->id]['values'][$item['target']] = $results[$index];
+            } elseif ($failure === null) {
+                $remainingIds[$translation->id] = $translation->id;
+            }
+        }
+
+        $translated = array_values($translated);
+        $remainingIds = array_values($remainingIds);
 
         $translatedValueCount = array_sum(array_map(
             fn (array $result): int => count($result['values']),
@@ -236,37 +221,43 @@ class ManageTranslationAiController
 
         $afterId = (int) ($validated['after_id'] ?? 0);
         $total = $afterId === 0 ? $this->countLocaleCandidates($locale, $baseLocale) : null;
-        $deadline = now()->addSeconds(self::REQUEST_TIME_BUDGET_SECONDS);
-        $driver = $this->drivers->make();
-        $translated = [];
-        $failure = null;
-        $nextAfterId = null;
+        $candidates = [];
+        $hasMore = false;
 
         foreach ($this->localeCandidates($locale, $baseLocale, $afterId) as $translation) {
-            if ($translated !== []
-                && (count($translated) === self::LOCALE_BATCH_SIZE || now()->greaterThanOrEqualTo($deadline))) {
-                $nextAfterId = end($translated)['translation']->id;
+            if (count($candidates) === self::LOCALE_BATCH_SIZE) {
+                $hasMore = true;
 
                 break;
             }
 
-            $this->extendTimeLimitForAiCall();
+            $candidates[] = $translation;
+        }
 
-            try {
-                $translated[] = [
-                    'translation' => $translation,
-                    'value' => $driver->translate(
-                        $translation->values->firstWhere('locale', $baseLocale)->value,
-                        $baseLocale,
-                        $locale,
-                        $this->buildTranslationContext($translation),
-                    ),
-                ];
-            } catch (Throwable $exception) {
-                $failure = $exception;
+        [$results, $failure] = $this->translateBatches(
+            $this->drivers->make(),
+            array_map(fn (VoxTranslation $translation): array => [
+                'text' => $translation->values->firstWhere('locale', $baseLocale)->value,
+                'target' => $locale,
+                'context' => $this->buildTranslationContext($translation),
+            ], $candidates),
+            $baseLocale,
+        );
+        $translated = [];
+        $nextAfterId = null;
 
-                break;
+        foreach ($candidates as $index => $translation) {
+            if (! array_key_exists($index, $results)) {
+                $nextAfterId ??= $translated === [] ? null : end($translated)['translation']->id;
+
+                continue;
             }
+
+            $translated[] = ['translation' => $translation, 'value' => $results[$index]];
+        }
+
+        if ($nextAfterId === null && $hasMore && count($translated) === count($candidates)) {
+            $nextAfterId = end($candidates)->id;
         }
 
         if ($translated !== []) {
@@ -370,62 +361,58 @@ class ManageTranslationAiController
             return $this->failed('Base locale value is required before translating.');
         }
 
-        try {
-            return Inertia::flash('translated_values', $this->translateLocales(
-                $this->drivers->make(),
-                $targetLocales,
-                $baseValue,
-                $baseLocale,
-                $group,
-                $key,
-                is_callable($context) ? $context() : $context,
-            ))->back();
-        } catch (Throwable $exception) {
-            return $this->failed($exception->getMessage());
+        $context = is_callable($context) ? $context() : $context;
+        $items = [];
+
+        foreach ($targetLocales as $locale) {
+            if (! app(TranslationFallbackRules::class)->usesDefault($locale, $group, $key)) {
+                $items[$locale] = ['text' => $baseValue, 'target' => $locale, 'context' => $context];
+            }
         }
+
+        [$translated, $failure] = $this->translateBatches($this->drivers->make(), $items, $baseLocale);
+
+        if ($failure !== null) {
+            return $this->failed($failure->getMessage());
+        }
+
+        return Inertia::flash('translated_values', $translated)->back();
     }
 
     /**
-     * Translate a source value into each locale that keeps its own wording.
+     * Translate the items in batches until they are done, one fails, or the request's time budget is spent. Items
+     * not reached are left out of the results.
      *
-     * @param  array<int, string>  $locales
-     * @param  array<string, string>  $context
-     * @param  array<string, string>  $translated  Filled as each locale completes, so finished work survives a later failure.
-     * @return array<string, string>
+     * @template TKey of array-key
+     *
+     * @param  array<TKey, array{text: string, target: string, context?: array<string, mixed>}>  $items
+     * @return array{0: array<TKey, string>, 1: Throwable|null}
      */
-    private function translateLocales(
-        TranslationDriver $driver,
-        array $locales,
-        string $baseValue,
-        string $baseLocale,
-        ?string $group,
-        string $key,
-        array $context,
-        array &$translated = [],
-    ): array {
-        foreach ($locales as $locale) {
-            if (app(TranslationFallbackRules::class)->usesDefault($locale, $group, $key)) {
-                continue;
+    private function translateBatches(TranslationDriver $driver, array $items, string $baseLocale): array
+    {
+        $deadline = now()->addSeconds(self::REQUEST_TIME_BUDGET_SECONDS);
+        $translated = [];
+        $failure = null;
+
+        foreach ($this->batcher->chunk($items) as $batch) {
+            if ($translated !== [] && now()->greaterThanOrEqualTo($deadline)) {
+                break;
             }
 
-            $this->extendTimeLimitForAiCall();
-            $translated[$locale] = $driver->translate($baseValue, $baseLocale, $locale, $context);
+            foreach ($this->batcher->translate($driver, $batch, $baseLocale, $deadline) as $key => $result) {
+                if ($result instanceof Throwable) {
+                    $failure ??= $result;
+                } else {
+                    $translated[$key] = $result;
+                }
+            }
+
+            if ($failure !== null) {
+                break;
+            }
         }
 
-        return $translated;
-    }
-
-    /**
-     * Restart PHP's execution timer so a slow provider response cannot end the request with a fatal error. Runtimes
-     * without a limit, such as the CLI, are left unlimited.
-     */
-    private function extendTimeLimitForAiCall(): void
-    {
-        $limit = (int) ini_get('max_execution_time');
-
-        if ($limit > 0 && function_exists('set_time_limit')) {
-            set_time_limit(max($limit, self::AI_CALL_TIME_LIMIT_SECONDS));
-        }
+        return [$translated, $failure];
     }
 
     private function failed(string $message): RedirectResponse

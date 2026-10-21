@@ -9,6 +9,7 @@ use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxConfig;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
 use KeypointSolutions\LaravelVox\Support\VoxSettingsRepository;
+use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationBatcher;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
 use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileRepository;
@@ -36,6 +37,7 @@ class LocaleProvisioner
         private VoxLocaleResolver $localeResolver,
         private VoxSettingsRepository $settings,
         private VoxAuditLogger $auditLogger,
+        private TranslationBatcher $batcher,
     ) {}
 
     public function provision(string $locale, bool $autoTranslate = false, bool $useDefault = false): LocaleProvisionResult
@@ -221,6 +223,9 @@ class LocaleProvisioner
     }
 
     /**
+     * Flag every source value for translation, then replace the flags with AI translations, batch by batch, until the
+     * values are done or a batch fails.
+     *
      * @param  array<string, mixed>  $values
      * @return array<string, mixed>
      */
@@ -232,26 +237,70 @@ class LocaleProvisioner
         ?TranslationDriver $driver,
         int &$valueCount,
         int &$translatedValueCount,
-        string $parentKey = '',
+    ): array {
+        $items = [];
+        $paths = [];
+        $prepared = $this->flagValues($values, $group, $targetLocale, $driver !== null, $valueCount, $items, $paths);
+
+        if ($driver === null) {
+            return $prepared;
+        }
+
+        foreach ($this->batcher->chunk($items) as $batch) {
+            if ($this->translationFailure !== null) {
+                break;
+            }
+
+            foreach ($this->batcher->translate($driver, $batch, $sourceLocale) as $index => $result) {
+                if ($result instanceof Throwable) {
+                    $this->translationFailure ??= $result;
+
+                    continue;
+                }
+
+                $target = &$prepared;
+
+                foreach ($paths[$index] as $segment) {
+                    $target = &$target[$segment];
+                }
+
+                $target = $result;
+                unset($target);
+                $translatedValueCount++;
+            }
+        }
+
+        return $prepared;
+    }
+
+    /**
+     * Copy the values with each string flagged as missing, collecting the ones AI can translate with their paths.
+     *
+     * @param  array<string, mixed>  $values
+     * @param  array<int, array{text: string, target: string, context: array<string, string>}>  $items
+     * @param  array<int, array<int, string>>  $paths
+     * @param  array<int, string>  $parentPath
+     * @return array<string, mixed>
+     */
+    private function flagValues(
+        array $values,
+        string $group,
+        string $targetLocale,
+        bool $translate,
+        int &$valueCount,
+        array &$items,
+        array &$paths,
+        array $parentPath = [],
     ): array {
         $prepared = [];
         $missingPrefix = VoxConfig::missingPrefix();
 
         foreach ($values as $key => $value) {
             $key = (string) $key;
-            $fullKey = $parentKey === '' ? $key : $parentKey.'.'.$key;
+            $path = [...$parentPath, $key];
 
             if (is_array($value)) {
-                $prepared[$key] = $this->prepareValues(
-                    $value,
-                    $group,
-                    $sourceLocale,
-                    $targetLocale,
-                    $driver,
-                    $valueCount,
-                    $translatedValueCount,
-                    $fullKey,
-                );
+                $prepared[$key] = $this->flagValues($value, $group, $targetLocale, $translate, $valueCount, $items, $paths, $path);
 
                 continue;
             }
@@ -263,27 +312,12 @@ class LocaleProvisioner
             }
 
             $valueCount++;
+            $prepared[$key] = Str::startsWith($value, $missingPrefix) ? $value : $missingPrefix.$value;
+            $fullKey = implode('.', $path);
 
-            $flagged = Str::startsWith($value, $missingPrefix) ? $value : $missingPrefix.$value;
-
-            if ($driver === null || $this->translationFailure !== null
-                || ! app(TranslationEligibility::class)->canTranslateSource($fullKey, $value)) {
-                $prepared[$key] = $flagged;
-
-                continue;
-            }
-
-            try {
-                $prepared[$key] = $driver->translate(
-                    $value,
-                    $sourceLocale,
-                    $targetLocale,
-                    ['context' => "Translation key: {$group}.{$fullKey}"]
-                );
-                $translatedValueCount++;
-            } catch (Throwable $exception) {
-                $this->translationFailure = $exception;
-                $prepared[$key] = $flagged;
+            if ($translate && app(TranslationEligibility::class)->canTranslateSource($fullKey, $value)) {
+                $items[] = ['text' => $value, 'target' => $targetLocale, 'context' => ['context' => "Translation key: {$group}.{$fullKey}"]];
+                $paths[] = $path;
             }
         }
 

@@ -7,10 +7,10 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Ai\AiAvailability;
-use KeypointSolutions\LaravelVox\Ai\TranslationPromptBuilder;
 use KeypointSolutions\LaravelVox\Commands\Concerns\RecordsTranslationCheckpoint;
 use KeypointSolutions\LaravelVox\Commands\Concerns\RendersAiTranslationOutput;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
+use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationBatcher;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriverFactory;
 use KeypointSolutions\LaravelVox\Translation\Files\TranslationFileChangeReporter;
@@ -39,7 +39,7 @@ class TranslateMissingTranslationsCommand extends Command
 
     private TranslationDriver $driver;
 
-    private TranslationPromptBuilder $promptBuilder;
+    private TranslationBatcher $batcher;
 
     private TranslationEligibility $eligibility;
 
@@ -70,7 +70,7 @@ class TranslateMissingTranslationsCommand extends Command
 
         $this->files = new TranslationFileRepository(new TranslationFileWriter);
         $this->driver = app(TranslationDriverFactory::class)->make();
-        $this->promptBuilder = app(TranslationPromptBuilder::class);
+        $this->batcher = app(TranslationBatcher::class);
         $this->eligibility = $eligibility;
         $this->format = $format;
         $this->force = (bool) $this->option('force');
@@ -215,6 +215,8 @@ class TranslateMissingTranslationsCommand extends Command
         $existing = $this->format->normalize($this->files->loadGroup($locale, $group));
         $flatExisting = Arr::dot($existing);
         $updated = $existing;
+        $items = [];
+        $labels = [];
 
         foreach ($entries as $key => $value) {
             if (! $filter->allowsKey($key)) {
@@ -227,18 +229,12 @@ class TranslateMissingTranslationsCommand extends Command
                 continue;
             }
 
-            try {
-                $this->format->set($updated, $key, $this->translateValue(
-                    $value,
-                    $locale,
-                    "{$group}.{$key}",
-                    $this->buildTranslationContext($baseComments, $key)
-                ));
-            } catch (Throwable $exception) {
-                $this->failure = $exception;
+            $items[$key] = ['text' => $value, 'target' => $locale, 'context' => $this->buildTranslationContext($baseComments, $key)];
+            $labels[$key] = "{$group}.{$key}";
+        }
 
-                break;
-            }
+        foreach ($this->translateItems($items, $labels, $locale) as $key => $translation) {
+            $this->format->set($updated, (string) $key, $translation);
         }
 
         $this->files->saveGroup(
@@ -258,6 +254,8 @@ class TranslateMissingTranslationsCommand extends Command
     {
         $existing = $this->files->loadJson($locale, $namespace);
         $updated = $existing;
+        $items = [];
+        $labels = [];
 
         foreach ($entries as $key => $value) {
             if (! $filter->allowsJsonKey($namespace, $key)) {
@@ -270,13 +268,12 @@ class TranslateMissingTranslationsCommand extends Command
                 continue;
             }
 
-            try {
-                $updated[$key] = $this->translateValue($value, $locale, $fullKey);
-            } catch (Throwable $exception) {
-                $this->failure = $exception;
+            $items[$key] = ['text' => $value, 'target' => $locale];
+            $labels[$key] = $fullKey;
+        }
 
-                break;
-            }
+        foreach ($this->translateItems($items, $labels, $locale) as $key => $translation) {
+            $updated[$key] = $translation;
         }
 
         $this->files->saveJson($locale, $updated, $namespace);
@@ -305,14 +302,35 @@ class TranslateMissingTranslationsCommand extends Command
     }
 
     /**
-     * @param  array<string, mixed>  $context
+     * Translate the items batch by batch, stopping at the first failure. Translations finished before it are
+     * returned so they can be saved.
+     *
+     * @param  array<array-key, array{text: string, target: string, context?: array<string, mixed>}>  $items
+     * @param  array<array-key, string>  $labels
+     * @return array<array-key, string>
      */
-    private function translateValue(string $text, string $locale, string $label, array $context = []): string
+    private function translateItems(array $items, array $labels, string $locale): array
     {
-        $translation = $this->translateWithOutput($this->driver, $this->promptBuilder, $text, $this->baseLocale, $locale, $label, $context);
-        $this->translated++;
+        $translated = [];
 
-        return $translation;
+        foreach ($this->batcher->chunk($items) as $batch) {
+            $results = $this->translateBatchWithOutput($this->batcher, $this->driver, $batch, $labels, $this->baseLocale, $locale);
+
+            foreach ($results as $key => $result) {
+                if ($result instanceof Throwable) {
+                    $this->failure ??= $result;
+                } else {
+                    $translated[$key] = $result;
+                    $this->translated++;
+                }
+            }
+
+            if ($this->failure !== null) {
+                break;
+            }
+        }
+
+        return $translated;
     }
 
     /**

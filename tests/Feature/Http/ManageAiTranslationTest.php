@@ -22,25 +22,10 @@ it('bulk translates only missing target values and returns affected translations
     config()->set('vox.translate.providers.openai.api_key', 'test-key');
     config()->set('vox.translate.model', 'gpt-5.4-mini');
 
-    Http::fakeSequence()
-        ->push([
-            'output' => [[
-                'type' => 'message',
-                'content' => [[
-                    'type' => 'output_text',
-                    'text' => 'Bonjour __LARAVEL_PLACEHOLDER_0__.',
-                ]],
-            ]],
-        ])
-        ->push([
-            'output' => [[
-                'type' => 'message',
-                'content' => [[
-                    'type' => 'output_text',
-                    'text' => 'Au revoir',
-                ]],
-            ]],
-        ]);
+    Http::fake(['*' => Http::response(['output' => [['type' => 'message', 'content' => [[
+        'type' => 'output_text',
+        'text' => json_encode(['1' => 'Bonjour __LARAVEL_PLACEHOLDER_0__.', '2' => 'Au revoir']),
+    ]]]]])]);
 
     $missing = VoxTranslation::factory()
         ->approved()
@@ -92,7 +77,12 @@ it('bulk translates only missing target values and returns affected translations
             ->where('context->values', 2)
             ->exists())->toBeTrue();
 
-    Http::assertSentCount(2);
+    Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => str_contains($request['instructions'], 'return only a JSON object')
+        && json_decode($request['input'], true) === [
+            '1' => ['text' => 'Hello __LARAVEL_PLACEHOLDER_0__.', 'target' => 'fr'],
+            '2' => ['text' => 'Goodbye', 'target' => 'fr'],
+        ]);
 });
 
 it('keeps completed bulk translations as drafts and reports why it stopped when the AI provider fails', function (): void {
@@ -102,15 +92,7 @@ it('keeps completed bulk translations as drafts and reports why it stopped when 
     config()->set('vox.translate.providers.openai.api_key', 'test-key');
 
     Http::fakeSequence()
-        ->push([
-            'output' => [[
-                'type' => 'message',
-                'content' => [[
-                    'type' => 'output_text',
-                    'text' => 'Premier',
-                ]],
-            ]],
-        ])
+        ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => '{"1": "Premier"}']]]]])
         ->push(['error' => ['message' => 'You exceeded your current quota.', 'type' => 'insufficient_quota']], 429);
 
     $first = VoxTranslation::factory()->approved()->withValues(['en' => 'First'])->create(['group' => 'messages', 'key' => 'a']);
@@ -192,6 +174,27 @@ it('protects Laravel placeholders when translating from the management UI', func
 
     Http::assertSent(fn (Request $request): bool => $request['input']
         === 'Hello __LARAVEL_PLACEHOLDER_0__.');
+});
+
+it('translates one key into every locale in a single request', function (): void {
+    $this->withoutVoxCsrfMiddleware();
+    config()->set('vox.translate.locales.values', ['en', 'fr', 'de']);
+    config()->set('vox.translate.driver', 'openai');
+    config()->set('vox.translate.providers.openai.api_key', 'test-key');
+    Http::fake(['*' => Http::response(['output' => [['type' => 'message', 'content' => [[
+        'type' => 'output_text',
+        'text' => json_encode(['1' => 'Hallo __LARAVEL_PLACEHOLDER_0__', '2' => 'Bonjour __LARAVEL_PLACEHOLDER_0__']),
+    ]]]]])]);
+
+    $translation = VoxTranslation::factory()->withValues(['en' => 'Hello :name'])->create(['group' => 'messages', 'key' => 'greeting']);
+
+    $this->from('/vox/manage')
+        ->post("/vox/manage/translations/{$translation->id}/translate", ['locales' => ['fr', 'de']])
+        ->assertInertiaFlash('translated_values', ['de' => 'Hallo :name', 'fr' => 'Bonjour :name']);
+
+    Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => str_contains($request['instructions'], "each item's target locale")
+        && array_column(json_decode($request['input'], true), 'target') === ['de', 'fr']);
 });
 
 it('AI translates draft dynamic values before creating the translation', function (): void {
@@ -321,7 +324,7 @@ it('keeps completed locale translations and reports why it stopped when the AI p
     config()->set('vox.translate.driver', 'openai');
     config()->set('vox.translate.providers.openai.api_key', 'test-key');
     Http::fakeSequence()
-        ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => 'Premier']]]]])
+        ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => '{"1": "Premier"}']]]]])
         ->push(['error' => ['message' => 'You exceeded your current quota.']], 429);
     $first = VoxTranslation::factory()->approved()->withValues(['en' => 'First'])->create(['group' => 'messages', 'key' => 'a']);
     $second = VoxTranslation::factory()->approved()->withValues(['en' => 'Second'])->create(['group' => 'messages', 'key' => 'b']);

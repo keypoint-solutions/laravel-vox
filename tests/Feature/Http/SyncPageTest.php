@@ -141,7 +141,7 @@ it('adds the locale with completed AI translations and flags the rest when the p
     $files = new TranslationFileRepository(new TranslationFileWriter);
     $files->saveGroup('en', 'messages', ['first' => 'First', 'second' => 'Second', 'third' => 'Third']);
     Http::fakeSequence()
-        ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => 'Primul']]]]])
+        ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => '{"1": "Primul"}']]]]])
         ->push(['error' => ['message' => 'You exceeded your current quota.']], 429);
 
     $this->from('/vox/sync')

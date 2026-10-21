@@ -2,6 +2,11 @@
 
 Notable changes to Laravel Vox are documented here. See the [README](README.md) for installation, configuration, and command examples.
 
+## 1.2.1 — 2026-10-21
+
+- Batch AI translation: values are sent to OpenAI or Claude up to 25 at a time instead of one request per value, which makes **AI translate missing**, **AI translate a locale**, per-key translation into several locales, `vox:translate` and `vox:add-locale --translate` much faster. A value whose batched reply is missing or breaks a placeholder is retried on its own. Custom drivers keep working one value at a time; implement `BatchTranslationDriver` to batch them.
+- `vox:translate -v` lists each key with its source and translation instead of the raw prompt.
+
 ## 1.2.0 — 2026-10-21
 
 - Separate the locales the dashboard manages from the locales the application serves. `VoxLocaleResolver::managedLocales()` includes languages added through Vox and stored in its database; `publishedLocales()` reads only configuration and files, so runtime endpoints and route registration no longer need the Vox database. This fixes booting a fresh checkout before `vox:setup`, which failed because the SQLite file did not exist yet.

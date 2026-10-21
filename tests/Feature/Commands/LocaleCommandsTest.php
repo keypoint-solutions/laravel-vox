@@ -55,7 +55,7 @@ it('keeps the added locale and fails when AI translation stops part-way', functi
     config()->set('vox.translate.driver', 'openai');
     config()->set('vox.translate.providers.openai.api_key', 'test-key');
     Http::fakeSequence()
-        ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => 'Primul']]]]])
+        ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => '{"1": "Primul"}']]]]])
         ->push(['error' => ['message' => 'You exceeded your current quota.']], 429);
 
     $this->artisan('vox:add-locale', ['locale' => 'ro', '--translate' => true, '--no-interaction' => true])

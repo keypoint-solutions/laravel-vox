@@ -3,10 +3,10 @@
 namespace KeypointSolutions\LaravelVox\Commands\Concerns;
 
 use Illuminate\Support\Str;
-use KeypointSolutions\LaravelVox\Ai\TranslationPromptBuilder;
-use KeypointSolutions\LaravelVox\Translation\Drivers\OpenAiTranslationDriver;
+use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationBatcher;
 use KeypointSolutions\LaravelVox\Translation\Drivers\TranslationDriver;
 use Symfony\Component\Console\Terminal;
+use Throwable;
 
 use function Laravel\Prompts\spin;
 use function Laravel\Prompts\table;
@@ -14,49 +14,50 @@ use function Laravel\Prompts\table;
 trait RendersAiTranslationOutput
 {
     /**
-     * Translate one value, showing a spinner normally and the full AI exchange in verbose mode.
+     * Translate one batch, showing a spinner normally and each source with its translation in verbose mode.
      *
-     * @param  array<string, mixed>  $context
+     * @template TKey of array-key
+     *
+     * @param  array<TKey, array{text: string, target: string, context?: array<string, mixed>}>  $items
+     * @param  array<TKey, string>  $labels
+     * @return array<TKey, string|Throwable>
      */
-    private function translateWithOutput(
+    private function translateBatchWithOutput(
+        TranslationBatcher $batcher,
         TranslationDriver $driver,
-        TranslationPromptBuilder $promptBuilder,
-        string $text,
+        array $items,
+        array $labels,
         string $sourceLocale,
         string $targetLocale,
-        string $label,
-        array $context = []
-    ): string {
-        $displayLabel = $this->formatLabelForOutput($label);
+    ): array {
+        $firstLabel = $this->formatLabelForOutput((string) $labels[array_key_first($items)]);
+        $displayLabel = count($items) === 1 ? $firstLabel : count($items).' values from '.$firstLabel;
 
         if (! $this->output->isVerbose()) {
             return spin(
-                fn () => $driver->translate($text, $sourceLocale, $targetLocale, $context),
+                fn (): array => $batcher->translate($driver, $items, $sourceLocale),
                 $this->formatSpinnerMessage($displayLabel, $targetLocale)
             );
         }
 
-        $this->output->writeln('');
-        $this->output->writeln("AI translation: {$displayLabel}");
-
+        $results = $batcher->translate($driver, $items, $sourceLocale);
         $rows = [];
 
-        if ($driver instanceof OpenAiTranslationDriver) {
-            $systemPrompt = $promptBuilder->build($text, $sourceLocale, $targetLocale, $context);
-            $rows[] = ['system', $systemPrompt];
-        } else {
-            $rows[] = ['note', 'Translation driver does not expose AI message payloads.'];
+        foreach ($items as $key => $item) {
+            $result = $results[$key] ?? null;
+            $outcome = match (true) {
+                is_string($result) => $result,
+                $result instanceof Throwable => 'Failed: '.$result->getMessage(),
+                default => 'Not translated',
+            };
+            $rows[] = [$this->formatLabelForOutput((string) $labels[$key]), $item['text']."\n→ ".$outcome];
         }
 
-        $rows[] = ['user', $text];
+        $this->output->writeln('');
+        $this->output->writeln("AI translation to {$targetLocale}: {$displayLabel}");
+        table(['Key', 'Source → Translation'], $this->formatPromptRows($rows));
 
-        $translation = $driver->translate($text, $sourceLocale, $targetLocale, $context);
-
-        $rows[] = ['assistant', $translation];
-
-        table(['Role', 'Content'], $this->formatPromptRows($rows));
-
-        return $translation;
+        return $results;
     }
 
     private function formatSpinnerMessage(string $label, string $targetLocale): string

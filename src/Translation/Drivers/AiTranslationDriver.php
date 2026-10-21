@@ -5,12 +5,13 @@ namespace KeypointSolutions\LaravelVox\Translation\Drivers;
 use KeypointSolutions\LaravelVox\Ai\LaravelPlaceholderProtector;
 use KeypointSolutions\LaravelVox\Ai\TranslationPromptBuilder;
 use RuntimeException;
+use Throwable;
 
 /**
  * Translation and wording choice shared by the AI providers.
  * A provider only supplies how one instruction and input are sent to its model.
  */
-abstract class AiTranslationDriver implements TranslationChoiceDriver, TranslationDriver
+abstract class AiTranslationDriver implements BatchTranslationDriver, TranslationChoiceDriver
 {
     public function __construct(
         protected TranslationPromptBuilder $promptBuilder,
@@ -52,6 +53,76 @@ abstract class AiTranslationDriver implements TranslationChoiceDriver, Translati
             trim($content),
             $placeholders,
         );
+    }
+
+    /**
+     * Translate the items in one request. An item the reply leaves out or garbles, such as one with a broken
+     * placeholder, is retried on its own; once such a retry fails, later garbled items are left out.
+     *
+     * @param  array<array-key, array{text: string, target: string, context?: array<string, mixed>}>  $items
+     * @return array<array-key, string|Throwable>
+     */
+    public function translateMany(array $items, string $sourceLocale): array
+    {
+        $keys = array_keys($items);
+        $input = [];
+        $placeholders = [];
+
+        foreach (array_values($items) as $index => $item) {
+            [$protectedText, $placeholders[$index + 1]] = $this->placeholderProtector->protect($item['text']);
+            $input[$index + 1] = array_filter([
+                'text' => $protectedText,
+                'target' => $item['target'],
+                'context' => $this->promptBuilder->contextLine($item['context'] ?? []),
+            ], fn (?string $value): bool => $value !== null);
+        }
+
+        $instructions = $this->promptBuilder->buildBatch(
+            array_column($input, 'text'),
+            $sourceLocale,
+            array_column($items, 'target'),
+        );
+
+        if (array_filter($placeholders) !== []) {
+            $instructions .= "\nLaravel placeholders are represented by __LARAVEL_PLACEHOLDER_n__ tokens. Preserve every token exactly.";
+        }
+
+        $reply = json_decode($this->stripCodeFence($this->complete(
+            $instructions,
+            json_encode((object) $input, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+        ) ?? ''), true);
+        $results = [];
+        $retryFailed = false;
+
+        foreach ($keys as $index => $key) {
+            $item = $items[$key];
+            $translation = is_array($reply) ? ($reply[$index + 1] ?? null) : null;
+
+            try {
+                if (! is_string($translation) || trim($translation) === '') {
+                    throw new RuntimeException($this->providerName().' response did not contain a translation.');
+                }
+
+                $results[$key] = $this->placeholderProtector->restoreAndValidate(
+                    $item['text'],
+                    trim($translation),
+                    $placeholders[$index + 1],
+                );
+            } catch (RuntimeException) {
+                if ($retryFailed) {
+                    continue;
+                }
+
+                try {
+                    $results[$key] = $this->translate($item['text'], $sourceLocale, $item['target'], $item['context'] ?? []);
+                } catch (Throwable $exception) {
+                    $results[$key] = $exception;
+                    $retryFailed = true;
+                }
+            }
+        }
+
+        return $results;
     }
 
     /**

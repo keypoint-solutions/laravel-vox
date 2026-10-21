@@ -225,7 +225,7 @@ it('saves completed translations and stops cleanly when the provider fails part-
     File::put($root.'/lang/en/check.php', "<?php return ['first' => 'First', 'second' => 'Second', 'third' => 'Third'];");
     File::put($root.'/lang/fr/check.php', "<?php return ['first' => '🚩First', 'second' => '🚩Second', 'third' => '🚩Third'];");
     Http::fakeSequence()
-        ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => 'Premier']]]]])
+        ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => '{"1": "Premier"}']]]]])
         ->push(['error' => ['message' => 'You exceeded your current quota.']], 429);
 
     $this->artisan('vox:translate', ['--path' => 'en/check.php'])

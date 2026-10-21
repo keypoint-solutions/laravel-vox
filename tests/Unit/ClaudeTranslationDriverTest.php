@@ -137,3 +137,48 @@ it('lists the Claude models the account offers, following pagination', function 
     Http::assertSent(fn (Request $request): bool => str_starts_with($request->url(), ClaudeAiClient::MODELS_ENDPOINT)
         && $request->hasHeader('x-api-key', 'test-key'));
 });
+
+it('translates several texts in one request and retries an item whose placeholders were lost', function (): void {
+    Http::fakeSequence()
+        ->push(claudeReply("```json\n".json_encode([
+            '1' => 'Bonjour __LARAVEL_PLACEHOLDER_0__',
+            '2' => 'Au revoir',
+            '3' => 'Hallo',
+        ])."\n```"))
+        ->push(claudeReply('Hallo __LARAVEL_PLACEHOLDER_0__'));
+
+    $results = app(ClaudeTranslationDriver::class)->translateMany([
+        'hello' => ['text' => 'Hello :name', 'target' => 'fr'],
+        'bye' => ['text' => 'Goodbye', 'target' => 'fr'],
+        'hello.de' => ['text' => 'Hello :name', 'target' => 'de'],
+    ], 'en');
+
+    expect($results)->toBe(['hello' => 'Bonjour :name', 'bye' => 'Au revoir', 'hello.de' => 'Hallo :name']);
+
+    Http::assertSentCount(2);
+    Http::assertSent(fn (Request $request): bool => str_contains($request['system'], 'mapping every ID to its translated text')
+        && str_contains($request['system'], 'Preserve every token exactly.')
+        && json_decode($request['messages'][0]['content'], true) === [
+            '1' => ['text' => 'Hello __LARAVEL_PLACEHOLDER_0__', 'target' => 'fr'],
+            '2' => ['text' => 'Goodbye', 'target' => 'fr'],
+            '3' => ['text' => 'Hello __LARAVEL_PLACEHOLDER_0__', 'target' => 'de'],
+        ]);
+});
+
+it('reports a failed retry and leaves later garbled items out of a batch', function (): void {
+    Http::fakeSequence()
+        ->push(claudeReply(json_encode(['2' => 'Deux'])))
+        ->push(['type' => 'error', 'error' => ['type' => 'overloaded_error', 'message' => 'Overloaded']], 529);
+
+    $results = app(ClaudeTranslationDriver::class)->translateMany([
+        ['text' => 'One', 'target' => 'fr'],
+        ['text' => 'Two', 'target' => 'fr'],
+        ['text' => 'Three', 'target' => 'fr'],
+    ], 'en');
+
+    expect(array_keys($results))->toBe([0, 1])
+        ->and($results[0])->toBeInstanceOf(AiProviderException::class)
+        ->and($results[1])->toBe('Deux');
+
+    Http::assertSentCount(2);
+});
