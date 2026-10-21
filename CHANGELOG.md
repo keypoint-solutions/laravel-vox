@@ -2,7 +2,7 @@
 
 Notable changes to Laravel Vox are documented here. See the [README](README.md) for installation, configuration, and command examples.
 
-## Unreleased
+## 1.2.0 — 2026-10-21
 
 - Separate the locales the dashboard manages from the locales the application serves. `VoxLocaleResolver::managedLocales()` includes languages added through Vox and stored in its database; `publishedLocales()` reads only configuration and files, so runtime endpoints and route registration no longer need the Vox database. This fixes booting a fresh checkout before `vox:setup`, which failed because the SQLite file did not exist yet.
 - Breaking: `resolveLocales()`, `resolveLocalesWithBase()`, `resolveFileLocales()` and `resolveRuntimeLocales()` are renamed to `managedLocales()`, `managedLocalesWithBase()`, `sourceLocales()` and `publishedLocales()`.
@@ -14,6 +14,8 @@ Notable changes to Laravel Vox are documented here. See the [README](README.md) 
 - Add `vox:add-locale {locale} {--translate} {--follow-default}` and `vox:remove-locale {locale} {--force}` commands, matching Sync's Application languages actions.
 - Fix the dashboard requesting chunk preloads from `/vox/assets/` instead of `/vendor/vox/assets/`, which logged a 404 for each preloaded chunk on every page.
 - Label the Manage header action **AI translate a locale** so it is distinct from the selection's **AI translate missing** action.
+- Fix **AI translate missing** and **AI translate a locale** in Manage failing after PHP's 30-second execution limit. Each request now stops starting AI calls after about 20 seconds and hands the rest back to the page, which repeats the request until the work is done; the execution timer is also restarted before each AI call so one slow provider response cannot end the request.
+- Show progress while AI translating a selection ("Translating N of M…" with a progress bar) and while the first batch of a locale translation is running.
 
 ## 1.0.19 — 2026-10-12
 

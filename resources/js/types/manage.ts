@@ -100,3 +100,11 @@ export type ManagePageProps = {
 export type CleanupAction = 'delete' | 'restore';
 
 export type ToastTone = 'success' | 'error';
+
+/** Progress flashed by one bulk AI translation request. */
+export interface BulkTranslationBatch {
+    translations: number;
+    values: number;
+    remaining_ids: number[];
+    failure: string | null;
+}

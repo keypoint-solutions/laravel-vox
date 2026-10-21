@@ -129,6 +129,14 @@
             values and keys that follow the default language are left unchanged. Translations are saved as drafts for
             review; Publish makes them live.
         </p>
+        <p
+            v-if="running && total === null"
+            class="text-muted-foreground mt-4 text-sm"
+            role="status"
+            data-test="locale-translation-starting"
+        >
+            Counting missing values and translating the first batch…
+        </p>
         <div
             v-if="total !== null"
             class="mt-4 space-y-1.5"

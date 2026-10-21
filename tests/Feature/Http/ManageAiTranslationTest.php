@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Http;
 use KeypointSolutions\LaravelVox\Models\VoxAudit;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
 use KeypointSolutions\LaravelVox\Tests\Support\LocaleProvisionTranslationDriver;
+use KeypointSolutions\LaravelVox\Tests\Support\SlowTranslationDriver;
 use KeypointSolutions\LaravelVox\Translation\TranslationFallbackRules;
 
 beforeEach(function (): void {
@@ -68,7 +69,12 @@ it('bulk translates only missing target values and returns affected translations
             'ids' => [$missing->id, $flagged->id, $complete->id, $blank->id, $orphan->id],
         ])
         ->assertRedirect('/vox/manage')
-        ->assertInertiaFlash('success', 'AI translated 2 missing values across 2 translations.');
+        ->assertInertiaFlash('bulk_translation', [
+            'translations' => 2,
+            'values' => 2,
+            'remaining_ids' => [],
+            'failure' => null,
+        ]);
 
     expect($missing->values()->where('locale', 'fr')->value('value'))->toBe('Bonjour :name.')
         ->and($missing->fresh()->status)->toBe('pending')
@@ -114,12 +120,12 @@ it('keeps completed bulk translations as drafts and reports why it stopped when 
     $this->from('/vox/manage')
         ->post('/vox/manage/translations/bulk-translate', ['ids' => [$first->id, $second->id, $third->id]])
         ->assertRedirect('/vox/manage')
-        ->assertSessionHasErrors('translate');
-
-    expect(session('errors')->first('translate'))->toBe(
-        'AI translated 1 missing value across 1 translation and saved them as drafts, then stopped: '
-        .'OpenAI request failed (HTTP 429): You exceeded your current quota.'
-    );
+        ->assertInertiaFlash('bulk_translation', [
+            'translations' => 1,
+            'values' => 1,
+            'remaining_ids' => [],
+            'failure' => 'OpenAI request failed (HTTP 429): You exceeded your current quota.',
+        ]);
 
     $saved = $first->values()->where('locale', 'fr')->sole();
 
@@ -144,10 +150,10 @@ it('saves nothing and reports the provider message when the first bulk translati
 
     $this->from('/vox/manage')
         ->post('/vox/manage/translations/bulk-translate', ['ids' => [$translation->id]])
-        ->assertSessionHasErrors('translate');
+        ->assertInertiaFlash('bulk_translation.values', 0)
+        ->assertInertiaFlash('bulk_translation.failure', 'OpenAI request failed (HTTP 429): You exceeded your current quota.');
 
-    expect(session('errors')->first('translate'))->toBe('OpenAI request failed (HTTP 429): You exceeded your current quota.')
-        ->and($translation->values()->where('locale', 'fr')->exists())->toBeFalse()
+    expect($translation->values()->where('locale', 'fr')->exists())->toBeFalse()
         ->and(VoxAudit::query()->where('action', 'translations-bulk-translated')->exists())->toBeFalse();
 });
 
@@ -218,7 +224,12 @@ it('skips unusable sources in bulk AI translation using the shared eligibility r
     }
     $this->from('/vox/manage')->post('/vox/manage/translations/bulk-translate', ['ids' => $ids])
         ->assertRedirect('/vox/manage')
-        ->assertInertiaFlash('success', 'No missing target values were found in the selected translations.');
+        ->assertInertiaFlash('bulk_translation', [
+            'translations' => 0,
+            'values' => 0,
+            'remaining_ids' => [],
+            'failure' => null,
+        ]);
     Http::assertNothingSent();
 });
 
@@ -257,6 +268,52 @@ it('translates the missing values of one locale as drafts in batches', function 
         ->and($blank->values()->where('locale', 'fr')->value('value'))->toBe('')
         ->and($followsDefault->values()->where('locale', 'fr')->exists())->toBeFalse()
         ->and(VoxAudit::query()->where('action', 'locale-translated')->count())->toBe(2);
+});
+
+it('hands the unreached selection back once a bulk request spends its time budget', function (): void {
+    $this->withoutVoxCsrfMiddleware();
+    config()->set('vox.translate.driver', SlowTranslationDriver::class);
+
+    $translations = collect(range(1, 4))->map(fn (int $index): VoxTranslation => VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => "Value {$index}"])
+        ->create(['group' => 'messages', 'key' => "key{$index}"]));
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/bulk-translate', ['ids' => $translations->pluck('id')->reverse()->values()->all()])
+        ->assertRedirect('/vox/manage')
+        ->assertInertiaFlash('bulk_translation', [
+            'translations' => 2,
+            'values' => 2,
+            'remaining_ids' => [$translations[2]->id, $translations[3]->id],
+            'failure' => null,
+        ]);
+
+    expect($translations[1]->values()->where('locale', 'fr')->value('value'))->toBe('fr: Value 2')
+        ->and($translations[2]->values()->where('locale', 'fr')->exists())->toBeFalse();
+});
+
+it('ends a locale batch early once the request spends its time budget', function (): void {
+    $this->withoutVoxCsrfMiddleware();
+    config()->set('vox.translate.driver', SlowTranslationDriver::class);
+
+    $translations = collect(range(1, 4))->map(fn (int $index): VoxTranslation => VoxTranslation::factory()
+        ->approved()
+        ->withValues(['en' => "Value {$index}"])
+        ->create(['group' => 'messages', 'key' => "key{$index}"]));
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/translate-locale', ['locale' => 'fr'])
+        ->assertInertiaFlash('locale_translation.translated', 2)
+        ->assertInertiaFlash('locale_translation.total', 4)
+        ->assertInertiaFlash('locale_translation.next_after_id', $translations[1]->id);
+
+    $this->from('/vox/manage')
+        ->post('/vox/manage/translations/translate-locale', ['locale' => 'fr', 'after_id' => $translations[1]->id])
+        ->assertInertiaFlash('locale_translation.translated', 2)
+        ->assertInertiaFlash('locale_translation.next_after_id', null);
+
+    expect($translations[3]->values()->where('locale', 'fr')->value('value'))->toBe('fr: Value 4');
 });
 
 it('keeps completed locale translations and reports why it stopped when the AI provider fails', function (): void {

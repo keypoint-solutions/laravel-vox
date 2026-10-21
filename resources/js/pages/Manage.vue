@@ -24,7 +24,7 @@
     import Layout from '@/layouts/Layout.vue';
     import { firstError, flashSuccess } from '@/lib/inertia';
     import { translationActionUrl } from '@/lib/manage';
-    import type { CleanupAction, ManagePageProps, TranslationItem } from '@/types/manage';
+    import type { BulkTranslationBatch, CleanupAction, ManagePageProps, TranslationItem } from '@/types/manage';
 
     defineOptions({
         layout: Layout,
@@ -81,6 +81,7 @@
     const isTranslatingLocale = ref(false);
     const isBulkUpdating = ref(false);
     const isBulkTranslating = ref(false);
+    const bulkTranslationProgress = ref({ done: 0, total: 0 });
     const cleanupRows = ref<TranslationItem[]>([]);
     const cleanupAction = ref<CleanupAction>('delete');
     const isCleaning = ref(false);
@@ -188,22 +189,74 @@
         }
 
         isBulkTranslating.value = true;
+        bulkTranslationProgress.value = { done: 0, total: selectedIds.value.length };
+        translateBulkBatch(selectedIds.value, { translations: 0, values: 0 });
+    }
 
+    /**
+     * Each request stops once its time budget is spent and returns the ids it did not reach, which are sent again.
+     */
+    function translateBulkBatch(ids: number[], totals: { translations: number; values: number }): void {
         router.post(
             voxRoutes.value?.manage_translation_bulk_translate ?? '',
-            { ids: selectedIds.value },
+            { ids },
             {
                 preserveScroll: true,
                 preserveState: true,
-                onError: handleBulkError,
-                onSuccess: (successPage) => {
-                    showToast(flashSuccess(successPage, 'Missing translations were translated.'));
-                },
-                onFinish: () => {
+                onError: (errors) => {
                     isBulkTranslating.value = false;
+                    handleBulkError(errors);
+                },
+                onSuccess: (successPage) => {
+                    const batch = successPage.flash?.bulk_translation as BulkTranslationBatch | undefined;
+
+                    if (!batch) {
+                        finishBulkTranslation(totals, 'the server returned no progress.');
+
+                        return;
+                    }
+
+                    const updatedTotals = {
+                        translations: totals.translations + batch.translations,
+                        values: totals.values + batch.values,
+                    };
+
+                    bulkTranslationProgress.value.done = Math.max(
+                        0,
+                        bulkTranslationProgress.value.total - batch.remaining_ids.length
+                    );
+
+                    if (batch.failure === null && batch.remaining_ids.length > 0) {
+                        translateBulkBatch(batch.remaining_ids, updatedTotals);
+                    } else {
+                        finishBulkTranslation(updatedTotals, batch.failure);
+                    }
                 },
             }
         );
+    }
+
+    function finishBulkTranslation(totals: { translations: number; values: number }, failure: string | null): void {
+        isBulkTranslating.value = false;
+
+        if (totals.values === 0) {
+            showToast(
+                failure ?? 'No missing target values were found in the selected translations.',
+                failure ? 'error' : undefined
+            );
+
+            return;
+        }
+
+        const valueNoun = totals.values === 1 ? 'value' : 'values';
+        const translationNoun = totals.translations === 1 ? 'translation' : 'translations';
+        const summary = `AI translated ${totals.values} missing ${valueNoun} across ${totals.translations} ${translationNoun}`;
+
+        if (failure) {
+            showToast(`${summary} and saved them as drafts, then stopped: ${failure}`, 'error');
+        } else {
+            showToast(`${summary}.`);
+        }
     }
 
     function toggleApproval(translation: TranslationItem): void {
@@ -412,7 +465,11 @@
                                 @click="bulkTranslateMissing"
                             >
                                 <Sparkles class="size-4" />
-                                {{ isBulkTranslating ? 'Translating…' : 'AI translate missing' }}
+                                {{
+                                    isBulkTranslating
+                                        ? `Translating ${bulkTranslationProgress.done} of ${bulkTranslationProgress.total}…`
+                                        : 'AI translate missing'
+                                }}
                             </Button>
                             <Button
                                 :disabled="isBulkUpdating || isBulkTranslating"
@@ -431,6 +488,22 @@
                                 Approve
                             </Button>
                         </div>
+                    </div>
+                    <div
+                        v-if="isBulkTranslating"
+                        class="bg-muted h-1 overflow-hidden"
+                        role="progressbar"
+                        aria-label="AI translation progress"
+                        :aria-valuenow="bulkTranslationProgress.done"
+                        :aria-valuemax="bulkTranslationProgress.total"
+                        data-test="bulk-translate-progress"
+                    >
+                        <div
+                            class="bg-primary h-full transition-all"
+                            :style="{
+                                width: `${bulkTranslationProgress.total ? Math.round((bulkTranslationProgress.done / bulkTranslationProgress.total) * 100) : 0}%`,
+                            }"
+                        />
                     </div>
 
                     <!-- Empty State -->

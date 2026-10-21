@@ -22,6 +22,17 @@ class ManageTranslationAiController
 {
     private const LOCALE_BATCH_SIZE = 25;
 
+    /**
+     * Seconds after which a request stops starting new AI calls and hands the rest back to the page, keeping each
+     * request well inside PHP's max_execution_time and proxy timeouts.
+     */
+    private const REQUEST_TIME_BUDGET_SECONDS = 20;
+
+    /**
+     * Execution time granted before each AI call: the provider timeout plus room to save the results.
+     */
+    private const AI_CALL_TIME_LIMIT_SECONDS = 90;
+
     public function __construct(
         private VoxLocaleResolver $localeResolver,
         private TranslationEligibility $eligibility,
@@ -78,7 +89,9 @@ class ManageTranslationAiController
     }
 
     /**
-     * Fill the missing target values of the selected translations and save them as drafts.
+     * Fill the missing target values of the selected translations and save them as drafts. A request stops once its
+     * time budget is spent and returns the ids it did not reach; the page repeats the request with them until none
+     * remain.
      */
     public function bulkTranslate(Request $request, VoxAuditLogger $auditLogger): RedirectResponse
     {
@@ -97,14 +110,24 @@ class ManageTranslationAiController
             ->with(['values', 'occurrences'])
             ->where('is_pending_delete', false)
             ->whereIn('id', $validated['ids'])
-            ->get();
+            ->orderBy('id')
+            ->get()
+            ->values();
         $driver = $this->drivers->make();
+        $deadline = now()->addSeconds(self::REQUEST_TIME_BUDGET_SECONDS);
 
         /** @var array<int, array{translation: VoxTranslation, values: array<string, string>}> $translated */
         $translated = [];
         $failure = null;
+        $remainingIds = [];
 
-        foreach ($translations as $translation) {
+        foreach ($translations as $index => $translation) {
+            if ($translated !== [] && now()->greaterThanOrEqualTo($deadline)) {
+                $remainingIds = $translations->slice($index)->pluck('id')->values()->all();
+
+                break;
+            }
+
             if ($translation->is_orphan || $translation->is_pending_delete) {
                 continue;
             }
@@ -148,17 +171,6 @@ class ManageTranslationAiController
             }
         }
 
-        if ($translated === [] && $failure !== null) {
-            return $this->failed($failure->getMessage());
-        }
-
-        if ($translated === []) {
-            return Inertia::flash(
-                'success',
-                'No missing target values were found in the selected translations.'
-            )->back();
-        }
-
         $translatedValueCount = array_sum(array_map(
             fn (array $result): int => count($result['values']),
             $translated
@@ -168,41 +180,41 @@ class ManageTranslationAiController
             $translated
         );
 
-        VoxConfig::connection()
-            ->transaction(function () use ($translated, $translatedIds, $translatedValueCount, $auditLogger): void {
-                foreach ($translated as $result) {
-                    foreach ($result['values'] as $locale => $value) {
-                        VoxTranslationValue::query()->firstOrNew([
-                            'translation_id' => $result['translation']->id,
-                            'locale' => $locale,
-                        ])->saveDraft($value);
+        if ($translated !== []) {
+            VoxConfig::connection()
+                ->transaction(function () use ($translated, $translatedIds, $translatedValueCount, $auditLogger): void {
+                    foreach ($translated as $result) {
+                        foreach ($result['values'] as $locale => $value) {
+                            VoxTranslationValue::query()->firstOrNew([
+                                'translation_id' => $result['translation']->id,
+                                'locale' => $locale,
+                            ])->saveDraft($value);
+                        }
+
+                        $result['translation']->status = 'pending';
+                        $result['translation']->save();
                     }
 
-                    $result['translation']->status = 'pending';
-                    $result['translation']->save();
-                }
-
-                $auditLogger->record('translations-bulk-translated', [
-                    'translation_ids' => $translatedIds,
-                    'translations' => count($translatedIds),
-                    'values' => $translatedValueCount,
-                ]);
-            });
-
-        $translationNoun = count($translatedIds) === 1 ? 'translation' : 'translations';
-        $valueNoun = $translatedValueCount === 1 ? 'value' : 'values';
-        $summary = "AI translated {$translatedValueCount} missing {$valueNoun} across ".count($translatedIds)." {$translationNoun}";
-
-        if ($failure !== null) {
-            return $this->failed("{$summary} and saved them as drafts, then stopped: {$failure->getMessage()}");
+                    $auditLogger->record('translations-bulk-translated', [
+                        'translation_ids' => $translatedIds,
+                        'translations' => count($translatedIds),
+                        'values' => $translatedValueCount,
+                    ]);
+                });
         }
 
-        return Inertia::flash('success', "{$summary}.")->back();
+        return Inertia::flash('bulk_translation', [
+            'translations' => count($translatedIds),
+            'values' => $translatedValueCount,
+            'remaining_ids' => $failure === null ? $remainingIds : [],
+            'failure' => $failure?->getMessage(),
+        ])->back();
     }
 
     /**
-     * Translate the next batch of missing values in one locale and save them as drafts. The page repeats the request
-     * with the returned cursor until it is null, so a locale of any size is translated in short requests.
+     * Translate the next batch of missing values in one locale and save them as drafts. A batch ends after
+     * LOCALE_BATCH_SIZE values or once the request's time budget is spent; the page repeats the request with the
+     * returned cursor until it is null, so a locale of any size is translated in short requests.
      */
     public function translateLocale(Request $request, VoxAuditLogger $auditLogger): RedirectResponse
     {
@@ -224,24 +236,22 @@ class ManageTranslationAiController
 
         $afterId = (int) ($validated['after_id'] ?? 0);
         $total = $afterId === 0 ? $this->countLocaleCandidates($locale, $baseLocale) : null;
-        $batch = [];
-        $nextAfterId = null;
-
-        foreach ($this->localeCandidates($locale, $baseLocale, $afterId) as $translation) {
-            $batch[] = $translation;
-
-            if (count($batch) === self::LOCALE_BATCH_SIZE) {
-                $nextAfterId = $translation->id;
-
-                break;
-            }
-        }
-
+        $deadline = now()->addSeconds(self::REQUEST_TIME_BUDGET_SECONDS);
         $driver = $this->drivers->make();
         $translated = [];
         $failure = null;
+        $nextAfterId = null;
 
-        foreach ($batch as $translation) {
+        foreach ($this->localeCandidates($locale, $baseLocale, $afterId) as $translation) {
+            if ($translated !== []
+                && (count($translated) === self::LOCALE_BATCH_SIZE || now()->greaterThanOrEqualTo($deadline))) {
+                $nextAfterId = end($translated)['translation']->id;
+
+                break;
+            }
+
+            $this->extendTimeLimitForAiCall();
+
             try {
                 $translated[] = [
                     'translation' => $translation,
@@ -398,10 +408,24 @@ class ManageTranslationAiController
                 continue;
             }
 
+            $this->extendTimeLimitForAiCall();
             $translated[$locale] = $driver->translate($baseValue, $baseLocale, $locale, $context);
         }
 
         return $translated;
+    }
+
+    /**
+     * Restart PHP's execution timer so a slow provider response cannot end the request with a fatal error. Runtimes
+     * without a limit, such as the CLI, are left unlimited.
+     */
+    private function extendTimeLimitForAiCall(): void
+    {
+        $limit = (int) ini_get('max_execution_time');
+
+        if ($limit > 0 && function_exists('set_time_limit')) {
+            set_time_limit(max($limit, self::AI_CALL_TIME_LIMIT_SECONDS));
+        }
     }
 
     private function failed(string $message): RedirectResponse
