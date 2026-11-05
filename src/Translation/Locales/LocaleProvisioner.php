@@ -5,6 +5,7 @@ namespace KeypointSolutions\LaravelVox\Translation\Locales;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use KeypointSolutions\LaravelVox\Models\VoxTranslation;
+use KeypointSolutions\LaravelVox\Models\VoxTranslationRule;
 use KeypointSolutions\LaravelVox\Support\VoxAuditLogger;
 use KeypointSolutions\LaravelVox\Support\VoxConfig;
 use KeypointSolutions\LaravelVox\Support\VoxMutationLock;
@@ -73,6 +74,7 @@ class LocaleProvisioner
 
         if ($useDefault) {
             return app(TranslationFileTransaction::class)->run(fn (): LocaleProvisionResult => VoxConfig::connection()->transaction(function () use ($locale, $baseLocale): LocaleProvisionResult {
+                $clearedRules = $this->clearStaleFallbackRules($locale);
                 $this->synchronizer->sync();
                 if (! $this->settings->save(['provisioned_locales' => array_values(array_unique([...$this->settings->provisionedLocales(), $locale]))])) {
                     throw new RuntimeException('Settings storage is unavailable. Run the Laravel Vox migrations and try again.');
@@ -83,7 +85,7 @@ class LocaleProvisioner
                     $translation->values()->firstOrCreate(['locale' => $locale], ['value' => '', 'is_approved' => true, 'is_pending_publish' => false]);
                     $count++;
                 }
-                $this->auditLogger->record('locale-provisioned', ['locale' => $locale, 'source_locale' => $baseLocale, 'use_default' => true, 'values' => $count]);
+                $this->auditLogger->record('locale-provisioned', ['locale' => $locale, 'source_locale' => $baseLocale, 'use_default' => true, 'values' => $count, 'cleared_fallback_rules' => $clearedRules]);
 
                 return new LocaleProvisionResult($locale, 0, $count, 0);
             }));
@@ -156,6 +158,8 @@ class LocaleProvisioner
                     $translatedValueCount,
                     &$installedFiles,
                 ): void {
+                    $clearedRules = $this->clearStaleFallbackRules($locale);
+
                     foreach ($stagedPaths as $stagedPath) {
                         $relativePath = substr(
                             $stagedPath,
@@ -195,6 +199,7 @@ class LocaleProvisioner
                         'translated_values' => $translatedValueCount,
                         'auto_translated' => $autoTranslate,
                         'reopened_translations' => $syncResult->reopenedTranslations(),
+                        'cleared_fallback_rules' => $clearedRules,
                     ]);
                 });
 
@@ -322,6 +327,18 @@ class LocaleProvisioner
         }
 
         return $prepared;
+    }
+
+    /**
+     * Drop fallback rules left behind for a locale Vox no longer manages, so a stale "follow the default language"
+     * choice cannot replace the new locale's flagged values with base language wording.
+     */
+    private function clearStaleFallbackRules(string $locale): int
+    {
+        $cleared = VoxTranslationRule::query()->where('locale', $locale)->delete();
+        app(TranslationFallbackRules::class)->clear();
+
+        return $cleared;
     }
 
     /**

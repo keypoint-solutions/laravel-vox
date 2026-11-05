@@ -117,6 +117,30 @@ it('creates a fallback language without generating files until publication', fun
     expect($this->files->loadGroup('de', 'billing')['pay'])->toBe('Pay now');
 });
 
+it('keeps a newly added language flagged when stale fallback rules exist for it', function (string $publishedMode): void {
+    VoxTranslationRule::query()->create(['locale' => 'de', 'scope' => 'locale', 'target' => 'stale', 'mode' => 'default', 'published_mode' => $publishedMode]);
+    VoxTranslationRule::query()->create(['locale' => 'de', 'scope' => 'group', 'group' => 'billing', 'target' => 'stale-group', 'mode' => 'default', 'published_mode' => 'default']);
+
+    $this->post('/vox/sync/locales', ['locale' => 'de'])->assertSessionHasNoErrors();
+
+    expect($this->files->loadGroup('de', 'billing')['pay'])->toBe('🚩Pay now')
+        ->and(VoxTranslationRule::query()->where('locale', 'de')->count())->toBe(0);
+
+    app(TranslationPublisher::class)->publish();
+
+    expect($this->files->loadGroup('de', 'billing')['pay'])->toBe('🚩Pay now');
+})->with(['published default' => 'default', 'draft default' => 'inherit']);
+
+it('replaces stale fallback rules when adding a language that follows the default', function (): void {
+    VoxTranslationRule::query()->create(['locale' => 'de', 'scope' => 'group', 'group' => 'billing', 'target' => 'stale-group', 'mode' => 'translated', 'published_mode' => 'translated']);
+
+    $this->post('/vox/sync/locales', ['locale' => 'de', 'use_default' => true])->assertSessionHasNoErrors();
+    app(TranslationPublisher::class)->publish();
+
+    expect(VoxTranslationRule::query()->where('locale', 'de')->sole()->scope)->toBe('locale')
+        ->and($this->files->loadGroup('de', 'billing')['pay'])->toBe('Pay now');
+});
+
 it('refuses missing defaults and rolls back published rules and files', function (): void {
     $this->key->values()->where('locale', 'en')->update(['value' => '🚩Pay now', 'file_value' => '🚩Pay now']);
     $this->rules->save('ro', 'locale', 'default');

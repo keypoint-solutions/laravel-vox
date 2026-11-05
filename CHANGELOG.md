@@ -2,6 +2,10 @@
 
 Notable changes to Laravel Vox are documented here. See the [README](README.md) for installation, configuration, and command examples.
 
+## 1.3.1 — 2026-11-05
+
+- Fix adding a language writing base language wording into its files without the missing-translation flag when fallback rules for that locale code were left in the database (for example after reverting `lang/` or restoring a database or checkpoint out of step with the files). Adding a language now clears its stale fallback rules first; the audit entry records how many were cleared.
+
 ## 1.3.0 — 2026-11-05
 
 - Rename "published overrides" to **custom wording** and "application wording" to **default wording** throughout the dashboard: the Manage badge and status filter read **Custom wording**, the key editor shows "Custom wording · live" next to "Default wording · from the files", and **Remove published override** is now **Use default wording**. Locales that follow the base language read "Follows base language" instead of "Using default". Payload keys, the `published-overrides` filter value, routes and `data-test` attributes are unchanged.
