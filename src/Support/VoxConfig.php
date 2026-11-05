@@ -31,6 +31,21 @@ class VoxConfig
         return (string) config('vox.parse.missing_translation_prefix', '🚩');
     }
 
+    /**
+     * Whether wording published through Vox survives a release that re-installs the language files.
+     * Unset, it is enabled everywhere except the `local` environment, where the files are the source of truth.
+     */
+    public static function retainsCustomWording(): bool
+    {
+        $configured = config('vox.publishing.retain_custom_wording');
+
+        if ($configured === null || $configured === '') {
+            return ! app()->environment('local');
+        }
+
+        return filter_var($configured, FILTER_VALIDATE_BOOL);
+    }
+
     public static function translateModel(): string
     {
         return (string) config('vox.translate.model', OpenAiModelCatalog::DEFAULT_MODEL);

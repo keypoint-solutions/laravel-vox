@@ -13,7 +13,7 @@ class DeployCommand extends Command
 
     public $signature = 'vox:deploy';
 
-    public $description = 'Import freshly installed translation files and generate live files preserving published overrides and drafts.';
+    public $description = 'Import freshly installed translation files and generate live files preserving custom wording and drafts.';
 
     public function handle(TranslationDeployment $deployment): int
     {

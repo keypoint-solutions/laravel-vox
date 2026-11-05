@@ -2,6 +2,16 @@
 
 Notable changes to Laravel Vox are documented here. See the [README](README.md) for installation, configuration, and command examples.
 
+## 1.3.0 — 2026-11-05
+
+- Rename "published overrides" to **custom wording** and "application wording" to **default wording** throughout the dashboard: the Manage badge and status filter read **Custom wording**, the key editor shows "Custom wording · live" next to "Default wording · from the files", and **Remove published override** is now **Use default wording**. Locales that follow the base language read "Follows base language" instead of "Using default". Payload keys, the `published-overrides` filter value, routes and `data-test` attributes are unchanged.
+- Publishing marks a value as custom wording only when its text differs from the default wording in the files; publishing text equal to the default clears the marker. A deploy whose release ships the custom text as its new default clears the marker too. Existing redundant markers clear on the next `vox:deploy` (retention on) or the next sync (retention off).
+- When a release changes the default wording underneath custom wording, `vox:deploy` keeps the custom wording live and adds the new default to Sync review as a change from local files, so it can be accepted or kept.
+- Add `VOX_RETAIN_CUSTOM_WORDING` (`vox.publishing.retain_custom_wording`). By default custom wording is retained everywhere except the `local` environment; set it to `false` to have Vox never mark custom wording and treat language files as the source of truth on sync, or `true` to always retain it.
+- **Use default wording** refuses keys without default wording and defaults that are still missing-translation placeholders, and the key editor hides the button for them ("No default wording. This key is managed in Vox.").
+- Sync review selection tokens no longer include the custom wording marker, so clearing markers during a deploy does not invalidate an open review.
+- The publish error for a locale that follows the base language now reads "Base language wording missing for [key]".
+
 ## 1.2.2 — 2026-10-21
 
 - Fix empty-array placeholders in the base locale, such as Laravel's `'attributes' => []` in `validation.php`, being written into other locales as flagged missing translations (`'🚩attributes'`). They are now copied as `[]` and no longer treated as obsolete. Fix existing flagged values by hand.

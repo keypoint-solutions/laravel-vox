@@ -188,7 +188,7 @@ class ManageController
         return [
             ['value' => 'new', 'label' => 'New'],
             ['value' => 'updated', 'label' => 'Updated'],
-            ['value' => 'published-overrides', 'label' => 'Published overrides'],
+            ['value' => 'published-overrides', 'label' => 'Custom wording'],
             ['value' => 'drafts', 'label' => 'Drafts'],
             ['value' => 'pending', 'label' => 'Pending review'],
             ['value' => 'approved', 'label' => 'Approved'],

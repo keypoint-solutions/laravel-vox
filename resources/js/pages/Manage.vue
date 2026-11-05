@@ -61,7 +61,7 @@
         { value: 'dynamic', label: 'Dynamic usage' },
         { value: 'retained', label: 'Retained by rule' },
         { value: 'pending-deletion', label: 'Pending deletion' },
-        { value: 'published-overrides', label: 'Published overrides' },
+        { value: 'published-overrides', label: 'Custom wording' },
         { value: 'drafts', label: 'Drafts' },
         { value: 'pending', label: 'Pending review' },
         { value: 'approved', label: 'Approved' },

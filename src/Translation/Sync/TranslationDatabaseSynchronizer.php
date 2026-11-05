@@ -58,7 +58,7 @@ class TranslationDatabaseSynchronizer
 
         $this->frontendManifest->writeFromDatabase();
 
-        if (! $deployment) {
+        if (! $deployment && VoxConfig::retainsCustomWording()) {
             app(TranslationPublisher::class)->publishTo($this->files->langPath(), overridesOnly: true);
         }
 

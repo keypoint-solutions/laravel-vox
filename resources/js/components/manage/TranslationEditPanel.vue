@@ -98,6 +98,12 @@
         return prefix !== '' && value.startsWith(prefix);
     }
 
+    function hasUsableDefault(locale: string): boolean {
+        const defaultWording = props.translation?.file_values?.[locale];
+
+        return defaultWording != null && defaultWording.trim() !== '' && !isFlagged(defaultWording);
+    }
+
     function localeStatus(locale: string): string {
         const translation = props.translation;
 
@@ -146,7 +152,7 @@
                 preserveState: true,
                 onError: handleError,
                 onSuccess: (successPage) => {
-                    emit('notify', flashSuccess(successPage, 'Application wording restored.'));
+                    emit('notify', flashSuccess(successPage, 'Default wording restored.'));
                 },
                 onFinish: async () => {
                     await nextTick();
@@ -382,15 +388,15 @@
                     v-if="translation?.fallback?.[locale]?.mode === 'default'"
                     class="bg-muted rounded-lg p-3 text-sm"
                 >
-                    <p class="font-medium">Using default · {{ baseLocale }}</p>
+                    <p class="font-medium">Follows base language · {{ baseLocale }}</p>
                     <p class="mt-1 whitespace-pre-wrap">
-                        {{ values[baseLocale] || 'Default translation missing' }}
+                        {{ values[baseLocale] || 'Base language wording missing' }}
                     </p>
                     <p class="text-muted-foreground mt-1 text-xs">
                         {{
                             translation.fallback[locale].published_mode === 'default'
-                                ? 'Default wording is published. Changes refresh on publish.'
-                                : 'Pending publication. Current application wording is unchanged.'
+                                ? 'Base language wording is published. Changes refresh on publish.'
+                                : 'Pending publication. The live wording is unchanged.'
                         }}
                     </p>
                 </div>
@@ -402,35 +408,42 @@
                     class="bg-muted/40 space-y-3 rounded-lg border p-3 text-sm"
                 >
                     <div>
-                        <p class="text-muted-foreground text-xs font-medium">Published override · currently live</p>
+                        <p class="text-muted-foreground text-xs font-medium">Custom wording · live</p>
                         <p class="mt-1 [overflow-wrap:anywhere] whitespace-pre-wrap">
                             {{ translation.published_overrides[locale] }}
                         </p>
                     </div>
-                    <div>
-                        <p class="text-muted-foreground text-xs font-medium">
-                            Application default · without the override
-                        </p>
+                    <div v-if="hasUsableDefault(locale)">
+                        <p class="text-muted-foreground text-xs font-medium">Default wording · from the files</p>
                         <p class="mt-1 [overflow-wrap:anywhere] whitespace-pre-wrap">
-                            {{ translation.file_values?.[locale] ?? 'No application value' }}
+                            {{ translation.file_values?.[locale] }}
                         </p>
                     </div>
+                    <p
+                        v-else
+                        class="text-muted-foreground text-xs"
+                    >
+                        No default wording. This key is managed in Vox.
+                    </p>
                     <Button
+                        v-if="hasUsableDefault(locale)"
                         :data-test="`use-application-wording-${locale}`"
                         :disabled="usingApplicationLocale !== null || isSaving || isTranslating"
                         size="sm"
                         variant="outline"
                         @click="useApplicationWording(locale)"
                     >
-                        {{ usingApplicationLocale === locale ? 'Removing…' : 'Remove published override' }}
+                        {{ usingApplicationLocale === locale ? 'Restoring…' : 'Use default wording' }}
                     </Button>
-                    <p class="text-muted-foreground text-xs">
+                    <p
+                        v-if="hasUsableDefault(locale)"
+                        class="text-muted-foreground text-xs"
+                    >
                         {{
                             translation.published_overrides[locale] === translation.file_values?.[locale]
-                                ? 'The override matches the application default. Removing it will not change the live wording.'
-                                : 'Immediately restores the application default in the live translation files.'
+                                ? 'The custom wording matches the default. Using the default changes nothing live.'
+                                : 'Immediately restores the default wording in the live translation files. Any unpublished edits are preserved.'
                         }}
-                        Any unpublished edits are preserved.
                     </p>
                 </div>
                 <p class="text-muted-foreground text-xs">

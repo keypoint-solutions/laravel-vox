@@ -53,6 +53,7 @@ class TranslationSyncer
         $translations = $this->applyDynamicMetadata($translations);
         $seenTranslationIds = [];
         $seenValueIds = [];
+        $retainsCustomWording = VoxConfig::retainsCustomWording();
         $fileCandidates = $deployment
             ? collect()
             : VoxRemoteTranslation::query()->whereNull('environment_id')->pluck('identity')->flip();
@@ -124,9 +125,11 @@ class TranslationSyncer
                 $current = $translationValue->value;
                 $isNewValue = ! $translationValue->exists;
 
-                if (! $deployment && $translationValue->published_override !== null && $value === $translationValue->published_override) {
+                $customWording = $translationValue->published_override;
+
+                if ($retainsCustomWording && ! $deployment && $customWording !== null && $value === $customWording) {
                     if ($fileCandidates->has(RemoteTranslationSnapshot::identity($translation->group, $translation->key, $locale))) {
-                        app(RemoteReconciliation::class)->ingestFileValue($translation, $locale, $value, $oldFileValue ?? $current);
+                        app(RemoteReconciliation::class)->refreshSettledFileValue($translation, $locale, $value, $oldFileValue ?? $current);
                     }
 
                     continue;
@@ -151,6 +154,14 @@ class TranslationSyncer
 
                 if (! $isNewValue && $oldFileValue === null && $current !== $value) {
                     $translationValue->is_pending_publish = true;
+                }
+
+                if ($retainsCustomWording && $deployment && $customWording !== null && $value !== $oldFileValue && $value !== $customWording) {
+                    app(RemoteReconciliation::class)->ingestFileValue($translation, $locale, $value, $oldFileValue);
+                }
+
+                if (! $retainsCustomWording || $customWording === $value) {
+                    $translationValue->published_override = null;
                 }
 
                 $contentChanged = $contentChanged || $oldFileValue !== $value;
@@ -192,6 +203,9 @@ class TranslationSyncer
                 if ($absentIds !== []) {
                     foreach (VoxTranslationValue::query()->whereKey($absentIds)->lockForUpdate()->get() as $value) {
                         $value->file_value = null;
+                        if (! $retainsCustomWording) {
+                            $value->published_override = null;
+                        }
                         $value->is_obsolete = $value->published_override === null && ! $value->is_pending_publish;
                         $value->save();
                     }

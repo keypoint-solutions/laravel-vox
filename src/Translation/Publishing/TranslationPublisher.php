@@ -122,7 +122,8 @@ class TranslationPublisher
                 $frontendFiles[] = $path;
             }
 
-            VoxConfig::connection()->transaction(function () use ($stagedResult, $pending): void {
+            $retainsCustomWording = VoxConfig::retainsCustomWording();
+            VoxConfig::connection()->transaction(function () use ($stagedResult, $pending, $retainsCustomWording): void {
                 foreach ($pending as $row) {
                     DB::connection($row->getConnectionName())->table('vox_remote_translations')->where('group', $row->group ?? 'json')->where('key', $row->key)->delete();
                     $row->occurrences()->delete();
@@ -134,9 +135,10 @@ class TranslationPublisher
 
                     if ($current !== null && $current->value === $value) {
                         $current->timestamps = false;
-                        if ($current->is_pending_publish || $current->value !== $current->file_value) {
-                            $current->published_override = $value;
+                        if (! $retainsCustomWording) {
+                            $current->file_value = $value;
                         }
+                        $current->published_override = $value !== $current->file_value ? $value : null;
                         $current->is_pending_publish = false;
                         $current->save();
                     }
@@ -233,7 +235,7 @@ class TranslationPublisher
                 $usesDefault = $rules->usesDefault($locale, $translation->group, $translation->key, true);
                 if ($usesDefault) {
                     if ($eligibility->isMissing($defaultValue)) {
-                        throw new RuntimeException("Default translation missing for [{$translation->key}]. Add and approve its default wording before publishing.");
+                        throw new RuntimeException("Base language wording missing for [{$translation->key}]. Add and approve its base language wording before publishing.");
                     }
                     if ($translation->group === null || $translation->group === 'json') {
                         [$namespace, $key] = $this->splitJsonKey($translation->key);

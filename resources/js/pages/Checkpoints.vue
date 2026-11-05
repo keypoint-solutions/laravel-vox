@@ -70,7 +70,7 @@
         <div>
             <h1 class="text-2xl font-semibold">Translation checkpoints</h1>
             <p class="text-muted-foreground mt-2 text-sm">
-                Return translations to an earlier point, including drafts, approvals, published overrides, and language
+                Return translations to an earlier point, including drafts, approvals, custom wording, and language
                 files. Vox automatically records changes made through the manager and translation commands.
             </p>
             <p class="text-muted-foreground mt-2 text-sm">

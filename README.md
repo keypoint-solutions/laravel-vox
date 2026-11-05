@@ -49,7 +49,7 @@ Selection is group-based: it does not trim every unused key or load translations
 
 The Vue integration supports locale discovery, fallback, pluralization, and reactive translations. Runtime endpoints serve generated files with cache revalidation, without reading the Vox database.
 
-For custom build pipelines, the [`TranslationsPublished` event](#publication-events) lets your application queue its own asset rebuild after successful publication. Deployment reconciliation preserves published management overrides and unpublished drafts when fresh application files arrive.
+For custom build pipelines, the [`TranslationsPublished` event](#publication-events) lets your application queue its own asset rebuild after successful publication. Deployment reconciliation preserves custom wording and unpublished drafts when fresh application files arrive.
 
 ### Built for developer workflows
 
@@ -141,6 +141,20 @@ If your `config/vox.php` was published before Claude support, add `'anthropic' =
 When a provider fails during a multi-string job, for example because the account runs out of credits, Vox keeps the translations already completed, stops, and reports the provider's message.
 
 To use another database, define a connection in `config/database.php` and set `VOX_DB_CONNECTION` to its name. To relocate the default SQLite file, set `VOX_DB_PATH`. Changing connections does not transfer existing Vox data.
+
+### Custom wording retention
+
+Vox remembers wording published through it that differs from the default wording in the language files, and reapplies that custom wording when a release re-installs the files (see [Translation Management](#translation-management)). This suits servers where language files come from releases. On a developer machine the files are tracked in version control and are the source of truth, so retention is off there by default.
+
+```dotenv
+VOX_RETAIN_CUSTOM_WORDING=true
+```
+
+- Unset or `null` (default): enabled in every environment except `local`.
+- `false`: Vox never marks published wording as custom, and sync treats the language files as the source of truth: hand edits to the files become the new default wording, and any existing custom wording markers are cleared.
+- `true`: always retain custom wording, including in the `local` environment.
+
+The setting is `vox.publishing.retain_custom_wording`. Rebuild Laravel's configuration cache after changing it if configuration is cached.
 
 ### Memory limit
 
@@ -344,14 +358,16 @@ php artisan vox:sync --parse
 
 Then use `/vox/manage` and `/vox/sync` to review, and `/vox/publish` to publish when ready.
 
-- **First import:** existing file values become approved application defaults.
+- **First import:** existing file values become approved default wording.
 - **Manual/AI edits:** saved as drafts until approved. Approval is per locale.
 - **AI translate missing:** in the key editor it fills fields that are empty or marker-prefixed; for selected rows it fills absent or marker-prefixed saved values and leaves deliberately blank ones alone. The **AI translate a locale** button in the page header does the same for every key in one locale, in batches with progress and **Stop**, skipping keys that follow the default language. All of these skip unusable base wording and save drafts for review. **AI retranslate** replaces selected target wording.
 - **Empty filter:** separates keys with empty/missing default wording from actionable missing translations.
 - **Publish:** writes approved usable changes, refreshes previously published wording, and applies pending deletions. Other locales and unapproved drafts do not block publication.
-- **Use application wording:** removes one locale's published override while preserving its draft.
+- **Use default wording:** puts one locale's default wording back live in place of its custom wording, while preserving its draft. It is unavailable when the key has no usable default, for example a key created in Vox or a default that is still a missing-translation placeholder.
 
 Static usage, dynamic matches, retention, and orphan status describe source usage separately from approval. A wildcard match does not prove a key is actually used.
+
+**Default and custom wording.** Developers ship the _default wording_ in the application's language files. When translators publish different text through Vox, that text becomes _custom wording_: Manage marks it with a **Custom wording** badge and filter, and Vox keeps it live when a later release re-installs the language files. A release that still ships the old default keeps the custom wording. A release that adopts the custom text as its default clears the marker, and the value is treated as default wording again. A release that changes the default underneath custom wording keeps the custom wording live and adds the new default to Sync review as a change from local files, where you can accept it or keep the custom wording. Publishing text identical to the default never marks it as custom. On developer machines, where language files are tracked in version control, Vox does not mark custom wording at all; see [Custom wording retention](#custom-wording-retention).
 
 ### Review incoming changes
 
@@ -368,7 +384,7 @@ Static usage, dynamic matches, retention, and orphan status describe source usag
 | Matching             | Current values agree                                                 |
 | No longer in source  | Source omitted the value; no automatic local deletion                |
 
-Repeated unchanged syncs preserve comparison records and open review tokens. Each pull records one audit summary with checked and changed counts; changed counts include new records, baseline updates, and values becoming unavailable. Actual comparison changes since loading a review invalidate its selection token; refresh before retrying. Local-file comparisons refresh when files match published overrides.
+Repeated unchanged syncs preserve comparison records and open review tokens. Each pull records one audit summary with checked and changed counts; changed counts include new records, baseline updates, and values becoming unavailable. Actual comparison changes since loading a review invalidate its selection token; refresh before retrying. Local-file comparisons refresh when files match custom wording.
 
 ### Add or delete keys and languages
 
@@ -376,7 +392,7 @@ Manage can create concrete keys covered by dynamic/retention patterns. The defau
 
 Delete any key from Manage, then Publish to remove all its locale values. Cancel pending deletion before publishing to keep it. Empty files are deleted, and failed file operations roll back. Rediscovery can recreate the key, **but cannot recover its deleted wording**. Deletion does not remove retention rules. The migration from older versions converts ignored keys to pending deletion without publishing them.
 
-In Sync, **Application languages** (or `php artisan vox:add-locale`) creates a locale from the configured base locale, including nested PHP groups and vendor JSON. In `configured` or `callback` mode, a language added here that the application does not declare is marked with a warning: it is managed by Vox but not served at runtime until it is declared. A declared language without language files is marked too; click its warning to add it. Without AI, nonempty source wording receives the missing marker. Optional AI skips unusable sources. These generated files become live application defaults immediately; this is different from Manage's AI draft workflow.
+In Sync, **Application languages** (or `php artisan vox:add-locale`) creates a locale from the configured base locale, including nested PHP groups and vendor JSON. In `configured` or `callback` mode, a language added here that the application does not declare is marked with a warning: it is managed by Vox but not served at runtime until it is declared. A declared language without language files is marked too; click its warning to add it. Without AI, nonempty source wording receives the missing marker. Optional AI skips unusable sources. These generated files become live default wording immediately; this is different from Manage's AI draft workflow.
 
 To remove a language added through Vox, open **Sync → Application languages**, click its trash icon, then confirm **Remove language**. No typing is required; **Cancel** leaves it unchanged. Removal takes effect immediately without Publish and deletes that language's PHP/JSON files (including vendor translations), runtime catalogue, saved translations and drafts, fallback rules, and sync review data. Other languages and shared translation keys remain intact. Failed removals roll back, and the automatic checkpoint can restore the removed language while that checkpoint is retained.
 
@@ -481,12 +497,12 @@ Review's batch actions apply to all matching actionable values, beyond the displ
 
 ### Publish, compile, and deploy
 
-| Command                             | Description and usage                                                                                                                                                                                                                              |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `php artisan vox:publish`           | Write approved changes, refresh previously published wording, and apply pending deletions. Also refresh frontend catalogues. Add `--published-only` to regenerate recorded defaults and overrides without applying drafts or pending deletions.    |
-| `php artisan vox:frontend-discover` | **Advanced; normally automatic.** The Vox Vite plugin runs this at startup, on relevant source changes during development, and before production builds. Refreshes the frontend group manifest without changing language files or database values. |
-| `php artisan vox:compile`           | Generate frontend translation JSON from current language files. Does not import database values, publish drafts, or run a JavaScript build.                                                                                                        |
-| `php artisan vox:deploy`            | Run setup, import freshly installed release defaults, and restore published management overrides while preserving drafts. Use only after installing fresh release language files; see [Deployment](#deploying-on-a-remote-server).                 |
+| Command                             | Description and usage                                                                                                                                                                                                                                |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `php artisan vox:publish`           | Write approved changes, refresh previously published wording, and apply pending deletions. Also refresh frontend catalogues. Add `--published-only` to regenerate recorded defaults and custom wording without applying drafts or pending deletions. |
+| `php artisan vox:frontend-discover` | **Advanced; normally automatic.** The Vox Vite plugin runs this at startup, on relevant source changes during development, and before production builds. Refreshes the frontend group manifest without changing language files or database values.   |
+| `php artisan vox:compile`           | Generate frontend translation JSON from current language files. Does not import database values, publish drafts, or run a JavaScript build.                                                                                                          |
+| `php artisan vox:deploy`            | Run setup, import freshly installed release defaults, and restore custom wording while preserving drafts. Use only after installing fresh release language files; see [Deployment](#deploying-on-a-remote-server).                                   |
 
 ```bash
 # Refresh runtime catalogues after editing language files directly.
@@ -538,7 +554,7 @@ Use a tagged Composer release in consuming applications. The following requireme
     php artisan vox:deploy --no-interaction
     ```
 
-    This runs Vox setup/migrations, publishes manager assets, imports shipped translation defaults, reapplies published manager overrides, and generates frontend catalogues when runtime delivery is enabled. Unpublished drafts are preserved. It does not pull remote environments, so a separate `vox:sync` is not required for deployment. A separate `vox:setup` is only needed if an earlier application step requires Vox to be initialized.
+    This runs Vox setup/migrations, publishes manager assets, imports shipped translation defaults, reapplies custom wording, and generates frontend catalogues when runtime delivery is enabled. Unpublished drafts are preserved. It does not pull remote environments, so a separate `vox:sync` is not required for deployment. A separate `vox:setup` is only needed if an earlier application step requires Vox to be initialized.
 
 4. **Finish your application's deployment.** With bundled delivery, build frontend assets after `vox:deploy` so they include the effective wording. With the default server-served delivery, translation changes do not require a frontend rebuild; application code changes may still require one. Stop deployment if translation preparation fails.
 
@@ -550,7 +566,7 @@ To regenerate only frontend translation JSON from the language files currently o
 php artisan vox:compile --no-interaction
 ```
 
-This works without a Vox database and does not import defaults, publish drafts, or modify source language files. Use it for standalone catalogue builds or after restoring language files during an application rollback. To rewrite language files from recorded database defaults and published overrides without accepting new drafts, use `vox:publish --published-only` instead.
+This works without a Vox database and does not import defaults, publish drafts, or modify source language files. Use it for standalone catalogue builds or after restoring language files during an application rollback. To rewrite language files from recorded database defaults and custom wording without accepting new drafts, use `vox:publish --published-only` instead.
 
 ### Retries and concurrent publication
 

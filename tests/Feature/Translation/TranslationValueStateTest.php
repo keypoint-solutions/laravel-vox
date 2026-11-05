@@ -125,7 +125,9 @@ it('accepts and publishes a CLI review selection without another approval step',
 
     $english = $this->translation->values()->where('locale', 'en')->firstOrFail();
     expect($english->is_approved)->toBeTrue()
-        ->and($english->published_override)->toBe('Incoming hello')
+        ->and($english->value)->toBe('Incoming hello')
+        ->and($english->file_value)->toBe('Incoming hello')
+        ->and($english->published_override)->toBeNull()
         ->and($english->is_pending_publish)->toBeFalse()
         ->and($french->fresh()->is_pending_publish)->toBeTrue()
         ->and((require $this->fixtureRoot.'/lang/fr/messages.php')['greeting'])->toBe('Bonjour');

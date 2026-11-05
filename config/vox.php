@@ -125,6 +125,11 @@ return [
             ],
         ],
     ],
+    'publishing' => [
+        // Keep wording published through Vox when a release re-installs language files.
+        // null = enabled everywhere except the `local` environment.
+        'retain_custom_wording' => env('VOX_RETAIN_CUSTOM_WORDING'),
+    ],
     'deployment' => [
         'lock_path' => storage_path('vox/publish.lock'),
     ],

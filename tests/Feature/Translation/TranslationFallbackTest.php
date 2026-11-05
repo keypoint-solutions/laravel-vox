@@ -120,7 +120,7 @@ it('creates a fallback language without generating files until publication', fun
 it('refuses missing defaults and rolls back published rules and files', function (): void {
     $this->key->values()->where('locale', 'en')->update(['value' => '🚩Pay now', 'file_value' => '🚩Pay now']);
     $this->rules->save('ro', 'locale', 'default');
-    expect(fn () => app(TranslationPublisher::class)->publish())->toThrow(RuntimeException::class, 'Default translation missing');
+    expect(fn () => app(TranslationPublisher::class)->publish())->toThrow(RuntimeException::class, 'Base language wording missing');
     expect(VoxTranslationRule::query()->sole()->published_mode)->toBe('inherit')
         ->and($this->files->loadGroup('ro', 'billing')['pay'])->toBe('Plătește');
 });

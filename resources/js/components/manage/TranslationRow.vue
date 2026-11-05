@@ -75,9 +75,9 @@
                 <Badge
                     v-if="overrideLocales(translation).length"
                     variant="secondary"
-                    :title="`Published overrides: ${overrideLocales(translation).join(', ').toUpperCase()}`"
+                    :title="`Custom wording: ${overrideLocales(translation).join(', ').toUpperCase()}`"
                 >
-                    Published override ·
+                    Custom wording ·
                     {{ overrideLocales(translation).join(', ').toUpperCase() }}
                 </Badge>
                 <Badge

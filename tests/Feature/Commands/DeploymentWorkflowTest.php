@@ -46,7 +46,7 @@ it('regenerates published files without importing overrides as defaults', functi
         ->and((require $this->fixtureRoot.'/lang/en/messages.php')['greeting'])->toBe('Manager greeting');
 });
 
-it('distinguishes regeneration from importing fresh defaults matching an override', function (bool $import): void {
+it('distinguishes regeneration from importing fresh defaults matching custom wording', function (bool $import): void {
     app(TranslationDeployment::class)->deploy();
     $value = VoxTranslation::query()->where('key', 'greeting')->firstOrFail()->values()->firstOrFail();
     $value->saveDraft('Manager greeting', true);
@@ -64,7 +64,7 @@ it('distinguishes regeneration from importing fresh defaults matching an overrid
     }
 
     expect($value->fresh()->file_value)->toBe($import ? 'Manager greeting' : 'Shipped greeting')
-        ->and($value->fresh()->published_override)->toBe('Manager greeting')
+        ->and($value->fresh()->published_override)->toBe($import ? null : 'Manager greeting')
         ->and($value->fresh()->value)->toBe('Unpublished edit')
         ->and($value->fresh()->is_pending_publish)->toBeTrue()
         ->and((require $this->fixtureRoot.'/lang/en/messages.php')['greeting'])->toBe('Manager greeting');

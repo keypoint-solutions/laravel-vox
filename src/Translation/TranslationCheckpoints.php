@@ -351,7 +351,7 @@ class TranslationCheckpoints
             'manage.translations.toggle-approval' => 'changing approval',
             'manage.translations.bulk-approval' => 'changing approvals',
             'manage.translations.bulk-translate' => 'AI translation',
-            'manage.translations.use-application' => 'removing a published override',
+            'manage.translations.use-application' => 'using the default wording',
             'checkpoints.restore' => 'restoring a checkpoint',
             'publish.store' => 'publishing translations',
         ];

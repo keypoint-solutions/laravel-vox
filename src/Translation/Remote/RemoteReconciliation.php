@@ -125,6 +125,29 @@ class RemoteReconciliation
         });
     }
 
+    /**
+     * Refresh a local file candidate from a file that only holds wording Vox published itself.
+     * Such a file carries no source information, so a candidate with an unacknowledged source change is left as it is.
+     */
+    public function refreshSettledFileValue(VoxTranslation $translation, string $locale, string $value, ?string $baseline): void
+    {
+        if ($this->fileCandidateHasPendingSourceChange($translation, $locale)) {
+            return;
+        }
+
+        $this->ingestFileValue($translation, $locale, $value, $baseline);
+    }
+
+    public function fileCandidateHasPendingSourceChange(VoxTranslation $translation, string $locale): bool
+    {
+        $candidate = VoxRemoteTranslation::query()->whereNull('environment_id')
+            ->where('identity', RemoteTranslationSnapshot::identity($translation->group, $translation->key, $locale))
+            ->first();
+
+        return $candidate !== null && $candidate->remote_present && $candidate->has_baseline
+            && $candidate->remote_value !== $candidate->base_value;
+    }
+
     public function ingestFileValue(VoxTranslation $translation, string $locale, string $value, ?string $baseline): void
     {
         $candidate = VoxRemoteTranslation::query()->whereNull('environment_id')->firstOrNew([
@@ -465,7 +488,7 @@ class RemoteReconciliation
                     'pending_publish' => $value?->is_pending_publish ?? false,
                     'revision' => $candidate->revision,
                 ];
-                $row['token'] = $this->token([$row, $translation?->status, $value?->is_obsolete, $value?->is_pending_publish, $value?->is_approved, $value?->file_value, $value?->published_override]);
+                $row['token'] = $this->token([$row, $translation?->status, $value?->is_obsolete, $value?->is_pending_publish, $value?->is_approved, $value?->file_value]);
 
                 return $row;
             });
@@ -524,7 +547,7 @@ class RemoteReconciliation
             ->select([
                 'r.*', 'v.value as local_value', 'd.value as default_value', 't.id as translation_id',
                 't.is_orphan', 't.status', 'v.is_obsolete', 'v.is_pending_publish', 'v.is_approved',
-                'v.file_value', 'v.published_override',
+                'v.file_value',
             ])
             ->selectRaw("CASE
                 WHEN r.remote_present = FALSE THEN 'unavailable'
@@ -596,7 +619,7 @@ class RemoteReconciliation
             $record->is_obsolete === null ? null : (bool) $record->is_obsolete,
             $record->is_pending_publish === null ? null : (bool) $record->is_pending_publish,
             $record->is_approved === null ? null : (bool) $record->is_approved,
-            $record->file_value, $record->published_override]);
+            $record->file_value]);
 
         return $row;
     }

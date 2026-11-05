@@ -78,14 +78,32 @@ it('retains newly created dynamic drafts through deployment until approved and p
         ->and($value->fresh()->published_override)->toBe('New notice');
 });
 
-it('removes both representations and deletes an empty file when no application value exists', function (): void {
+it('refuses to restore default wording for a key without a default', function (): void {
     $translation = VoxTranslation::factory()->create(['group' => 'custom', 'key' => 'promo.line']);
-    $translation->values()->create(['locale' => 'en', 'value' => 'Override', 'published_override' => 'Override', 'is_approved' => true]);
+    $value = $translation->values()->create(['locale' => 'en', 'value' => 'Override', 'published_override' => 'Override', 'is_approved' => true]);
     $path = $this->fixtureRoot.'/lang/en/custom.php';
-    File::put($path, "<?php return ['promo' => ['line' => 'Override'], 'promo.line' => 'Override'];");
-    $this->post('/vox/manage/translations/'.$translation->id.'/use-application', ['locale' => 'en'])->assertSessionHasNoErrors();
-    expect(File::exists($path))->toBeFalse();
+    File::put($path, "<?php return ['promo.line' => 'Override'];");
+
+    $this->postJson('/vox/manage/translations/'.$translation->id.'/use-application', ['locale' => 'en'])
+        ->assertStatus(422)->assertJsonPath('message', 'This key has no default wording to restore.');
+
+    expect(require $path)->toBe(['promo.line' => 'Override'])
+        ->and($value->fresh()->published_override)->toBe('Override');
 });
+
+it('refuses to restore a default wording that is a placeholder', function (string $default): void {
+    $translation = VoxTranslation::factory()->create(['group' => 'custom', 'key' => 'promo.line']);
+    $value = $translation->values()->create(['locale' => 'en', 'value' => 'Override', 'file_value' => $default, 'published_override' => 'Override', 'is_approved' => true]);
+    $path = $this->fixtureRoot.'/lang/en/custom.php';
+    File::put($path, "<?php return ['promo.line' => 'Override'];");
+
+    $this->postJson('/vox/manage/translations/'.$translation->id.'/use-application', ['locale' => 'en'])
+        ->assertStatus(422)->assertJsonPath('message', 'The default wording is a placeholder and cannot be restored.');
+
+    expect(require $path)->toBe(['promo.line' => 'Override'])
+        ->and($value->fresh()->published_override)->toBe('Override')
+        ->and($value->fresh()->value)->toBe('Override');
+})->with(['flagged' => '🚩Promo line', 'blank' => '  ']);
 
 it('restores application wording using the configured group format', function (string $format): void {
     config()->set('vox.parse.output', $format);

@@ -57,12 +57,14 @@ class TestCase extends Orchestra
 
     /**
      * Open the dashboard as a local developer: no Vite manifest needed and the Vox gates bypassed.
+     * Custom wording retention stays on, as in a deployed environment, unless a test turns it off.
      */
     protected function useVoxDashboard(): void
     {
         $this->withoutVite();
         app()->detectEnvironment(fn () => 'local');
         config()->set('vox.system.bypass_auth_in_local', true);
+        config()->set('vox.publishing.retain_custom_wording', true);
     }
 
     protected function withoutVoxCsrfMiddleware(): void
