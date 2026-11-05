@@ -117,3 +117,16 @@ protected function isAccessible(User $user, ?string $path = null): bool
 
 - Typically, keys in an Enum should be TitleCase. For example: `FavoritePerson`, `BestLake`, `Monthly`.
   </laravel-boost-guidelines>
+
+# Pinned Dependencies
+
+Some packages are pinned to an exact version (no `^`) because a newer release breaks CI. `npm update` will not move them. When updating dependencies, check whether a newer release fixes the problem, and unpin in a separate commit once it does.
+
+## vue-tsc (pinned to 3.3.13 on 2026-11-05)
+
+- **Why:** vue-tsc 3.3.14 (and its `@vue/language-core` 3.3.14) wrongly reports `Property 'value' does not exist` on `useForm()`/`usePage()` objects used in the template of `resources/js/pages/Sync.vue` (from about line 712 onward), so `npm run type-check` fails. 3.3.13 passes on the same code.
+- **Verify a newer release** (replace `X.Y.Z`) without touching the project's `node_modules`:
+    1. `npm view vue-tsc versions --json` to find releases after 3.3.14.
+    2. `npm i --prefix "$TMPDIR/vue-tsc-check" vue-tsc@X.Y.Z typescript@<version in package.json>`
+    3. From the project root: `"$TMPDIR/vue-tsc-check/node_modules/.bin/vue-tsc" --noEmit`. It must exit 0 with no errors.
+- **Unpin:** set `"vue-tsc": "^X.Y.Z"` in `package.json`, run `npm install`, then `npm run type-check` and `npm run build`. Remove this section in the same commit.
