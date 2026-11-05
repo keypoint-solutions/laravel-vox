@@ -234,3 +234,15 @@ it('exposes published overrides independently of drafts and approval', function 
     expect(manageTranslations($this->get('/vox/manage?status=published-overrides'))->pluck('id')->all())->toBe([$published->id])
         ->and(manageTranslations($this->get('/vox/manage?status=drafts'))->pluck('id')->all())->toBe([$draft->id]);
 });
+
+it('hides custom wording options when retention is off', function (bool $retains): void {
+    config()->set('vox.publishing.retain_custom_wording', $retains);
+
+    $props = $this->get('/vox/manage')->assertOk()->inertiaPage()['props'];
+
+    expect($props['retainsCustomWording'])->toBe($retains)
+        ->and(collect($props['statusOptions'])->pluck('value')->contains('published-overrides'))->toBe($retains);
+})->with([
+    'retention off' => [false],
+    'retention on' => [true],
+]);

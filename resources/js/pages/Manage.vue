@@ -47,6 +47,7 @@
     const aiStatus = computed(() => page.props.ai ?? { available: false });
     const dynamicPatterns = computed(() => page.props.dynamicPatterns ?? []);
     const fallbackRules = computed(() => page.props.fallbackRules ?? []);
+    const retainsCustomWording = computed(() => page.props.retainsCustomWording ?? false);
     const voxRoutes = useVoxRoutes();
     const targetLocales = computed(() => locales.value.filter((locale) => locale !== baseLocale.value));
     const orderedLocales = computed(() => [baseLocale.value, ...[...targetLocales.value].sort()]);
@@ -61,7 +62,7 @@
         { value: 'dynamic', label: 'Dynamic usage' },
         { value: 'retained', label: 'Retained by rule' },
         { value: 'pending-deletion', label: 'Pending deletion' },
-        { value: 'published-overrides', label: 'Custom wording' },
+        ...(retainsCustomWording.value ? [{ value: 'published-overrides', label: 'Custom wording' }] : []),
         { value: 'drafts', label: 'Drafts' },
         { value: 'pending', label: 'Pending review' },
         { value: 'approved', label: 'Approved' },
@@ -533,6 +534,7 @@
                             <TranslationRow
                                 :translation="translation"
                                 :base-locale="baseLocale"
+                                :retains-custom-wording="retainsCustomWording"
                                 :selected="selectedIds.includes(translation.id)"
                                 :delete-disabled="isCleaning"
                                 @open="editTranslation = translation"
@@ -588,6 +590,7 @@
         :base-locale="baseLocale"
         :ai-available="aiStatus.available"
         :fallback-rules="fallbackRules"
+        :retains-custom-wording="retainsCustomWording"
         :missing-translation-prefix="page.props.missingTranslationPrefix ?? '🚩'"
         :update-route="voxRoutes?.manage_translation_update"
         :translate-route="voxRoutes?.manage_translation_translate"

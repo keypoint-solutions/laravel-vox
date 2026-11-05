@@ -88,6 +88,7 @@ export type ManagePageProps = {
     baseLocale: string;
     filters: ManageFilters;
     statusOptions: SelectOption[];
+    retainsCustomWording: boolean;
     sortOptions: SelectOption[];
     lastSyncAt: string | null;
     totalTranslations: number;

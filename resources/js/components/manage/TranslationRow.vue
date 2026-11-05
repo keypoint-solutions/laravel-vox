@@ -8,6 +8,7 @@
     defineProps<{
         translation: TranslationItem;
         baseLocale: string;
+        retainsCustomWording: boolean;
         selected: boolean;
         deleteDisabled: boolean;
     }>();
@@ -73,7 +74,7 @@
             </div>
             <div class="mt-1 flex flex-wrap gap-1.5">
                 <Badge
-                    v-if="overrideLocales(translation).length"
+                    v-if="retainsCustomWording && overrideLocales(translation).length"
                     variant="secondary"
                     :title="`Custom wording: ${overrideLocales(translation).join(', ').toUpperCase()}`"
                 >

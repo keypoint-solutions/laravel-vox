@@ -2,6 +2,10 @@
 
 Notable changes to Laravel Vox are documented here. See the [README](README.md) for installation, configuration, and command examples.
 
+## 1.3.2 — 2026-11-05
+
+- With custom wording retention off, the Manage **Custom wording** badge, status filter and key-editor block are hidden, since they could only show stale markers.
+
 ## 1.3.1 — 2026-11-05
 
 - Fix adding a language writing base language wording into its files without the missing-translation flag when fallback rules for that locale code were left in the database (for example after reverting `lang/` or restoring a database or checkpoint out of step with the files). Adding a language now clears its stale fallback rules first; the audit entry records how many were cleared.

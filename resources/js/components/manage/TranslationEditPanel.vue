@@ -17,6 +17,7 @@
         baseLocale: string;
         aiAvailable: boolean;
         fallbackRules: FallbackRule[];
+        retainsCustomWording: boolean;
         missingTranslationPrefix: string;
         updateRoute: string | undefined;
         translateRoute: string | undefined;
@@ -402,6 +403,7 @@
                 </div>
                 <div
                     v-if="
+                        retainsCustomWording &&
                         translation?.published_overrides?.[locale] != null &&
                         translation?.fallback?.[locale]?.published_mode !== 'default'
                     "

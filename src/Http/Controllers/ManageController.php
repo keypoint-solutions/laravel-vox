@@ -52,6 +52,7 @@ class ManageController
             'missingTranslationPrefix' => VoxConfig::missingPrefix(),
             'filters' => $filters,
             'statusOptions' => $this->statusOptions(),
+            'retainsCustomWording' => VoxConfig::retainsCustomWording(),
             'sortOptions' => $this->sortOptions(),
             'lastSyncAt' => $lastSync?->created_at?->toIso8601String(),
             'ai' => ['available' => $this->ai->available()],
@@ -181,6 +182,8 @@ class ManageController
     }
 
     /**
+     * The Custom wording option is omitted when retention is off, since only stale markers could match it.
+     *
      * @return array<int, array{value: string, label: string}>
      */
     private function statusOptions(): array
@@ -188,7 +191,7 @@ class ManageController
         return [
             ['value' => 'new', 'label' => 'New'],
             ['value' => 'updated', 'label' => 'Updated'],
-            ['value' => 'published-overrides', 'label' => 'Custom wording'],
+            ...(VoxConfig::retainsCustomWording() ? [['value' => 'published-overrides', 'label' => 'Custom wording']] : []),
             ['value' => 'drafts', 'label' => 'Drafts'],
             ['value' => 'pending', 'label' => 'Pending review'],
             ['value' => 'approved', 'label' => 'Approved'],
